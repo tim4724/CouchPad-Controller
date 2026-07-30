@@ -18,14 +18,6 @@ enum CP {
     static let relayBase = "https://ws.couchpad.games"
     /// Canonical launcher domain.
     static let launcherHost = "couchpad.games"
-    /// Domains the launcher answered to before the couchpad.games rebrand. Still honoured
-    /// everywhere `launcherHost` is — canonical /<CODE> links, trusted preview subdomains,
-    /// the game-host navigation allow-list, hosted legal pages — so codes and links already
-    /// in the wild (printed, shared, indexed) keep opening in the app. Nothing is ever
-    /// *generated* on them: every URL the app builds or displays uses `launcherHost`.
-    static let legacyLauncherHosts = ["couch-games.com"]
-    /// Every domain the launcher itself owns: `launcherHost` plus `legacyLauncherHosts`.
-    static let launcherHosts = [launcherHost] + legacyLauncherHosts
     /// Hosted legal pages, shown in-app via WebDocScreen so they stay reachable from
     /// within the app (§5 DDG imprint requirement; GDPR privacy notice).
     static let privacyURL = "https://couchpad.games/privacy"
@@ -60,14 +52,13 @@ enum CP {
     /// hasn't vouched for its host, and `legalTitle` matches only the path. So before
     /// the doc viewer (which trusts its URL: no allow-list) may load a scanned value,
     /// require a launcher apex over https with no embedded credentials, mirroring
-    /// the Universal Link routing. Legacy apexes count — a code printed before the
-    /// rebrand still resolves. Returns the URL to open (locale variants like
+    /// the Universal Link routing. Returns the URL to open (locale variants like
     /// /en/privacy pass through as-is), or nil when it's not a legal page.
     static func scannedLegalUrl(_ raw: String) -> String? {
         guard let components = URLComponents(string: raw),
               components.scheme?.lowercased() == "https",
               (components.user ?? "").isEmpty,
-              let host = components.host?.lowercased(), launcherHosts.contains(host),
+              let host = components.host?.lowercased(), host == launcherHost,
               legalTitle(for: components.url) != nil else { return nil }
         return raw
     }

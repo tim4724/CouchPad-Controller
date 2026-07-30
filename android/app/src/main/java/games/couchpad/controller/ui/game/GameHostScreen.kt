@@ -83,7 +83,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import games.couchpad.controller.R
 import games.couchpad.controller.BuildConfig
-import games.couchpad.controller.data.LAUNCHER_HOSTS
+import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
 import games.couchpad.controller.data.RecentRoomStore
@@ -151,7 +151,7 @@ private fun GameHostContent(
   val density = LocalDensity.current
   val layoutDirection = LocalLayoutDirection.current
   var webView by remember { mutableStateOf<WebView?>(null) }
-  val allowed = remember(allowedHosts) { (allowedHosts + LAUNCHER_HOSTS).map { it.lowercase() } }
+  val allowed = remember(allowedHosts) { (allowedHosts + LAUNCHER_HOST).map { it.lowercase() } }
   var profile by remember { mutableStateOf(ProfileStore.load(context)) }
   var showProfile by remember { mutableStateOf(false) }
   var loading by remember { mutableStateOf(true) }

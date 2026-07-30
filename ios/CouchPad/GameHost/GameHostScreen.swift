@@ -46,7 +46,7 @@ struct GameHostScreen: View {
     // MARK: - Derived
 
     private var allowed: [String] {
-        (allowedHosts + CP.launcherHosts).map { $0.lowercased() }
+        (allowedHosts + [CP.launcherHost]).map { $0.lowercased() }
     }
 
     /// The page's own title once reported, else the manifest name.

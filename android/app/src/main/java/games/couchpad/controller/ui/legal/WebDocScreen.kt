@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
-import games.couchpad.controller.data.LAUNCHER_HOSTS
+import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.ui.components.BackScaffold
 import games.couchpad.controller.ui.components.ServerUnreachableRetry
 import games.couchpad.controller.ui.components.denyLocalFileAccess
@@ -63,9 +63,9 @@ private const val HIDE_HEADING_JS = """
   })();
 """
 
-// The legal pages are served from a launcher apex; scope the injected script to those
-// origins. Legacy apexes are included — a pre-rebrand App Link still lands here.
-private val LEGAL_ORIGINS = LAUNCHER_HOSTS.map { "https://$it" }.toSet()
+// The legal pages are served from the launcher apex; scope the injected script to
+// that origin.
+private val LEGAL_ORIGINS = setOf("https://$LAUNCHER_HOST")
 
 /**
  * A read-only in-app viewer for a hosted legal document (privacy / imprint). Kept

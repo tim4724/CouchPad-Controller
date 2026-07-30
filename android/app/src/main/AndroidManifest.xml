@@ -56,25 +56,19 @@
                  (couchpad.games/<CODE>). pathPattern "/......" claims exactly six
                  characters, so the marketing index and any non-6-char page fall through
                  to the browser. pathPattern can't express base58, so avoid naming a page
-                 with a 6-char path — JoinResolver rejects non-room codes at runtime.
-                 couch-games.com is the pre-rebrand domain, kept so links already in the
-                 wild still open the app; it must keep serving assetlinks.json for as
-                 long as it's listed here (see LEGACY_LAUNCHER_HOSTS). -->
+                 with a 6-char path — JoinResolver rejects non-room codes at runtime. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="couchpad.games" android:pathPattern="/......" />
                 <data android:scheme="https" android:host="*.couchpad.games" android:pathPattern="/......" />
-                <data android:scheme="https" android:host="couch-games.com" android:pathPattern="/......" />
-                <data android:scheme="https" android:host="*.couch-games.com" android:pathPattern="/......" />
             </intent-filter>
 
             <!-- Launcher legal pages open in the in-app doc viewer (WebDocScreen),
                  not the join flow — privacy + imprint, default and English. Apex only:
                  preview subdomains don't serve these. Exact paths, so everything else on
-                 the apex still routes by the room-code filter above or the browser.
-                 Legacy apex included for links already in the wild. -->
+                 the apex still routes by the room-code filter above or the browser. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -83,10 +77,6 @@
                 <data android:scheme="https" android:host="couchpad.games" android:path="/imprint" />
                 <data android:scheme="https" android:host="couchpad.games" android:path="/en/privacy" />
                 <data android:scheme="https" android:host="couchpad.games" android:path="/en/imprint" />
-                <data android:scheme="https" android:host="couch-games.com" android:path="/privacy" />
-                <data android:scheme="https" android:host="couch-games.com" android:path="/imprint" />
-                <data android:scheme="https" android:host="couch-games.com" android:path="/en/privacy" />
-                <data android:scheme="https" android:host="couch-games.com" android:path="/en/imprint" />
             </intent-filter>
         </activity>
     </application>

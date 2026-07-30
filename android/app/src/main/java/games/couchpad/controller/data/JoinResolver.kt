@@ -9,18 +9,6 @@ import games.couchpad.controller.R
 /** The suite's canonical launcher domain (couchpad.games links, display fallback). */
 const val LAUNCHER_HOST = "couchpad.games"
 
-/**
- * Domains the launcher answered to before the couchpad.games rebrand. Still honoured
- * everywhere [LAUNCHER_HOST] is — canonical /<CODE> links, trusted preview subdomains,
- * the game-host navigation allow-list, hosted legal pages — so codes and links already
- * in the wild (printed, shared, indexed) keep opening in the app. Nothing is ever
- * *generated* on them: every URL the app builds or displays uses [LAUNCHER_HOST].
- */
-val LEGACY_LAUNCHER_HOSTS = listOf("couch-games.com")
-
-/** Every domain the launcher itself owns: [LAUNCHER_HOST] plus [LEGACY_LAUNCHER_HOSTS]. */
-val LAUNCHER_HOSTS = listOf(LAUNCHER_HOST) + LEGACY_LAUNCHER_HOSTS
-
 /** True when [host] is [domain] itself or any subdomain of it (case-insensitive). */
 fun hostInDomain(host: String?, domain: String): Boolean {
   val h = host?.lowercase() ?: return false
@@ -71,7 +59,7 @@ sealed interface JoinOutcome {
  *
  * The two code-first exceptions carry no origin of their own and resolve to the sole
  * live game's controllerBaseUrl: bare typed codes, and canonical couchpad.games/<code>
- * links (bare domain or www; [LEGACY_LAUNCHER_HOSTS] too).
+ * links (bare domain or www).
  */
 object JoinResolver {
 
@@ -90,22 +78,21 @@ object JoinResolver {
     val claim = uri.getQueryParameter("claim")
     val instance = uri.fragment?.let { f -> runCatching { Uri.decode(f) }.getOrDefault(f) }
 
-    // Canonical couchpad.games/<CODE> links (bare domain or www, plus the legacy
-    // domains) carry no controller origin of their own, so the sole live game hosts
-    // them. The App Links filter claims exactly-6-char paths, so the marketing index
-    // never reaches the app; a non-room 6-char path is rejected by validCode.
+    // Canonical couchpad.games/<CODE> links (bare domain or www) carry no controller
+    // origin of their own, so the sole live game hosts them. The App Links filter
+    // claims exactly-6-char paths, so the marketing index never reaches the app; a
+    // non-room 6-char path is rejected by validCode.
     // (Subdomains are preview deployments and load their own origin — below.)
-    if (LAUNCHER_HOSTS.any { host.equals(it, true) || host.equals("www.$it", true) }) {
+    if (host.equals(LAUNCHER_HOST, true) || host.equals("www.$LAUNCHER_HOST", true)) {
       return soleLiveGameJoin(games, segs.firstOrNull().orEmpty(), claim, instance)
     }
 
-    // A game's own domain, or a launcher subdomain (preview/branch deployment, on
-    // the canonical or a legacy domain). The subdomain prefix names the game when it
-    // can ("tinytrack-…"), purely for title/metadata — the scanned URL itself is
-    // what gets loaded.
+    // A game's own domain, or a launcher subdomain (preview/branch deployment). The
+    // subdomain prefix names the game when it can ("tinytrack-…"), purely for
+    // title/metadata — the scanned URL itself is what gets loaded.
     val game = games.firstOrNull { g -> g.hosts.any { hostInDomain(host, it) } }
       ?: when {
-        LAUNCHER_HOSTS.any { hostInDomain(host, it) } ->
+        hostInDomain(host, LAUNCHER_HOST) ->
           games.firstOrNull { host.lowercase().startsWith(it.id) } ?: launcherGame()
         // Debug only: a LAN dev server isn't any known game's host — load it as its
         // own trusted controller so a locally served page can be tested end-to-end.

@@ -51,10 +51,8 @@ targets:
     # legal pages (/privacy, /imprint, EN + default). The AASA room pattern is a
     # single exactly-6-char path segment — marketing pages fall through to the
     # browser, and JoinResolver rejects any 6-char non-room code at runtime.
-    # couch-games.com is the pre-rebrand domain, kept so links already in the wild
-    # still open the app; it must keep serving its AASA for as long as it's listed
-    # (see CP.legacyLauncherHosts). This file is generated from the properties below
-    # (like the .xcodeproj) and is gitignored; edit the list here, not the plist.
+    # This file is generated from the properties below (like the .xcodeproj) and is
+    # gitignored; edit the list here, not the plist.
     # Associated Domains must also be enabled on the App ID in the Developer portal.
     entitlements:
       path: CouchPad/CouchPad.entitlements
@@ -62,7 +60,6 @@ targets:
         com.apple.developer.associated-domains:
           - applinks:hexstacker.com
           - applinks:couchpad.games
-          - applinks:couch-games.com
     scheme:
       testTargets:
         - CouchPadUITests

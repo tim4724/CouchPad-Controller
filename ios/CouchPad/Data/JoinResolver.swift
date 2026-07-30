@@ -29,9 +29,9 @@ enum JoinResolver {
         let instance: String? = components.percentEncodedFragment.map { $0.removingPercentEncoding ?? $0 }
         let lowerHost = host.lowercased()
 
-        // Canonical launcher links (bare domain or www, legacy domains too): code-first,
-        // sole live game hosts them.
-        if CP.launcherHosts.contains(where: { lowerHost == $0 || lowerHost == "www." + $0 }) {
+        // Canonical launcher links (bare domain or www): code-first, sole live game
+        // hosts them.
+        if lowerHost == CP.launcherHost || lowerHost == "www." + CP.launcherHost {
             let code = components.path.split(separator: "/").map(String.init).first ?? ""
             return soleLiveGameJoin(games: games, roomCode: code, claim: claim, instance: instance)
         }
@@ -41,7 +41,7 @@ enum JoinResolver {
         let game: Game
         if let matched = games.first(where: { g in g.hosts.contains(where: { hostInDomain(host, $0) }) }) {
             game = matched
-        } else if CP.launcherHosts.contains(where: { hostInDomain(host, $0) }) {
+        } else if hostInDomain(host, CP.launcherHost) {
             game = games.first(where: { lowerHost.hasPrefix($0.id) }) ?? Game.syntheticLauncher
         } else {
             #if DEBUG

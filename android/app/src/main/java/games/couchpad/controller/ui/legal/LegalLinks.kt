@@ -1,7 +1,7 @@
 package games.couchpad.controller.ui.legal
 
 import androidx.core.net.toUri
-import games.couchpad.controller.data.LAUNCHER_HOSTS
+import games.couchpad.controller.data.LAUNCHER_HOST
 
 // Hosted legal pages, served on the launcher's own domain. Shown in-app via
 // WebDocScreen (a plain WebView) so they stay reachable from within the app —
@@ -35,13 +35,12 @@ object LegalLinks {
   // vouched for its host, and [isPrivacy]/[isImprint] match only the path. So before
   // the doc viewer (which trusts its URL: no allow-list) may load a scanned value,
   // require a launcher apex over https with no embedded credentials, mirroring the
-  // manifest's legal App Link filter. Legacy apexes count — a code printed before the
-  // rebrand still resolves. Returns the URL to open (locale variants like /en/privacy
-  // pass through as-is), or null when it's not a legal page.
+  // manifest's legal App Link filter. Returns the URL to open (locale variants like
+  // /en/privacy pass through as-is), or null when it's not a legal page.
   fun scannedLegalUrl(raw: String): String? {
     val uri = runCatching { raw.toUri() }.getOrNull() ?: return null
     if (!"https".equals(uri.scheme, ignoreCase = true) || !uri.userInfo.isNullOrEmpty()) return null
-    if (LAUNCHER_HOSTS.none { uri.host.equals(it, ignoreCase = true) }) return null
+    if (!uri.host.equals(LAUNCHER_HOST, ignoreCase = true)) return null
     return raw.takeIf { isPrivacy(it) || isImprint(it) }
   }
 }

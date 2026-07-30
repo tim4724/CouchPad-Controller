@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 Two native **launcher** apps (Android/Kotlin+Compose, iOS/Swift+SwiftUI) that are the shell
-for the Couch Games party-game suite. Each game's controller is a remote web page loaded in a
+for the CouchPad party-game suite. Each game's controller is a remote web page loaded in a
 hardened top-level web view under launcher chrome. Read `README.md` for layout and
 `CONTRACT.md` for the launcher⇄game interface — don't restate them here.
 
@@ -19,10 +19,11 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # iOS (Xcode project is generated, not committed)
 cd ios
 xcodegen generate    # brew install xcodegen, once
-open CouchGames.xcodeproj
+open CouchPad.xcodeproj
 ```
 
-Android: minSdk 24 / target 36, namespace `com.couchgames.controller`. iOS: 17+, no
+Android: minSdk 24 / target 36, applicationId and namespace both
+`games.couchpad.controller`. iOS: 17+, bundle id `games.couchpad.controller`, no
 third-party dependencies. There is no automated test suite.
 
 ## The two apps are functional parity ports
@@ -34,7 +35,7 @@ always needs the mirrored change on the other. Both implement `CONTRACT.md` iden
 ## Things that must stay in sync (and their checks)
 
 - **Manifest + artwork**: `android/app/src/main/assets/games-manifest.json` +
-  `assets/artwork/` are the source of truth; `ios/CouchGames/Resources/` holds byte-identical
+  `assets/artwork/` are the source of truth; `ios/CouchPad/Resources/` holds byte-identical
   copies. Update both when either changes. The manifest is purely structural — no translated
   text; per-game display copy lives in string resources under `game_<id>_*` keys. The bundled
   copy is only the first-run seed — both apps refresh from the served manifest
@@ -42,7 +43,7 @@ always needs the mirrored change on the other. Both implement `CONTRACT.md` iden
   changed image must ship under a new file name or `?v=` bump (details: README §Where things
   live).
 - **Localization** (11 HexStacker locales): Android `res/values[-XX]/strings.xml`, iOS
-  `CouchGames/Resources/*.xcstrings`. After any string change run:
+  `CouchPad/Resources/*.xcstrings`. After any string change run:
   ```sh
   python3 tools/check_l10n_sync.py
   ```
@@ -52,7 +53,7 @@ always needs the mirrored change on the other. Both implement `CONTRACT.md` iden
 
 ## The CONTRACT is a compatibility boundary
 
-`CONTRACT.md` is versioned via `cgv`; the same deployed controller must keep working in a
-plain browser, so all shell behavior is gated on `cgv=1`. Relay-declared join targets
+`CONTRACT.md` is versioned via `cpv`; the same deployed controller must keep working in a
+plain browser, so all shell behavior is gated on `cpv=1`. Relay-declared join targets
 (`url`/`origin`) are UNTRUSTED and re-validated against the manifest host allow-list before
-loading. Changing contract semantics means bumping `cgv` and updating both apps.
+loading. Changing contract semantics means bumping `cpv` and updating both apps.

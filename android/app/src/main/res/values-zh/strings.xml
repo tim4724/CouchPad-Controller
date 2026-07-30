@@ -46,7 +46,7 @@
     <string name="game_end_generic">派对结束了</string>
 
     <string name="error_empty_code">代码为空。</string>
-    <string name="error_not_couch_games_room">该代码不是 Couch Games 房间。</string>
+    <string name="error_not_couchpad_room">该代码不是 CouchPad 房间。</string>
     <string name="error_no_live_game">未配置可用的游戏。</string>
     <string name="error_no_controller_url">该游戏没有控制器网址。</string>
     <string name="error_enter_room_code">请输入房间代码。</string>

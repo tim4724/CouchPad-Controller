@@ -47,7 +47,7 @@
     <string name="game_end_generic">파티가 끝났어요</string>
 
     <string name="error_empty_code">코드가 비어 있어요.</string>
-    <string name="error_not_couch_games_room">Couch Games 방 코드가 아니에요.</string>
+    <string name="error_not_couchpad_room">CouchPad 방 코드가 아니에요.</string>
     <string name="error_no_live_game">설정된 활성 게임이 없어요.</string>
     <string name="error_no_controller_url">이 게임에는 컨트롤러 URL이 없어요.</string>
     <string name="error_enter_room_code">방 코드를 입력하세요.</string>

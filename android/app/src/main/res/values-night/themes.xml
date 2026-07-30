@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Dark parent + dark cg_surface (values-night/colors.xml): without this
+    <!-- Dark parent + dark cp_surface (values-night/colors.xml): without this
          override the pre-Compose frames flash white in system dark mode. The
          splash attribute is API 31+ but harmlessly ignored below (targetApi
          tells lint that's intentional). -->
-    <style name="Theme.CouchGames" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/cg_surface</item>
-        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/cg_surface</item>
+    <style name="Theme.CouchPad" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/cp_surface</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/cp_surface</item>
     </style>
 </resources>

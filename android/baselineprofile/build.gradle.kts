@@ -12,7 +12,7 @@ plugins {
 }
 
 android {
-  namespace = "com.couchgames.controller.baselineprofile"
+  namespace = "games.couchpad.controller.baselineprofile"
   compileSdk = 37
   defaultConfig {
     // Macrobenchmark's floor, not the app's (24): profile generation only ever

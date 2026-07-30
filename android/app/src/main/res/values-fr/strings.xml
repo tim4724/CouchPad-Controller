@@ -46,7 +46,7 @@
     <string name="game_end_generic">La partie est terminée</string>
 
     <string name="error_empty_code">Code vide.</string>
-    <string name="error_not_couch_games_room">Ce code ne correspond pas à une salle Couch Games.</string>
+    <string name="error_not_couchpad_room">Ce code ne correspond pas à une salle CouchPad.</string>
     <string name="error_no_live_game">Aucun jeu actif configuré.</string>
     <string name="error_no_controller_url">Ce jeu n’a pas d’URL de manette.</string>
     <string name="error_enter_room_code">Saisis un code de salle.</string>

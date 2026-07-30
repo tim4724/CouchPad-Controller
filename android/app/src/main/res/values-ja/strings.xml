@@ -47,7 +47,7 @@
     <string name="game_end_generic">パーティーが終了しました</string>
 
     <string name="error_empty_code">コードが空です。</string>
-    <string name="error_not_couch_games_room">このコードはCouch Gamesのルームではありません。</string>
+    <string name="error_not_couchpad_room">このコードはCouchPadのルームではありません。</string>
     <string name="error_no_live_game">利用可能なゲームが設定されていません。</string>
     <string name="error_no_controller_url">このゲームにはコントローラーのURLがありません。</string>
     <string name="error_enter_room_code">ルームコードを入力してください。</string>

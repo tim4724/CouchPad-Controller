@@ -46,7 +46,7 @@
     <string name="game_end_generic">Вечеринка закончилась</string>
 
     <string name="error_empty_code">Пустой код.</string>
-    <string name="error_not_couch_games_room">Этот код не от комнаты Couch Games.</string>
+    <string name="error_not_couchpad_room">Этот код не от комнаты CouchPad.</string>
     <string name="error_no_live_game">Нет настроенной активной игры.</string>
     <string name="error_no_controller_url">У этой игры нет URL контроллера.</string>
     <string name="error_enter_room_code">Введи код комнаты.</string>

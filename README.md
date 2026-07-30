@@ -1,6 +1,6 @@
-# Couch Games Controller
+# CouchPad Controller
 
-Native **controller** apps for the Couch Games party-game suite. The
+Native **controller** apps for the CouchPad party-game suite. The
 TV/computer is the display; phones are the controllers: scan the room code the
 display shows and your phone becomes the gamepad.
 
@@ -38,7 +38,7 @@ telemetry (CAMERA permission, with manual room-code entry as the fallback).
 ```sh
 cd ios
 xcodegen generate    # brew install xcodegen, once
-open CouchGames.xcodeproj
+open CouchPad.xcodeproj
 ```
 
 QR scanning uses AVFoundation (camera permission) and degrades to manual
@@ -48,7 +48,7 @@ room-code entry in the simulator.
 
 Both apps ship the 11 HexStacker locales (en + de, es, fr, it, ja, ko, pt, ru,
 tr, zh): Android in `res/values[-XX]/strings.xml`, iOS in
-`CouchGames/Resources/*.xcstrings`. Per-game display copy (e.g. player counts)
+`CouchPad/Resources/*.xcstrings`. Per-game display copy (e.g. player counts)
 lives in those same string resources under `game_<id>_*` keys, resolved by game
 id at load time — `games-manifest.json` itself is purely structural and holds no
 translated text.
@@ -68,17 +68,17 @@ fails the check. Run it after any string change.
 - `android/app/src/main/assets/games-manifest.json` — the bundled games list;
   drives the home screen, scan/typed-code resolution, and relay probing. Cover
   art sits next to it in `assets/artwork/`. The iOS app bundles copies under
-  `ios/CouchGames/Resources/` — keep them in sync when the manifest changes.
+  `ios/CouchPad/Resources/` — keep them in sync when the manifest changes.
   The bundled copy is only the first-run seed: once per launch both apps fetch
-  `couch-games.com/games-manifest.json` (served no-cache from the Couch-Games
+  `couchpad.games/games-manifest.json` (served no-cache from the site
   repo), persist it, and render from it — so a new game or status flip is one
   site deploy, no app update. Art the current build didn't ship is downloaded
   into a URL-keyed cache that is never revalidated, and shipped art is matched
   by file name — so a **changed image must get a new file name (or a `?v=`
   bump) in the served manifest**; changed bytes under an unchanged URL go
   unnoticed by design, same as the site's CSS/JS versioning.
-- `android/app/src/main/java/com/couchgames/controller/` — `data/` (manifest
+- `android/app/src/main/java/games/couchpad/controller/` — `data/` (manifest
   model, join resolution, relay probe, prefs), `ui/main/` (home), `ui/game/`
   (WebView game host), `theme/`.
-- `ios/CouchGames/` — `Data/` (same responsibilities as Android `data/`),
+- `ios/CouchPad/` — `Data/` (same responsibilities as Android `data/`),
   `UI/Main/`, `GameHost/` (WKWebView game host), `Theme/`.

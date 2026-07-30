@@ -1,23 +1,29 @@
-name: CouchGames
+name: CouchPad
 options:
   createIntermediateGroups: true
   deploymentTarget:
     iOS: "17.0"
 targets:
-  CouchGames:
+  CouchPad:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - path: CouchGames
+      - path: CouchPad
         excludes:
           - "Resources"
-      - path: CouchGames/Resources
+      - path: CouchPad/Resources
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.couch-games.controller
-        PRODUCT_NAME: CouchGames
+        # App Store identity, reverse-DNS of couchpad.games. Changed in the 2026-07
+        # rebrand while the app was still unpublished — once a build reaches App Store
+        # Connect the bundle id is frozen. It must match the AASA `appID`
+        # (5ZH48MPAM3.games.couchpad.controller) on every Universal Link host.
+        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.controller
+        # Names the .app and the Swift module (hence $(PRODUCT_MODULE_NAME) below);
+        # what the user actually sees is CFBundleDisplayName.
+        PRODUCT_NAME: CouchPad
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.10"
@@ -30,34 +36,40 @@ targets:
         # builds for the simulator (CI screenshots), which isn't code-signed, so
         # the distribution profile is inert there; Release uses it for the
         # archive. The profile is bound to the explicit App ID
-        # com.couch-games.controller carrying Associated Domains — set that up in
-        # the portal, not here. Xcode-pane signing picks don't survive
-        # `xcodegen generate`; these do.
+        # games.couchpad.controller carrying Associated Domains — set that up in
+        # the portal, not here. The rebrand changed the bundle id, so that App ID
+        # and its profile are NEW: create both, then keep the name below in sync
+        # (Release builds fail on a profile name the portal doesn't know; Debug is
+        # simulator-only and unsigned, so CI screenshots are unaffected).
+        # Xcode-pane signing picks don't survive `xcodegen generate`; these do.
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "Apple Distribution"
-        PROVISIONING_PROFILE_SPECIFIER: "CouchGames App Store"
+        PROVISIONING_PROFILE_SPECIFIER: "CouchPad App Store"
         DEVELOPMENT_TEAM: 5ZH48MPAM3
     # Universal Links. Each host serves /.well-known/apple-app-site-association;
-    # hexstacker.com scopes to the 6-char room code, couch-games.com adds the
+    # hexstacker.com scopes to the 6-char room code, couchpad.games adds the
     # legal pages (/privacy, /imprint, EN + default). The AASA room pattern is a
     # single exactly-6-char path segment — marketing pages fall through to the
     # browser, and JoinResolver rejects any 6-char non-room code at runtime.
-    # This file is generated from the properties below (like the .xcodeproj) and
-    # is gitignored; edit the list here, not the plist. Associated Domains must
-    # also be enabled on the App ID in the Developer portal.
+    # couch-games.com is the pre-rebrand domain, kept so links already in the wild
+    # still open the app; it must keep serving its AASA for as long as it's listed
+    # (see CP.legacyLauncherHosts). This file is generated from the properties below
+    # (like the .xcodeproj) and is gitignored; edit the list here, not the plist.
+    # Associated Domains must also be enabled on the App ID in the Developer portal.
     entitlements:
-      path: CouchGames/CouchGames.entitlements
+      path: CouchPad/CouchPad.entitlements
       properties:
         com.apple.developer.associated-domains:
           - applinks:hexstacker.com
+          - applinks:couchpad.games
           - applinks:couch-games.com
     scheme:
       testTargets:
-        - CouchGamesUITests
+        - CouchPadUITests
     info:
-      path: CouchGames/Info.plist
+      path: CouchPad/Info.plist
       properties:
-        CFBundleDisplayName: Couch Games
+        CFBundleDisplayName: CouchPad
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         ITSAppUsesNonExemptEncryption: false
@@ -68,7 +80,7 @@ targets:
         # LAN navigation under #if DEBUG, so a release build never exercises it.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
-        NSCameraUsageDescription: "Couch Games uses the camera to scan the room QR code shown on your TV."
+        NSCameraUsageDescription: "CouchPad uses the camera to scan the room QR code shown on your TV."
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:
@@ -81,18 +93,18 @@ targets:
               - UISceneConfigurationName: Default
                 UISceneDelegateClassName: "$(PRODUCT_MODULE_NAME).SceneDelegate"
   # Smoke test + store-screenshot capture (see StoreScreenshotTests.swift).
-  CouchGamesUITests:
+  CouchPadUITests:
     type: bundle.ui-testing
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - path: CouchGamesUITests
+      - path: CouchPadUITests
     dependencies:
-      - target: CouchGames
+      - target: CouchPad
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.couch-games.controller.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.controller.uitests
         SWIFT_VERSION: "5.10"
-        TEST_TARGET_NAME: CouchGames
+        TEST_TARGET_NAME: CouchPad
         GENERATE_INFOPLIST_FILE: true
         CODE_SIGN_STYLE: Automatic

@@ -2,7 +2,7 @@
 #   - Android: .aab signed with the Play upload keystore (materialized from secrets;
 #     see keystore.properties.example), uploaded as a workflow artifact — the Play
 #     upload itself is still manual.
-#   - iOS: signed with the Apple Distribution cert + "CouchGames App Store" profile
+#   - iOS: signed with the Apple Distribution cert + "CouchPad App Store" profile
 #     (project.yml pins manual signing with exactly these). Tag builds upload
 #     straight to TestFlight via the ASC API key with the tag as marketing version
 #     (the TestFlight build IS the release candidate — no .ipa artifact);
@@ -75,7 +75,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: com.couchgames.controller-release-aab
+          name: games.couchpad.controller-release-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
@@ -147,10 +147,10 @@ jobs:
             VERSION_ARGS+=("MARKETING_VERSION=$GITHUB_REF_NAME")
           fi
           xcodebuild archive \
-            -project CouchGames.xcodeproj \
-            -scheme CouchGames \
+            -project CouchPad.xcodeproj \
+            -scheme CouchPad \
             -destination "generic/platform=iOS" \
-            -archivePath build/CouchGames.xcarchive \
+            -archivePath build/CouchPad.xcarchive \
             "${VERSION_ARGS[@]}"
 
       - name: Export signed IPA (dispatch) or upload to TestFlight (tag)
@@ -160,7 +160,7 @@ jobs:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
         run: |
-          EXPORT_ARGS=(-archivePath build/CouchGames.xcarchive -exportOptionsPlist ExportOptions.plist)
+          EXPORT_ARGS=(-archivePath build/CouchPad.xcarchive -exportOptionsPlist ExportOptions.plist)
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             for v in ASC_API_KEY_P8_BASE64 ASC_API_KEY_ID ASC_API_ISSUER_ID; do
               [ -n "${!v}" ] || { echo "::error::Secret $v is not set"; exit 1; }
@@ -178,7 +178,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: github.ref_type != 'tag'
         with:
-          name: com.couch-games.controller-release-ipa
+          name: games.couchpad.controller-release-ipa
           path: ios/build/export/*.ipa
           if-no-files-found: error
 
@@ -186,6 +186,6 @@ jobs:
       # reports for exactly this binary.
       - uses: actions/upload-artifact@v7
         with:
-          name: com.couch-games.controller-release-dsyms
-          path: ios/build/CouchGames.xcarchive/dSYMs
+          name: games.couchpad.controller-release-dsyms
+          path: ios/build/CouchPad.xcarchive/dSYMs
           if-no-files-found: error

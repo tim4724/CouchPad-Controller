@@ -46,7 +46,7 @@
     <string name="game_end_generic">Die Party ist vorbei</string>
 
     <string name="error_empty_code">Leerer Code.</string>
-    <string name="error_not_couch_games_room">Dieser Code gehört zu keinem Couch-Games-Raum.</string>
+    <string name="error_not_couchpad_room">Dieser Code gehört zu keinem CouchPad-Raum.</string>
     <string name="error_no_live_game">Kein aktives Spiel konfiguriert.</string>
     <string name="error_no_controller_url">Dieses Spiel hat keine Controller-URL.</string>
     <string name="error_enter_room_code">Gib einen Raumcode ein.</string>

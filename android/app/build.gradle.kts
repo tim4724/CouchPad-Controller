@@ -24,10 +24,17 @@ val releaseStoreFile = keystoreProps.getProperty("storeFile")?.let { rootProject
 val hasReleaseKeystore = releaseStoreFile != null
 
 android {
-    namespace = "com.couchgames.controller"
+    // Kotlin package / R+BuildConfig namespace — compile-time only, kept identical
+    // to the applicationId below.
+    namespace = "games.couchpad.controller"
     compileSdk = 37
     defaultConfig {
-        applicationId = "com.couchgames.controller"
+        // Play Store identity, reverse-DNS of couchpad.games. Changed in the 2026-07
+        // rebrand while the app was still unpublished — this is a one-way door once
+        // a build is uploaded (a new applicationId is a new listing), and it must
+        // match the package_name in the assetlinks.json served on every App Link
+        // host, or link verification silently fails.
+        applicationId = "games.couchpad.controller"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

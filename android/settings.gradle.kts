@@ -29,6 +29,6 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = "Couch Games"
+rootProject.name = "CouchPad"
 include(":app")
 include(":baselineprofile")

@@ -17,8 +17,8 @@
 	<string>5ZH48MPAM3</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.couch-games.controller</key>
-		<string>CouchGames App Store</string>
+		<key>games.couchpad.controller</key>
+		<string>CouchPad App Store</string>
 	</dict>
 	<key>uploadSymbols</key>
 	<true/>

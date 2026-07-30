@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LOCALES = ["de", "es", "fr", "it", "ja", "ko", "pt", "ru", "tr", "zh"]
 
 ANDROID_RES = ROOT / "android/app/src/main/res"
-IOS_RESOURCES = ROOT / "ios/CouchGames/Resources"
+IOS_RESOURCES = ROOT / "ios/CouchPad/Resources"
 MANIFESTS = [
     ROOT / "android/app/src/main/assets/games-manifest.json",
     IOS_RESOURCES / "games-manifest.json",

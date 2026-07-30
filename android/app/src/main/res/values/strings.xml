@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Couch Games</string>
+    <string name="app_name" translatable="false">CouchPad</string>
 
     <!-- Home -->
     <string name="home_subtitle">Controller</string>
@@ -57,7 +57,7 @@
 
     <!-- Join / code resolution errors -->
     <string name="error_empty_code">Empty code.</string>
-    <string name="error_not_couch_games_room">That code isn\'t a Couch Games room.</string>
+    <string name="error_not_couchpad_room">That code isn\'t a CouchPad room.</string>
     <string name="error_no_live_game">No live game configured.</string>
     <string name="error_no_controller_url">That game has no controller URL.</string>
     <string name="error_enter_room_code">Enter a room code.</string>

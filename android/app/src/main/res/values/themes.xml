@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <style name="Theme.CouchGames" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.CouchPad" parent="android:Theme.Material.Light.NoActionBar">
         <!-- The frames before Compose draws: launch window + Android 12+ splash.
              The splash does NOT follow windowBackground, so set it explicitly.
              The attribute is API 31+ but harmlessly ignored below, so targetApi
              tells lint that's intentional rather than a NewApi crash risk. -->
-        <item name="android:windowBackground">@color/cg_surface</item>
-        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/cg_surface</item>
+        <item name="android:windowBackground">@color/cp_surface</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/cp_surface</item>
     </style>
 </resources>

@@ -1,22 +1,23 @@
 [versions]
-aboutLibraries = "15.0.3"
-androidGradlePlugin = "9.3.0"
+aboutLibraries = "15.0.4"
+androidGradlePlugin = "9.3.1"
 androidxCore = "1.19.0"
 androidxLifecycle = "2.11.0"
 androidxActivity = "1.13.0"
 androidxComposeBom = "2026.06.01"
 androidxTestExtJunit = "1.3.0"
 # benchmark drives both the macrobenchmark test dep and the androidx.baselineprofile plugin.
-# 1.5.0-alpha: the 1.4.x plugin rejects AGP 9 modules ("not a supported android module").
-benchmark = "1.5.0-alpha07"
+# Pre-release by necessity: the 1.4.x plugin (the newest stable) rejects AGP 9 modules
+# ("not a supported android module"). Drop the suffix once 1.5.0 ships.
+benchmark = "1.5.0-beta01"
 camerax = "1.6.1"
 espressoCore = "3.7.0"
 kotlin = "2.4.10"
-nav3Core = "1.1.4"
+nav3Core = "1.1.5"
 profileinstaller = "1.4.1"
 uiautomator = "2.4.0"
 webkit = "1.16.0"
-zxingCpp = "3.1.0"
+zxingCpp = "3.1.1"
 
 [libraries]
 # Open-source license list — the Gradle plugin generates R.raw.aboutlibraries at
@@ -27,8 +28,8 @@ androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "androidxComposeBom" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3"}
-# Not managed by recent Compose BOMs — pin explicitly.
-androidx-compose-material-icons-core = { module = "androidx.compose.material:material-icons-core", version = "1.7.8" }
+# Deprecated and frozen at 1.7.8 upstream; the BOM pins that version, so no version here.
+androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui"}
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espressoCore" }

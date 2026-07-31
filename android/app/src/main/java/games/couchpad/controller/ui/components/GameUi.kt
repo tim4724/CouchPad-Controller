@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +53,7 @@ import games.couchpad.controller.data.ArtworkCache
 import games.couchpad.controller.data.Game
 import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.data.remoteArtUrl
+import games.couchpad.controller.theme.ActionCoral
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -195,7 +197,13 @@ fun PlaySteps(game: Game) {
 /** The two join actions — shared by the home Join card and a live game's info sheet. */
 @Composable
 fun JoinButtons(onScan: () -> Unit, onEnterCode: () -> Unit) {
-  Button(onClick = onScan, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+  // Coral is reserved for this one CTA (site --action rule): large/bold only,
+  // everything else stays on the neutral chrome.
+  Button(
+    onClick = onScan,
+    modifier = Modifier.fillMaxWidth().height(56.dp),
+    colors = ButtonDefaults.buttonColors(containerColor = ActionCoral, contentColor = Color.White),
+  ) {
     Icon(painterResource(R.drawable.ic_qr_scan), contentDescription = null, Modifier.size(22.dp))
     Spacer(Modifier.width(10.dp))
     Text(stringResource(R.string.scan_code), style = MaterialTheme.typography.titleMedium)

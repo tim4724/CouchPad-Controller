@@ -515,7 +515,7 @@ private struct RejoinCard: View {
                     // falling back to the manifest's curated name until it's captured.
                     Text(room.title ?? room.game.name)
                         .font(.cpTitleMedium)
-                        .foregroundStyle(palette.onSecondaryContainer)
+                        .foregroundStyle(palette.onSurface)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     if !room.roomCode.isEmpty {
@@ -531,8 +531,11 @@ private struct RejoinCard: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity)
+            // Same surface tone as the Join card, not secondaryContainer — the deep
+            // tonal fill is sized for buttons; as a full-width card it reads khaki
+            // on the paper bg (mirrors the Android RejoinCard).
             .background(
-                palette.secondaryContainer,
+                palette.surfaceContainerHigh,
                 in: RoundedRectangle(cornerRadius: 20, style: .continuous)
             )
         }

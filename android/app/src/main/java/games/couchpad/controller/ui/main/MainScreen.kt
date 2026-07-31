@@ -546,9 +546,11 @@ private fun RejoinCard(room: RecentRoom, onClick: () -> Unit) {
       .fillMaxWidth()
       .graphicsLayer { scaleX = scale; scaleY = scale },
     interactionSource = interaction,
+    // Same surface tone as the Join card, not secondaryContainer — the deep tonal
+    // fill is sized for buttons; as a full-width card it reads khaki on the paper bg.
     colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.secondaryContainer,
-      contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+      containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+      contentColor = MaterialTheme.colorScheme.onSurface,
     ),
   ) {
     Row(

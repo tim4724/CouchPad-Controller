@@ -271,24 +271,34 @@ struct JoinButtons: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            // Coral is reserved for this one CTA (site --action rule): large/bold only,
+            // everything else stays on the neutral chrome.
             Button(action: onScan) {
                 Label("Scan code", systemImage: "qrcode.viewfinder")
                     .font(.cpTitleMedium)
-                    .foregroundStyle(palette.onPrimary)
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(CPPalette.actionCoral)
             .buttonBorderShape(.roundedRectangle(radius: 14))
             .controlSize(.large)
 
+            // Explicit tonal fill: `.bordered` would derive a translucent fill from
+            // the ambient tint and never read the palette's secondaryContainer, so
+            // the fill would drift from Android's FilledTonalButton.
             Button(action: onEnterCode) {
                 Text("Enter code manually")
                     .font(.cpTitleMedium)
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
             }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.roundedRectangle(radius: 14))
-            .controlSize(.large)
+            .buttonStyle(.plain)
+            .background(
+                palette.secondaryContainer,
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .foregroundStyle(palette.onSecondaryContainer)
         }
     }
 }

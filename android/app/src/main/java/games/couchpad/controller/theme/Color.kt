@@ -2,37 +2,44 @@ package games.couchpad.controller.theme
 
 import androidx.compose.ui.graphics.Color
 
-// MONO — graphite chrome, console-shell pattern (PS5/Switch/Netflix): the game
-// posters carry ALL the color, so neutral chrome never fights a game's palette.
-// The container ladders derive from the two surface bases in Theme.kt.
-val PrimaryLight = Color(0xFF202024)
+// INK & CONFETTI — the couchpad.games design tokens (Couch-Games assets/theme.css)
+// mapped onto M3 roles. Neutral charcoal chrome still carries the structure and the
+// game posters still carry the color (console-shell pattern); the change from the old
+// Mono palette is warmth: paper-tinted light surfaces, violet-tinted near-black dark
+// ones, and the coral CTA. Container roles the site doesn't define are steps on the
+// site's surface ladder — except the tonal-button fill (secondaryContainer), which is
+// deliberately off-ladder; see its comment below.
+val PrimaryLight = Color(0xFF26242C) // --chrome
 val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFE5E1E9)
-val OnPrimaryContainerLight = Color(0xFF1B1B1F)
+val PrimaryContainerLight = Color(0xFFE9E4D9) // --surface-container
+val OnPrimaryContainerLight = Color(0xFF26242C)
 
-val PrimaryDark = Color(0xFFE6E1E9)
-val OnPrimaryDark = Color(0xFF1C1B20)
-val PrimaryContainerDark = Color(0xFF47444D)
-val OnPrimaryContainerDark = Color(0xFFE6E1E9)
+val PrimaryDark = Color(0xFFF2EFE9)
+val OnPrimaryDark = Color(0xFF26242C)
+val PrimaryContainerDark = Color(0xFF3D3849)
+val OnPrimaryContainerDark = Color(0xFFF2EFE9)
 
-// Neutral secondary / variant / outline roles: Material 3 fills any UNSET role
-// with its stock lavender, which renders purple against the graphite chrome.
-// Deeper than surfaceContainerHigh so a tonal button ON the Join card still
-// reads as a button rather than blending in.
-val SecondaryContainerLight = Color(0xFFD7D6DD)
-val OnSecondaryContainerLight = Color(0xFF1B1B1F)
-val SurfaceVariantLight = Color(0xFFE4E3E7)
-val OnSurfaceVariantLight = Color(0xFF46464B)
-val OutlineLight = Color(0xFF77767C)
-val OutlineVariantLight = Color(0xFFCAC9CE)
+// Tonal-button fill: ink-tinted greige (paper blended toward --chrome), NOT a
+// step on the beige ladder — the beiges' yellow cast reads khaki as a fill.
+// Deep enough to read as a button on the surfaceContainerHigh Join card.
+val SecondaryContainerLight = Color(0xFFDCD8D3)
+val OnSecondaryContainerLight = Color(0xFF26242C)
+val SurfaceVariantLight = Color(0xFFE9E4D9) // --surface-container
+val OnSurfaceVariantLight = Color(0xFF5E5A66)
+val OutlineLight = Color(0xFF77717F)
+val OutlineVariantLight = Color(0xFFDFD9CD)
 
-val SecondaryContainerDark = Color(0xFF35353B)
-val OnSecondaryContainerDark = Color(0xFFE6E1E9)
-val SurfaceVariantDark = Color(0xFF46464B)
-val OnSurfaceVariantDark = Color(0xFFC7C6CC)
-val OutlineDark = Color(0xFF90909A)
-val OutlineVariantDark = Color(0xFF44444A)
+val SecondaryContainerDark = Color(0xFF332F3F) // --surface-highest
+val OnSecondaryContainerDark = Color(0xFFF2EFE9)
+val SurfaceVariantDark = Color(0xFF332F3F)
+val OnSurfaceVariantDark = Color(0xFFA8A3B1)
+val OutlineDark = Color(0xFF8D8798)
+val OutlineVariantDark = Color(0xFF2F2B3A)
 
-// Deep neutral dark (living-room dark, deeper than stock M3) and a hair-off-white light.
-val SurfaceDarkBase = Color(0xFF0F0F11)
-val SurfaceLightBase = Color(0xFFFAFAFB)
+// Warm paper light, violet-tinted near-black dark (site --bg values).
+val SurfaceDarkBase = Color(0xFF110F17)
+val SurfaceLightBase = Color(0xFFFBF9F4)
+
+// --action. CTA container only, never small text: it is 3.4:1 against the light
+// background, so anything below large/bold sizes must use onSurface instead.
+val ActionCoral = Color(0xFFF04A50)

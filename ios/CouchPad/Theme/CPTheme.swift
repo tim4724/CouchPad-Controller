@@ -18,9 +18,12 @@ extension Color {
 
 // MARK: - Palette
 
-/// MONO graphite chrome palette (Material 3 roles, pre-baked hex — never re-derive lerps).
-/// Members are `var` only so the copy helpers can mutate a copy; `.light`/`.dark` are the
-/// sole instances handed out.
+/// INK & CONFETTI palette — the couchpad.games design tokens (Couch-Games
+/// assets/theme.css) mapped onto Material 3 roles; must stay value-identical to the
+/// Android theme (android theme/Color.kt + Theme.kt). Warm paper light, violet-tinted
+/// near-black dark; large fills use only the palest beige steps (the deep ones read
+/// khaki at card size). Members are `var` only so the copy helpers can mutate a copy;
+/// `.light`/`.dark` are the sole instances handed out.
 struct CPPalette: Equatable {
     var primary, onPrimary, primaryContainer, onPrimaryContainer: Color
     var secondary, onSecondary, secondaryContainer, onSecondaryContainer: Color
@@ -30,28 +33,29 @@ struct CPPalette: Equatable {
     var error, onError, inverseSurface, inverseOnSurface, scrim: Color
 
     static let light = CPPalette(
-        primary: Color(cpHex: 0x202024),
+        primary: Color(cpHex: 0x26242C),
         onPrimary: Color(cpHex: 0xFFFFFF),
-        primaryContainer: Color(cpHex: 0xE5E1E9),
-        onPrimaryContainer: Color(cpHex: 0x1B1B1F),
+        primaryContainer: Color(cpHex: 0xE9E4D9),
+        onPrimaryContainer: Color(cpHex: 0x26242C),
         secondary: Color(cpHex: 0x625B71),
         onSecondary: Color(cpHex: 0xFFFFFF),
-        secondaryContainer: Color(cpHex: 0xD7D6DD),
-        onSecondaryContainer: Color(cpHex: 0x1B1B1F),
-        background: Color(cpHex: 0xFAFAFB),
+        // Ink-tinted greige, not a beige-ladder step (yellow-cast fills read khaki).
+        secondaryContainer: Color(cpHex: 0xDCD8D3),
+        onSecondaryContainer: Color(cpHex: 0x26242C),
+        background: Color(cpHex: 0xFBF9F4),
         onBackground: Color(cpHex: 0x1C1B1F),
-        surface: Color(cpHex: 0xFAFAFB),
+        surface: Color(cpHex: 0xFBF9F4),
         onSurface: Color(cpHex: 0x1C1B1F),
-        surfaceVariant: Color(cpHex: 0xE4E3E7),
-        onSurfaceVariant: Color(cpHex: 0x46464B),
-        outline: Color(cpHex: 0x77767C),
-        outlineVariant: Color(cpHex: 0xCAC9CE),
+        surfaceVariant: Color(cpHex: 0xE9E4D9),
+        onSurfaceVariant: Color(cpHex: 0x5E5A66),
+        outline: Color(cpHex: 0x77717F),
+        outlineVariant: Color(cpHex: 0xDFD9CD),
         surfaceContainerLowest: Color(cpHex: 0xFFFFFF),
-        surfaceContainerLow: Color(cpHex: 0xF0F0F1),
-        surfaceContainer: Color(cpHex: 0xEBEBEC),
-        surfaceContainerHigh: Color(cpHex: 0xE4E4E5),
-        surfaceContainerHighest: Color(cpHex: 0xDDDDDE),
-        surfaceBright: Color(cpHex: 0xFEF7FF),
+        surfaceContainerLow: Color(cpHex: 0xF8F5EF),
+        surfaceContainer: Color(cpHex: 0xF3F0E8),
+        surfaceContainerHigh: Color(cpHex: 0xF0EDE6),
+        surfaceContainerHighest: Color(cpHex: 0xE9E4D9),
+        surfaceBright: Color(cpHex: 0xFBF9F4),
         error: Color(cpHex: 0xB3261E),
         onError: Color(cpHex: 0xFFFFFF),
         inverseSurface: Color(cpHex: 0x313033),
@@ -60,34 +64,38 @@ struct CPPalette: Equatable {
     )
 
     static let dark = CPPalette(
-        primary: Color(cpHex: 0xE6E1E9),
-        onPrimary: Color(cpHex: 0x1C1B20),
-        primaryContainer: Color(cpHex: 0x47444D),
-        onPrimaryContainer: Color(cpHex: 0xE6E1E9),
+        primary: Color(cpHex: 0xF2EFE9),
+        onPrimary: Color(cpHex: 0x26242C),
+        primaryContainer: Color(cpHex: 0x3D3849),
+        onPrimaryContainer: Color(cpHex: 0xF2EFE9),
         secondary: Color(cpHex: 0xCCC2DC),
         onSecondary: Color(cpHex: 0x332D41),
-        secondaryContainer: Color(cpHex: 0x35353B),
-        onSecondaryContainer: Color(cpHex: 0xE6E1E9),
-        background: Color(cpHex: 0x0F0F11),
+        secondaryContainer: Color(cpHex: 0x332F3F),
+        onSecondaryContainer: Color(cpHex: 0xF2EFE9),
+        background: Color(cpHex: 0x110F17),
         onBackground: Color(cpHex: 0xE6E1E5),
-        surface: Color(cpHex: 0x0F0F11),
+        surface: Color(cpHex: 0x110F17),
         onSurface: Color(cpHex: 0xE6E1E5),
-        surfaceVariant: Color(cpHex: 0x46464B),
-        onSurfaceVariant: Color(cpHex: 0xC7C6CC),
-        outline: Color(cpHex: 0x90909A),
-        outlineVariant: Color(cpHex: 0x44444A),
-        surfaceContainerLowest: Color(cpHex: 0x040405),
-        surfaceContainerLow: Color(cpHex: 0x151517),
-        surfaceContainer: Color(cpHex: 0x19191B),
-        surfaceContainerHigh: Color(cpHex: 0x222224),
-        surfaceContainerHighest: Color(cpHex: 0x2A2A2C),
-        surfaceBright: Color(cpHex: 0x363638),
+        surfaceVariant: Color(cpHex: 0x332F3F),
+        onSurfaceVariant: Color(cpHex: 0xA8A3B1),
+        outline: Color(cpHex: 0x8D8798),
+        outlineVariant: Color(cpHex: 0x2F2B3A),
+        surfaceContainerLowest: Color(cpHex: 0x0B0A10),
+        surfaceContainerLow: Color(cpHex: 0x1C1A24),
+        surfaceContainer: Color(cpHex: 0x211E2B),
+        surfaceContainerHigh: Color(cpHex: 0x2A2735),
+        surfaceContainerHighest: Color(cpHex: 0x332F3F),
+        surfaceBright: Color(cpHex: 0x413F45),
         error: Color(cpHex: 0xF2B8B5),
         onError: Color(cpHex: 0x601410),
         inverseSurface: Color(cpHex: 0xE6E1E5),
         inverseOnSurface: Color(cpHex: 0x313033),
         scrim: Color(cpHex: 0x000000)
     )
+
+    /// Site --action. CTA container only, never small text: 3.4:1 against the light
+    /// background. White label per the site's "Play now" (contentColorOn would pick black).
+    static let actionCoral = Color(cpHex: 0xF04A50)
 
     /// Copy with primary = accent, onPrimary = contentColorOn(accent). (Game-host accent remap.)
     func withAccent(_ accent: Color) -> CPPalette {
@@ -153,7 +161,8 @@ private struct CPThemedModifier: ViewModifier {
         let palette: CPPalette = colorScheme == .dark ? .dark : .light
         content
             .environment(\.cpPalette, palette)
-            // Mono brand accent for every system control (buttons, alerts, cursors).
+            // Ink chrome accent for every system control (buttons, alerts, cursors);
+            // coral is applied per-CTA, never as the global tint.
             .tint(palette.primary)
     }
 }

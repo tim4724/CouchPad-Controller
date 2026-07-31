@@ -23,11 +23,12 @@ private val DarkColors = darkColorScheme(
   surface = SurfaceDarkBase,
   surfaceDim = SurfaceDarkBase,
   surfaceBright = lerp(SurfaceDarkBase, Color.White, 0.20f),
-  surfaceContainerLowest = lerp(SurfaceDarkBase, Color.Black, 0.35f),
-  surfaceContainerLow = lerp(SurfaceDarkBase, Color.White, 0.035f),
-  surfaceContainer = lerp(SurfaceDarkBase, Color.White, 0.055f),
-  surfaceContainerHigh = lerp(SurfaceDarkBase, Color.White, 0.10f),
-  surfaceContainerHighest = lerp(SurfaceDarkBase, Color.White, 0.14f),
+  // Site --surface-* ladder verbatim, not lerps: the tokens are the contract.
+  surfaceContainerLowest = Color(0xFF0B0A10),
+  surfaceContainerLow = Color(0xFF1C1A24),
+  surfaceContainer = Color(0xFF211E2B),
+  surfaceContainerHigh = Color(0xFF2A2735),
+  surfaceContainerHighest = Color(0xFF332F3F),
 )
 
 private val LightColors = lightColorScheme(
@@ -43,16 +44,22 @@ private val LightColors = lightColorScheme(
   outlineVariant = OutlineVariantLight,
   background = SurfaceLightBase,
   surface = SurfaceLightBase,
+  // Explicit: the M3 default is lavender-white #FEF7FF, which clashes with paper
+  // (and iOS mirrors this value).
+  surfaceBright = SurfaceLightBase,
+  // Much paler than the site's raw ladder: on the site only --surface-low
+  // (#F0EDE6, the facts panel) appears as a large fill; the deeper beige steps
+  // are hover/detail tones and read khaki when spread across a card or button.
   surfaceContainerLowest = Color.White,
-  surfaceContainerLow = lerp(SurfaceLightBase, PrimaryLight, 0.04f),
-  surfaceContainer = lerp(SurfaceLightBase, PrimaryLight, 0.06f),
-  surfaceContainerHigh = lerp(SurfaceLightBase, PrimaryLight, 0.09f),
-  surfaceContainerHighest = lerp(SurfaceLightBase, PrimaryLight, 0.12f),
+  surfaceContainerLow = Color(0xFFF8F5EF),
+  surfaceContainer = Color(0xFFF3F0E8),
+  surfaceContainerHigh = Color(0xFFF0EDE6),
+  surfaceContainerHighest = Color(0xFFE9E4D9),
 )
 
 /**
  * Standard Material 3 theming: follows the system light/dark setting; both
- * schemes are the brand Mono (graphite) palette.
+ * schemes are the brand Ink & Confetti palette (see Color.kt).
  */
 @Composable
 fun CouchPadTheme(

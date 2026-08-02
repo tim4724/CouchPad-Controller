@@ -33,6 +33,17 @@ struct MainScreen: View {
     // refresh task below updates it live when the served manifest differs.
     @ObservedObject private var manifest = ManifestStore.shared
     private var games: [Game] { manifest.games }
+    // Rooms advertised on the LAN by native display apps (contract §8). Browsed only
+    // while this screen is the visible top; resolved against `games` on every render,
+    // so a manifest refresh re-admits (or drops) an advert without restarting anything.
+    @StateObject private var nearby = NearbyBrowser()
+    @State private var nearbyOptedIn = NearbyOptIn.isSet
+    /// mDNS discovery never "completes" — it just keeps listening — so a spinner would
+    /// spin forever with the TV off. Settle to a plain "not found" after a grace period.
+    @State private var nearbySearchSettled = false
+    /// An advertised code becomes a card only once the relay has resolved it — that call
+    /// is what supplies the join URL, `cpp` and the occupancy check.
+    @State private var resolvedNearby: [String: NearbyRoom] = [:]
     @State private var profile: Profile = ProfileStore.load()
     // Item-based presentation: values are snapshotted into the request at
     // present time. @State read inside a sheet/cover content closure is not
@@ -80,6 +91,32 @@ struct MainScreen: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
 
+                    // "Searching…" / "No rooms found" are claims about having looked and
+                    // come up empty — false while a room card is already on screen, rejoin
+                    // included. The ask is an offer rather than a claim, so it stays
+                    // regardless: hiding it behind a rejoin card would make discovery
+                    // invisible for the rest of the session.
+                    let nearbyRoomList = nearbyRooms(Array(resolvedNearby.values), excluding: rejoin)
+                    if nearbyState == .ask || (nearbyRoomList.isEmpty && rejoin == nil) {
+                        NearbyStatusCard(
+                            state: nearbyState,
+                            onAsk: {
+                                NearbyOptIn.set()
+                                nearbyOptedIn = true
+                                nearby.start()
+                            },
+                            onOpenSettings: {
+                                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                                UIApplication.shared.open(url)
+                            }
+                        )
+                        .transition(.opacity)
+                    }
+                    ForEach(nearbyRoomList) { room in
+                        NearbyCard(room: room) { requireName(.join(room.target)) }
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
+
                     VStack(spacing: 12) {
                         ForEach(games) { game in
                             GameCard(game: game) { infoGame = game }
@@ -92,6 +129,7 @@ struct MainScreen: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .animation(.spring(duration: 0.45), value: messages.gameEndBanner)
+                .animation(.spring(duration: 0.45), value: resolvedNearby.count)
             }
 
             // Bottom protection, mirroring Android's nav-area fade: posters dissolve
@@ -187,6 +225,41 @@ struct MainScreen: View {
             guard isTopVisible else { return }
             await runRejoinPoll()
         }
+        // Browse only while home is on screen AND the player has opted in — the same
+        // gating as the rejoin poll, and it keeps the Local Network prompt off the
+        // game host and off a first launch nobody asked anything of yet.
+        .onChange(of: isTopVisible, initial: true) { _, visible in
+            if visible && nearbyOptedIn { nearby.start() } else { nearby.stop() }
+        }
+        .onDisappear { nearby.stop() }
+        // Re-checked on the same cadence as the rejoin card: both promise "you can enter
+        // this", so both have to notice when the room dies or fills. Tied to the browse
+        // task's lifetime, so nothing polls while this screen isn't the visible top.
+        .task(id: nearby.adverts) {
+            while !Task.isCancelled {
+                // One probe per ROOM, not per record: a room announced by its display
+                // and by every phone in it is still one code.
+                let adverts = distinctAdverts(nearby.adverts)
+                resolvedNearby = resolvedNearby.filter { key, _ in
+                    adverts.contains { $0.code == key }
+                }
+                await withTaskGroup(of: (String, NearbyRoom?).self) { group in
+                    for advert in adverts {
+                        group.addTask { (advert.code, await resolveNearby(advert, games: games)) }
+                    }
+                    for await (code, room) in group {
+                        if let room { resolvedNearby[code] = room } else { resolvedNearby[code] = nil }
+                    }
+                }
+                do { try await Task.sleep(for: roomPollInterval) } catch { return }
+            }
+        }
+        .task(id: nearbyOptedIn) {
+            nearbySearchSettled = false
+            guard nearbyOptedIn else { return }
+            try? await Task.sleep(for: .seconds(8))
+            nearbySearchSettled = true
+        }
         // Pull the served manifest once per launch (ManifestStore guards
         // re-entry, so push/pop re-creating this screen doesn't refetch).
         .task { await manifest.refresh() }
@@ -278,6 +351,12 @@ struct MainScreen: View {
     }
 
     // MARK: Derived
+
+    private var nearbyState: NearbyStatus {
+        if !nearbyOptedIn { return .ask }
+        if nearby.permissionDenied { return .denied }
+        return nearbySearchSettled ? .none : .searching
+    }
 
     private var joinHost: String {
         games.first(where: { $0.isLive })?.displayHost ?? CP.launcherHost
@@ -407,7 +486,10 @@ struct MainScreen: View {
             if Task.isCancelled { return }
             switch result {
             case .found:
-                withAnimation(.spring(duration: 0.45)) { rejoin = recent }
+                // Full is not gone: keep the slot polled so the card returns when someone
+                // leaves, rather than dropping the room the player was just in.
+                let room = result.isFull ? nil : recent
+                withAnimation(.spring(duration: 0.45)) { rejoin = room }
             case .notFound:
                 RecentRoomStore.clear()
                 withAnimation(.spring(duration: 0.45)) {
@@ -418,7 +500,7 @@ struct MainScreen: View {
                 break // transient failure: keep last state
             }
             do {
-                try await Task.sleep(for: .seconds(10))
+                try await Task.sleep(for: roomPollInterval)
             } catch {
                 return
             }
@@ -498,83 +580,190 @@ private struct GameEndBanner: View {
     }
 }
 
-// MARK: - RejoinCard
+// MARK: - RoomCard
 
-private struct RejoinCard: View {
-    let room: RecentRoom
+/// A room the player can enter right now — the one they just left, or one a display is
+/// advertising. The two are the same object to a player, so they are one card; only where
+/// the pieces come from differs, which is what `RejoinCard` and `NearbyCard` supply.
+///
+/// Ordinary chrome — the same secondaryContainer the tonal buttons use, so it adapts per
+/// theme instead of sitting as a dark slab on a light screen. The game's colour lives on
+/// the icon and nowhere else: routing brand through the border made every HexStacker card
+/// near-CTA red (its accent is #FF6B6B against coral #F04A50), which both read as an alert
+/// and spent the one colour that's supposed to mean "this is how you play".
+private struct RoomCard: View {
+    let game: Game
+    let title: String
+    let roomCode: String
+    /// The display's own label ("Wohnzimmer"). Blank for a rejoin, which never has one.
+    let label: String
+    /// `cpp` — which box the room is on (§6). Nil when the URL declared nothing.
+    let platform: String?
     let onTap: () -> Void
 
     @Environment(\.cpPalette) private var palette
 
+    /// "Wohnzimmer · Apple TV" — which box, on its own line. Either half may be missing.
+    private var locator: String {
+        [label.isEmpty ? nil : label, deviceName(platform)].compactMap { $0 }.joined(separator: " · ")
+    }
+
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 14) {
-                RejoinIcon(favicon: room.favicon)
+                GameIcon(game: game, tint: palette.onSecondaryContainer)
                 VStack(alignment: .leading, spacing: 2) {
-                    // Just the controller's own page title (captured this session),
-                    // falling back to the manifest's curated name until it's captured.
-                    Text(room.title ?? room.game.name)
+                    cardTitle(title, roomCode,
+                              codeColor: palette.onSecondaryContainer.opacity(0.55))
                         .font(.cpTitleMedium)
-                        .foregroundStyle(palette.onSurface)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    if !room.roomCode.isEmpty {
-                        Text("Room \(room.roomCode)")
+                    if !locator.isEmpty {
+                        Text(locator)
                             .font(.cpBodyMedium)
-                            .foregroundStyle(.secondary)
+                            .opacity(0.72)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .opacity(0.65)
             }
+            .foregroundStyle(palette.onSecondaryContainer)
             .padding(16)
             .frame(maxWidth: .infinity)
-            // Same surface tone as the Join card, not secondaryContainer — the deep
-            // tonal fill is sized for buttons; as a full-width card it reads khaki
-            // on the paper bg (mirrors the Android RejoinCard).
             .background(
-                palette.surfaceContainerHigh,
+                palette.secondaryContainer,
                 in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(palette.outlineVariant, lineWidth: 1)
             )
         }
         .buttonStyle(PressableCardButtonStyle())
     }
 }
 
-// MARK: - RejoinIcon
+/// The room just left: its title comes from the controller page itself once captured, so
+/// it beats the manifest's curated name. `cpp` rides the join URL (§6), the same string
+/// however the room was reached, so the device name outlives the advertisement it came
+/// from.
+private struct RejoinCard: View {
+    let room: RecentRoom
+    let onTap: () -> Void
 
-/// The rejoin card's leading glyph: the game's captured controller favicon on a tile
-/// whose shade is chosen from the icon's OWN content — a dark plate under a
-/// light/transparent icon, a white plate under a dark one — so it never washes out
-/// against the light card or a same-toned plate. Falls back to a play symbol when
-/// nothing's been captured this session.
-private struct RejoinIcon: View {
-    let favicon: Favicon?
+    var body: some View {
+        RoomCard(game: room.game,
+                 title: room.title ?? room.game.name,
+                 roomCode: room.roomCode,
+                 label: "",
+                 platform: devicePlatform(fromUrl: room.joinUrl),
+                 onTap: onTap)
+    }
+}
+
+/// A room a display on this network is advertising (contract §8).
+private struct NearbyCard: View {
+    let room: NearbyRoom
+    let onTap: () -> Void
+
+    var body: some View {
+        RoomCard(game: room.game,
+                 title: room.game.name,
+                 roomCode: room.roomCode,
+                 label: room.label,
+                 platform: room.platform,
+                 onTap: onTap)
+    }
+}
+
+/// "HexStacker A3KX9p" — the room code sits with the thing it belongs to, demoted in
+/// color so the name still leads. One concatenated Text, so a long name truncates the
+/// pair as a unit.
+private func cardTitle(_ name: String, _ roomCode: String, codeColor: Color) -> Text {
+    let title = Text(name)
+    guard !roomCode.isEmpty else { return title }
+    return title + Text("  \(roomCode)").foregroundColor(codeColor)
+}
+
+// MARK: - NearbyStatusCard
+
+/// Where discovery currently stands, when it has no room to show for it.
+enum NearbyStatus {
+    /// Never opted in — the only state that asks for anything, so the only one that
+    /// earns a full card.
+    case ask
+    case searching
+    case none
+    /// iOS only: Local Network was denied, which is unrecoverable in-app.
+    case denied
+}
+
+/// What the TV slot shows when there are no rooms to show.
+///
+/// The ask is an action, so it takes a button — the room cards are objects you pick from,
+/// and giving the ask their shape blurs the two. Tonal, not coral: this is one-time setup
+/// that vanishes for good once granted, and it must not outshout the scan CTA you use every
+/// session. Metrics match JoinButtons so the three buttons on this screen are one family.
+///
+/// Once granted, searching and not-found collapse to a muted line — an idle home screen
+/// shouldn't carry a box announcing that a TV simply isn't switched on. `denied` is a line
+/// too, but tappable: it's the only route out of a denial.
+private struct NearbyStatusCard: View {
+    let state: NearbyStatus
+    let onAsk: () -> Void
+    let onOpenSettings: () -> Void
 
     @Environment(\.cpPalette) private var palette
 
     var body: some View {
-        if let favicon {
-            let plate: Color = favicon.contentIsLight ? Color(white: 0.13) : .white
-            // ~10pt of breathing room inside the tile so the icon never touches the edge.
-            Image(uiImage: favicon.image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 28, height: 28)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .frame(width: 48, height: 48)
-                .background(plate, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(palette.outlineVariant, lineWidth: 1)
-                )
-        } else {
-            Image(systemName: "play.circle.fill")
-                .font(.system(size: 40))
-                .symbolRenderingMode(.hierarchical)
+        switch state {
+        case .ask:
+            // Explicit tonal fill, matching JoinButtons' "Enter code manually" — see the
+            // note there on why `.bordered` can't be used.
+            Button(action: onAsk) {
+                Label("Show rooms nearby", systemImage: "antenna.radiowaves.left.and.right")
+                    .font(.cpTitleMedium)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+            }
+            .buttonStyle(.plain)
+            .background(
+                palette.secondaryContainer,
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .foregroundStyle(palette.onSecondaryContainer)
+        case .searching:
+            statusLine(Text("Searching for TVs…"), showsProgress: true)
+        case .none:
+            statusLine(Text("No TV found"), showsProgress: false)
+        case .denied:
+            Button(action: onOpenSettings) {
+                statusLine(Text("Allow local network access in Settings"), showsProgress: false)
+            }
+            .buttonStyle(.plain)
         }
+    }
+
+    /// A 48pt minimum height keeps the muted states interchangeable without the cards
+    /// below moving, and gives `denied` a real touch target.
+    private func statusLine(_ text: Text, showsProgress: Bool) -> some View {
+        HStack(spacing: 10) {
+            if showsProgress {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "antenna.radiowaves.left.and.right").font(.footnote)
+            }
+            text.font(.cpBodyMedium)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
     }
 }
 
@@ -662,4 +851,75 @@ private struct JoinCard: View {
         )
         .shadow(color: Color.black.opacity(0.15), radius: 18, y: 6)
     }
+}
+
+// MARK: - Previews
+
+/// The home screen's room-card states in one strip, fed by CardSamples so the ones that
+/// otherwise need a live room — an Android TV display, a game with no manifest icon, a
+/// name long enough to truncate — are reachable while editing. The cards are theme
+/// chrome, so the light/dark pair is checking that they adapt rather than sitting as a
+/// slab. Mirrored by Android `MainScreen.kt`; a card change wants both.
+private struct PreviewStrip<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollView {
+            // Home's own card spacing and padding, so the previews show the gaps the
+            // real screen has.
+            VStack(spacing: 12) { content }
+                .padding(16)
+        }
+        .background(Color(.systemBackground))
+        .cpThemed()
+    }
+}
+
+#Preview("Nearby — light") {
+    PreviewStrip {
+        NearbyStatusCard(state: .ask, onAsk: {}, onOpenSettings: {})
+        NearbyStatusCard(state: .searching, onAsk: {}, onOpenSettings: {})
+        NearbyStatusCard(state: .none, onAsk: {}, onOpenSettings: {})
+        NearbyStatusCard(state: .denied, onAsk: {}, onOpenSettings: {})
+        NearbyCard(room: CardSamples.nearbyFull) {}
+        NearbyCard(room: CardSamples.nearbyDeviceOnly) {}
+        NearbyCard(room: CardSamples.nearbyLabelOnly) {}
+        NearbyCard(room: CardSamples.nearbyBare) {}
+        NearbyCard(room: CardSamples.nearbyAndroidTv) {}
+        NearbyCard(room: CardSamples.nearbyIconless) {}
+        NearbyCard(room: CardSamples.nearbyLongName) {}
+    }
+}
+
+#Preview("Nearby — dark") {
+    PreviewStrip {
+        NearbyStatusCard(state: .ask, onAsk: {}, onOpenSettings: {})
+        NearbyStatusCard(state: .searching, onAsk: {}, onOpenSettings: {})
+        NearbyStatusCard(state: .none, onAsk: {}, onOpenSettings: {})
+        NearbyStatusCard(state: .denied, onAsk: {}, onOpenSettings: {})
+        NearbyCard(room: CardSamples.nearbyFull) {}
+        NearbyCard(room: CardSamples.nearbyAndroidTv) {}
+        NearbyCard(room: CardSamples.nearbyIconless) {}
+        NearbyCard(room: CardSamples.nearbyLongName) {}
+    }
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Rejoin — light") {
+    PreviewStrip {
+        RejoinCard(room: CardSamples.rejoinPlain) {}
+        RejoinCard(room: CardSamples.rejoinIconless) {}
+        RejoinCard(room: CardSamples.rejoinPageTitle) {}
+        RejoinCard(room: CardSamples.rejoinNoCode) {}
+        RejoinCard(room: CardSamples.rejoinWithDevice) {}
+        RejoinCard(room: CardSamples.rejoinWeb) {}
+    }
+}
+
+#Preview("Rejoin — dark") {
+    PreviewStrip {
+        RejoinCard(room: CardSamples.rejoinPlain) {}
+        RejoinCard(room: CardSamples.rejoinIconless) {}
+    }
+    .preferredColorScheme(.dark)
 }

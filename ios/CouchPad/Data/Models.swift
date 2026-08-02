@@ -75,13 +75,16 @@ struct Game: Identifiable, Hashable {
     let video: String?
     let accentColor: Color
     let art: String?
+    /// Square brand mark, same asset-path + cache rules as `art`. Distinct from the
+    /// 16:9 cover: a poster crop is unreadable at icon size (NearbyCard).
+    let icon: String?
     let controllerBaseUrl: String?
     let hosts: [String]
     let relayProbeBase: String?
 
     init(id: String, name: String, status: String = "soon",
          minPlayers: Int? = nil, maxPlayers: Int? = nil, video: String? = nil, accentColor: Color = CP.defaultAccent,
-         art: String? = nil, controllerBaseUrl: String? = nil, hosts: [String] = [],
+         art: String? = nil, icon: String? = nil, controllerBaseUrl: String? = nil, hosts: [String] = [],
          relayProbeBase: String? = nil) {
         self.id = id
         self.name = name
@@ -91,6 +94,7 @@ struct Game: Identifiable, Hashable {
         self.video = video
         self.accentColor = accentColor
         self.art = art
+        self.icon = icon
         self.controllerBaseUrl = controllerBaseUrl
         self.hosts = hosts
         self.relayProbeBase = relayProbeBase
@@ -171,6 +175,11 @@ enum GamesManifest {
             art = String(a.dropFirst())
         }
 
+        var icon = blankToNil(obj["icon"])
+        if let i = icon, i.hasPrefix("/") {
+            icon = String(i.dropFirst())
+        }
+
         let controllerBaseUrl = httpsURL(obj["controllerBaseUrl"])
 
         let relayProbeBase = httpsURL(obj["relayProbeBase"])?.trimmingTrailingSlashes()
@@ -179,7 +188,7 @@ enum GamesManifest {
 
         return Game(id: id, name: name, status: status,
                     minPlayers: minPlayers, maxPlayers: maxPlayers, video: video, accentColor: accentColor,
-                    art: art, controllerBaseUrl: controllerBaseUrl, hosts: hosts,
+                    art: art, icon: icon, controllerBaseUrl: controllerBaseUrl, hosts: hosts,
                     relayProbeBase: relayProbeBase)
     }
 

@@ -3,7 +3,12 @@
          match HexStacker-Party's i18n; informal register (tu) like the rest of the suite. -->
     <string name="home_subtitle">Controller</string>
     <string name="about">Informazioni</string>
-    <string name="room_code_label">Stanza %1$s</string>
+    <string name="nearby_find">Mostra le stanze nelle vicinanze</string>
+    <string name="nearby_none">Nessuna stanza trovata</string>
+    <string name="nearby_searching">Ricerca di stanze…</string>
+    <string name="device_apple_tv">Apple TV</string>
+    <string name="device_android_tv">Android TV</string>
+    <string name="device_web">Browser</string>
     <string name="status_live">Disponibile</string>
     <string name="status_coming_soon">In arrivo</string>
 

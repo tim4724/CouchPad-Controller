@@ -10,8 +10,11 @@ under launcher-owned chrome — games ship controller changes without an app
 update.
 
 [CONTRACT.md](CONTRACT.md) is the launcher⇄game contract: join-URL identity
-params, live rename, session end, theming hints, and the safe zone. Both apps
-implement it identically.
+params, live rename, session end, theming hints, the safe zone, and the
+`_couchpad._tcp` room advertisement that puts a one-tap join card on home with no
+scan at all: a **native** display app (tvOS / Android TV) announces its room code,
+and a controller already in a room relays it so browser-hosted rooms are findable
+too. Both apps implement it identically.
 
 ## Layout
 
@@ -67,7 +70,8 @@ fails the check. Run it after any string change.
 
 - `android/app/src/main/assets/games-manifest.json` — the bundled games list;
   drives the home screen, scan/typed-code resolution, and relay probing. Cover
-  art sits next to it in `assets/artwork/`. The iOS app bundles copies under
+  art (`art`, 16:9) and the square brand mark (`icon`, used by the nearby-room
+  card) both sit next to it in `assets/artwork/`. The iOS app bundles copies under
   `ios/CouchPad/Resources/` — keep them in sync when the manifest changes.
   The bundled copy is only the first-run seed: once per launch both apps fetch
   `couchpad.games/games-manifest.json` (served no-cache from the site
@@ -78,7 +82,7 @@ fails the check. Run it after any string change.
   bump) in the served manifest**; changed bytes under an unchanged URL go
   unnoticed by design, same as the site's CSS/JS versioning.
 - `android/app/src/main/java/games/couchpad/controller/` — `data/` (manifest
-  model, join resolution, relay probe, prefs), `ui/main/` (home), `ui/game/`
-  (WebView game host), `theme/`.
+  model, join resolution, relay probe, LAN room discovery, prefs), `ui/main/`
+  (home), `ui/game/` (WebView game host), `theme/`.
 - `ios/CouchPad/` — `Data/` (same responsibilities as Android `data/`),
   `UI/Main/`, `GameHost/` (WKWebView game host), `Theme/`.

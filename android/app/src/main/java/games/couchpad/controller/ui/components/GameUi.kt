@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AssistChip
@@ -51,6 +52,9 @@ import androidx.compose.ui.unit.dp
 import games.couchpad.controller.R
 import games.couchpad.controller.data.ArtworkCache
 import games.couchpad.controller.data.Game
+import games.couchpad.controller.data.PLATFORM_ANDROID_TV
+import games.couchpad.controller.data.PLATFORM_TVOS
+import games.couchpad.controller.data.PLATFORM_WEB
 import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.data.remoteArtUrl
 import games.couchpad.controller.theme.ActionCoral
@@ -140,6 +144,49 @@ fun GameArt(game: Game, modifier: Modifier = Modifier) {
           Brush.linearGradient(listOf(game.accentColor.copy(alpha = 0.50f), game.accentColor.copy(alpha = 0.14f))),
         ),
       )
+    }
+  }
+}
+
+/**
+ * The display's name for a `cpp` platform code, rendered by the launcher and never by
+ * the wire, so the wording stays localized and consistent. Null when the URL declared
+ * nothing usable.
+ */
+@Composable
+fun deviceName(platform: String?): String? = when (platform) {
+  PLATFORM_TVOS -> stringResource(R.string.device_apple_tv)
+  PLATFORM_ANDROID_TV -> stringResource(R.string.device_android_tv)
+  PLATFORM_WEB -> stringResource(R.string.device_web)
+  else -> null
+}
+
+/**
+ * A game's square brand mark on a white tile — the manifest `icon`, not the 16:9 cover
+ * (a poster crop is unreadable this small). Falls back to the TV glyph for a game with
+ * no icon, or an advert that resolved to an unknown launcher subdomain. The tile is
+ * white rather than accent-tinted because icons are authored for a light backdrop.
+ */
+@Composable
+fun GameIcon(game: Game, tint: Color, modifier: Modifier = Modifier) {
+  val context = LocalContext.current
+  val img by produceState(initialValue = game.icon?.let(artCache::get), game.icon) {
+    val icon = game.icon ?: return@produceState
+    if (value == null) {
+      value = withContext(Dispatchers.IO) { decodeArt(context, icon)?.also { artCache[icon] = it } }
+    }
+  }
+  val bitmap = img
+  if (bitmap != null) {
+    Box(
+      modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Color.White),
+      contentAlignment = Alignment.Center,
+    ) {
+      Image(bitmap, contentDescription = null, Modifier.size(34.dp), contentScale = ContentScale.Fit)
+    }
+  } else {
+    Box(modifier.size(48.dp), contentAlignment = Alignment.Center) {
+      Icon(painterResource(R.drawable.ic_tv), contentDescription = null, Modifier.size(34.dp), tint = tint)
     }
   }
 }

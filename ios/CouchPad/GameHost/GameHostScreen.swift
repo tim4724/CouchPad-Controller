@@ -173,6 +173,16 @@ struct GameHostScreen: View {
             ChromeState.shared.statusBarStyle =
                 relativeLuminance(target) > 0.5 ? .darkContent : .lightContent
         }
+        // Relay this room to the local network while we're in it, so the next player can
+        // tap instead of scan — and so the room stays discoverable even if its display
+        // never advertised. Publishes the room code only (§8); no URL, no device name.
+        .task(id: joinUrl) {
+            guard let room = RecentRoomStore.current() else { return }
+            NearbyAdvertiser.shared.start(roomCode: room.roomCode)
+            defer { NearbyAdvertiser.shared.stop() }
+            // Park until the task is cancelled — i.e. until this screen goes away.
+            try? await Task.sleep(for: .seconds(60 * 60 * 24))
+        }
     }
 
     // MARK: - Pieces

@@ -7,6 +7,7 @@
       "minPlayers": 1,
       "maxPlayers": 8,
       "art": "/artwork/hexstacker-16x9.webp",
+      "icon": "/artwork/hexstacker-icon.png",
       "video": "https://hexstacker.com/artwork/trailer.mp4",
       "accentColor": "#FF6B6B",
       "controllerBaseUrl": "https://hexstacker.com",

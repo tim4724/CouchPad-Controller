@@ -66,6 +66,9 @@ IOS_ONLY = {
     "QR scanning is not supported on this device",
     "Scanner unavailable: %@",
     "Version %@ (%@)",   # version footer: Android shows the version name only
+    # iOS-only: a denied Local Network permission is unrecoverable in-app, so iOS
+    # points at Settings. Android just falls back to its ask card.
+    "Allow local network access in Settings",
 }
 
 problems = []

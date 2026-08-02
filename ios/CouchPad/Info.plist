@@ -27,8 +27,14 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_couchpad._tcp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>CouchPad uses the camera to scan the room QR code shown on your TV.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>CouchPad looks for CouchPad games on your TV so you can join without scanning a code.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

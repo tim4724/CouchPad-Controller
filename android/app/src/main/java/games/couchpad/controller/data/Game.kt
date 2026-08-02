@@ -28,6 +28,9 @@ data class Game(
   val video: String? = null,     // https URL of a muted gameplay loop, cached on demand (TrailerCache)
   val accentColor: Color,
   val art: String?,              // asset-relative path, e.g. "artwork/hexstacker-16x9.webp"
+  // Square brand mark, same asset-path + cache rules as [art]. Distinct from the
+  // 16:9 cover: a poster crop is unreadable at icon size (NearbyCard).
+  val icon: String? = null,
   val controllerBaseUrl: String?,
   val hosts: List<String>,       // domains that resolve to this game (subdomains included)
   // The game's own relay (pre-unification) — where its rooms actually live, so
@@ -72,6 +75,7 @@ object GamesManifest {
         video = g.optHttpsUrl("video"),
         accentColor = parseHexColor(g.optString("accentColor", "")),
         art = g.optNonBlank("art")?.removePrefix("/"),
+        icon = g.optNonBlank("icon")?.removePrefix("/"),
         controllerBaseUrl = g.optHttpsUrl("controllerBaseUrl"),
         hosts = if (hostsArr != null) (0 until hostsArr.length()).map { hostsArr.getString(it) } else emptyList(),
         relayProbeBase = g.optHttpsUrl("relayProbeBase")?.trimEnd('/'),

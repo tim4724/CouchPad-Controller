@@ -86,9 +86,11 @@ import games.couchpad.controller.BuildConfig
 import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
+import games.couchpad.controller.data.NearbyAdvertiser
 import games.couchpad.controller.data.RecentRoomStore
 import games.couchpad.controller.data.hostInDomain
 import games.couchpad.controller.data.isPrivateHost
+import games.couchpad.controller.theme.contentColorOn
 import games.couchpad.controller.theme.CouchPadTheme
 import games.couchpad.controller.ui.components.PlayerChip
 import games.couchpad.controller.ui.components.ServerUnreachableRetry
@@ -189,6 +191,14 @@ private fun GameHostContent(
       onGameEnded = { if (exited.compareAndSet(false, true)) currentOnGameEnd(it) },
       onThemeChanged = { currentOnPageTheme(it) },
     )
+  }
+
+  // Relay this room to the local network while we're in it, so the next player can tap
+  // instead of scan — and so the room stays discoverable even if its display never
+  // advertised. Publishes the room code only (§8); no URL, no device name.
+  DisposableEffect(joinUrl) {
+    RecentRoomStore.current()?.let { NearbyAdvertiser.start(context, it.roomCode) }
+    onDispose { NearbyAdvertiser.stop() }
   }
 
   // Hide ONLY the nav bar while in a game — the status bar stays. Hidden-nav +
@@ -371,21 +381,14 @@ private fun GameHostContent(
               }
             },
           )
-          // Capture the page favicon (keyed by host) so the home rejoin card can
-          // show the game's own icon instead of a generic play glyph. WebView hands
-          // us a decoded bitmap — no extra fetch — and a miss just keeps the glyph.
           webChromeClient = object : WebChromeClient() {
-            override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
-              // While the load has failed, the icon/title belong to WebView's own error
-              // page ("Webpage not available") — they'd pollute the Leave bar and the
-              // persisted room card, so ignore them until a real page loads.
-              if (!failed && icon != null) RecentRoomStore.putFavicon(icon)
-            }
-
             // The page's own name (ground truth over the manifest): drives the LEAVE
             // bar live and feeds the home rejoin card. Fires on every document.title
             // change, so late SPA renames are picked up too.
             override fun onReceivedTitle(view: WebView?, title: String?) {
+              // While the load has failed the title is WebView's own error page
+              // ("Webpage not available") — it would pollute the Leave bar and the
+              // room card, so ignore it until a real page loads.
               if (failed || title == null) return
               RecentRoomStore.putTitle(title)?.let { pageTitle = it }
             }
@@ -540,18 +543,6 @@ private fun LeaveBar(
       colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
     )
   }
-}
-
-// Black or white over [color], whichever wins on WCAG contrast — game-supplied
-// colors arrive without a paired "on" color. A naive luminance > 0.5 split picks
-// white on saturated mid-tones (a coral like #FF6B6B sits at ~0.33) even though
-// black reads far better there; the real black/white crossover is at luminance
-// ≈ 0.179, so compare the two contrasts instead.
-private fun contentColorOn(color: Color): Color {
-  val l = color.luminance()
-  val blackContrast = (l + 0.05f) / 0.05f   // black L = 0
-  val whiteContrast = 1.05f / (l + 0.05f)   // white L = 1
-  return if (blackContrast >= whiteContrast) Color.Black else Color.White
 }
 
 /**

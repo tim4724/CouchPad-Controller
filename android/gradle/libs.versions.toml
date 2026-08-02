@@ -31,6 +31,10 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 # Deprecated and frozen at 1.7.8 upstream; the BOM pins that version, so no version here.
 androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui"}
+# @Preview annotation (on main, next to the composables it renders) + the IDE renderer
+# behind it (debug only).
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espressoCore" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExtJunit" }

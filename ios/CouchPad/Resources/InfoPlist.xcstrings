@@ -97,6 +97,77 @@
           }
         }
       }
+    },
+    "NSLocalNetworkUsageDescription" : {
+      "comment" : "Privacy - Local Network Usage Description",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad sucht nach CouchPad-Spielen auf deinem Fernseher, damit du ohne Code-Scan beitreten kannst."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad looks for CouchPad games on your TV so you can join without scanning a code."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad busca partidas de CouchPad en tu TV para que puedas unirte sin escanear un código."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad recherche les parties CouchPad sur ta TV pour que tu puisses rejoindre sans scanner de code."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad cerca partite CouchPad sulla tua TV così puoi unirti senza scansionare un codice."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPadは、コードをスキャンせずに参加できるよう、テレビで実行中のCouchPadゲームを探します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad는 코드를 스캔하지 않고 참여할 수 있도록 TV에서 실행 중인 CouchPad 게임을 찾습니다."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O CouchPad procura jogos do CouchPad na sua TV para você entrar sem escanear um código."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad ищет игры CouchPad на телевизоре, чтобы можно было присоединиться без сканирования кода."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad, kod taramadan katılabilmen için TV'ndeki CouchPad oyunlarını arar."
+          }
+        },
+        "zh" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CouchPad 会查找电视上运行的 CouchPad 游戏，让你无需扫码即可加入。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

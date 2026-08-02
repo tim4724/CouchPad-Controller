@@ -92,6 +92,13 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSCameraUsageDescription: "CouchPad uses the camera to scan the room QR code shown on your TV."
+        # Contract §8 room discovery: browse `_couchpad._tcp` for native display apps
+        # advertising a room, so home can offer one-tap join. NSBonjourServices is not
+        # just documentation — an undeclared type is filtered out and the browser
+        # silently returns nothing. Both strings are localized in InfoPlist.xcstrings.
+        NSLocalNetworkUsageDescription: "CouchPad looks for CouchPad games on your TV so you can join without scanning a code."
+        NSBonjourServices:
+          - _couchpad._tcp
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:

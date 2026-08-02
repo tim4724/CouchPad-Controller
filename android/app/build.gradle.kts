@@ -36,7 +36,10 @@ android {
         // host, or link verification silently fails.
         applicationId = "games.couchpad.controller"
         minSdk = 24
-        targetSdk = 36
+        // 37 = Android 17. Local Network Protections are ENFORCED from this target:
+        // mDNS room discovery (NearbyRooms.kt) needs ACCESS_LOCAL_NETWORK granted or
+        // it is silently blocked — no exception, just no results.
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -143,6 +146,14 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.material.icons.core)
+
+  // Card-state previews (MainScreen.kt, fed by ui/preview/CardSamples.kt). @Preview is
+  // declared on main because it annotates the private composables it renders; the
+  // renderer behind it is debug-only and never ships. (ui-tooling-preview already
+  // arrives transitively via aboutlibraries-compose-m3 — declared anyway, because
+  // compiling against another library's transitive dependency breaks silently.)
+  implementation(libs.androidx.compose.ui.tooling.preview)
+  debugImplementation(libs.androidx.compose.ui.tooling)
 
   // Navigation
   implementation(libs.androidx.navigation3.ui)

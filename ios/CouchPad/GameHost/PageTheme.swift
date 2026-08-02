@@ -182,36 +182,6 @@ enum GameHostJS {
         return "window.CouchPad && typeof window.CouchPad.setName === 'function' && window.CouchPad.setName(\(quoted));"
     }
 
-    /// Resolve the page's best icon URL (absolute). Prefers apple-touch-icon (usually
-    /// 180px, so it stays crisp on the rejoin card) over a rel~=icon, and falls back
-    /// to the conventional /favicon.ico. Returns null when the page declares nothing
-    /// and there's no default — the native side then keeps the play glyph.
-    ///
-    /// SVG icons are skipped: UIImage(data:) can't decode them, so an SVG href would
-    /// fetch fine and then fail to become an image, leaving the glyph. Pages commonly
-    /// list <link rel="icon" href="/favicon.svg"> BEFORE a raster fallback (HexStacker
-    /// does), so we scan past the SVG to the first raster link rather than take the
-    /// first match.
-    static let faviconHref = """
-    (function () {
-      function isSvg(l) {
-        var t = (l.getAttribute('type') || '').toLowerCase();
-        var h = (l.href || '').toLowerCase().split(/[?#]/)[0];
-        return t.indexOf('svg') >= 0 || h.slice(-4) === '.svg';
-      }
-      function pick(sel) {
-        var links = document.querySelectorAll(sel);
-        for (var i = 0; i < links.length; i++) {
-          if (links[i].href && !isSvg(links[i])) return links[i].href;
-        }
-        return null;
-      }
-      return pick('link[rel~="apple-touch-icon"]')
-        || pick('link[rel~="icon"]')
-        || (location.origin ? location.origin + '/favicon.ico' : null);
-    })();
-    """
-
     /// Publish the safe zone to the page as CSS vars on <html> (CONTRACT.md §5), in CSS px.
     static func safeZonePush(_ zone: SafeZone) -> String {
         "(function () { var s = document.documentElement.style;"

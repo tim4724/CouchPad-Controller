@@ -13,15 +13,19 @@ The game owns everything else: colors, avatars, sound, gameplay, match flow.
 Appended to the join URL, preserving any existing `?claim=` and `#instance`:
 
 ```
-https://<game-host>/<ROOMCODE>?cpv=1&cpName=<name>[#<instance>]
+https://<game-host>/<ROOMCODE>?cpName=<name>[#<instance>]
 ```
 
 | Param    | Meaning |
 |----------|---------|
-| `cpv=1`  | Contract version; presence means "running inside the CouchPad shell". Gate ALL shell behavior on it — the same deployed controller must keep working in a plain browser. |
-| `cpName` | The player's name. Guaranteed non-blank and ≤ 16 characters; sanitize defensively anyway. |
+| `cpName` | The player's name. Guaranteed non-blank and ≤ 16 characters; sanitize defensively anyway. Its **presence is the shell gate** — the launcher is the only thing that sends it. Gate ALL shell behavior on it: the same deployed controller must keep working in a plain browser. |
 
-When `cpv=1` is present, the game must:
+The `cp`-prefix is **reserved** across this contract — query params (`cpName`, `cpp`) and
+metas (`cp-accent-color`). A game must not mint its own `cp*` params, and must ignore any
+it doesn't recognize: they may be addressed to the launcher, not to it, and more can be
+added in a later revision.
+
+When `cpName` is present, the game must:
 
 - **Skip the name screen.** Use `cpName` and never offer a path back to name entry —
   the launcher is the identity authority.
@@ -137,11 +141,22 @@ Client → relay:  create { clientId, maxClients, url? }
   (local dev, E2E) must pass no `url`.
 - Optional: a display that registers none but is served from a CouchPad-owned origin is
   still findable via that `origin`.
+- The template may carry a `cpp` query arg naming the display: `tvos`, `androidtv`, or
+  `web` (a browser-based display, which by definition can't advertise over mDNS but can
+  register a template). The URL is the **only** place a display declares itself, so every
+  join path — scan, typed code, rejoin, nearby tap (§8) — reads it from the same string,
+  and it survives into the rejoin card after the room is gone.
+- The value is machine-readable and fixed-vocabulary; there is no free-text field for a
+  model or browser name. The launcher renders the wording ("Apple TV") itself, localized,
+  so it stays consistent and translatable without a display update, and no display can
+  put arbitrary text on a launcher card. An unknown or absent value degrades to no name
+  at all. `cpp` is `cp`-prefixed to stay clear of a game's own query params, and is inert
+  in a browser.
 
 The launcher resolves a typed code through `GET {relayBase}/room/{code}`:
 
 ```
-200 → { url?, origin? }   404 → not found
+200 → { url?, origin?, clients, maxClients }   404 → not found
 ```
 
 - `url` — the stored template with `{room}`/`{instance}` **already substituted** (the
@@ -176,10 +191,63 @@ There is no synthetic counterpart on return: the engine fires the standard
 ordinary web behavior, so the same code is correct in a plain browser. Additive in v1 — a
 game without a `pagehide` handler keeps today's behavior.
 
+## 8. Native display app → local network: room advertisement
+
+A **native** display app (tvOS, Android TV) advertises the room it is hosting over
+DNS-SD/mDNS, so the launcher can offer one-tap join with no QR scan and no typed code.
+A browser-based display can't do this — browsers cannot advertise mDNS — so §6 remains
+the universal path.
+
+Service type `_couchpad._tcp` in the `.local` domain. The **instance name is the
+display's human label** ("Living Room"); the launcher shows it verbatim so a player with
+two TVs can tell them apart.
+
+| TXT key | Required | Value |
+|---------|----------|-------|
+| `c`   | yes | The room code, exactly as shown on screen. Nothing else. |
+| `cpr` | never (launcher-only) | Marks a record published by a **controller relaying a room it is in**, rather than by the display. A display must never set it. Launchers relay so that a browser-based display — which cannot advertise at all — still becomes discoverable, and so a room survives a native display whose own record is missing. A relaying phone may never have learned the room's label, so `cpr=1` tells the launcher its instance name is not one. Launcher↔launcher only; no game or display work involved. |
+
+- The code is the **whole payload**. The launcher resolves it through
+  `GET {relayBase}/room/{code}` (§6) — the same probe a typed code takes — and that
+  response supplies the join URL, the display's `cpp`, whether the room still exists, and
+  its occupancy. A display therefore declares itself in exactly one place, the template it
+  registered at create, regardless of how a player arrives.
+- Nothing on the LAN is trusted beyond the code. An advertisement can name a room but
+  **cannot propose an origin**, so there is no host to re-validate and no way to point the
+  launcher at an arbitrary page. That is the reason the record carries no URL.
+- Discovery therefore needs the internet, like joining does: a code no relay can resolve
+  produces no card.
+- The SRV port is never dialed. The launcher reads the TXT record and nothing else.
+  Advertise any listening port your responder needs; it stays unused.
+- Advertise at room create, withdraw at room close (an mDNS goodbye — records at TTL 0).
+  Withdrawing when the room **fills**, and re-publishing when a slot frees, is
+  recommended: the launcher already hides a full room (it compares `clients` against
+  `maxClients` on resolve), but it only re-checks when a record appears, so a display that
+  goes quiet is what keeps a full room off the list promptly.
+- A record that outlives its room is harmless — resolution 404s and no card appears.
+- Two displays hosting two rooms produce two records; the launcher lists both. One room
+  announced by its display *and* by every controller in it also produces several records;
+  the launcher collapses them on `c` before resolving, so a room costs one probe however
+  many devices announce it.
+- The record carries no version field: `_couchpad._tcp` plus a code some relay knows *is*
+  the gate, and a record without a usable `c` is ignored. Later revisions add keys, which
+  old launchers skip; a shape old launchers must not read at all takes a new service type.
+
+Discovery is an accelerator, never the only route — mDNS is blocked on AP-isolated and
+guest networks, and both platforms gate it behind a permission the player must grant
+(iOS Local Network, Android `ACCESS_LOCAL_NETWORK`; the launcher asks only when the
+player asks for it, never at launch). A display that advertises must still show
+its QR and room code.
+
+The card is branded from the manifest, not from the advertisement: the resolved game's
+`icon` (a square brand mark, distinct from the 16:9 `art`) sits on the leading tile, and
+carries the branding alone — the card itself is neutral chrome. A game with no `icon`
+falls back to a generic glyph.
+
 ## Checklist for a new game
 
-1. Read `cpv` + `cpName`; when `cpv=1`: skip name entry, don't persist the name,
-   suppress own back/leave affordances.
+1. Read `cpName`; when it's there: skip name entry, don't persist the name, suppress own
+   back/leave affordances.
 2. Implement `window.CouchPad.setName(name)`: apply locally + broadcast.
 3. Call `window.CouchPadHost.gameEnded(reason)` at the terminal-session-end chokepoint
    when available, else fall back to normal web behavior.
@@ -188,6 +256,8 @@ game without a `pagehide` handler keeps today's behavior.
 6. *(Optional)* Declare `theme-color` / `cp-accent-color` metas (§4).
 7. Register the controller-URL template on room create so typed codes resolve (§6).
 8. Declare the game in `games-manifest.json` (hosts, controllerBaseUrl, room-code format).
+9. *(Native display apps only)* Advertise the room over `_couchpad._tcp` so the launcher
+   can offer one-tap join (§8).
 
 Keep all contract code in the game's own bundle — game origins typically ship
 `script-src 'self'`, and the launcher only injects the guarded `setName` call and a
@@ -196,5 +266,12 @@ equivalent, which is exempt from the page's CSP).
 
 ## Versioning
 
-`cpv` is bumped only for breaking changes. Games should treat an unknown higher version as
-"shell present, behave per the highest version you know".
+There is no version number on the wire. Every touchpoint is feature-detected — a param
+that is there or isn't, a bridge object that exists or doesn't — so a game implements
+what it recognizes and ignores the rest, and the launcher can add capabilities without a
+coordinated release.
+
+That makes additions free and breaks expensive by construction: a change old games cannot
+survive can't be signalled by a version bump, so it ships as a **new param or bridge
+name** that only updated games look for, leaving everyone else on today's behavior. The
+`— v1` in this document's title names the document, not a handshake.

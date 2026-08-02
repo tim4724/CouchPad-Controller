@@ -4,7 +4,12 @@
     <!-- Home -->
     <string name="home_subtitle">Controller</string>
     <string name="about">About</string>
-    <string name="room_code_label">Room %1$s</string>
+    <string name="nearby_find">Show rooms nearby</string>
+    <string name="nearby_none">No rooms found</string>
+    <string name="nearby_searching">Searching for rooms…</string>
+    <string name="device_apple_tv">Apple TV</string>
+    <string name="device_android_tv">Android TV</string>
+    <string name="device_web">Browser</string>
     <string name="status_live">Live</string>
     <string name="status_coming_soon">Coming soon</string>
 

@@ -220,7 +220,6 @@ struct GameWebView: UIViewRepresentable {
         // home only once. (A load failure is NOT terminal: it flips `failed` for the
         // retry overlay, so it doesn't gate on this.)
         private var didEnd = false
-        private var faviconCaptured = false  // once per session — didFinish fires on every navigation
 
         // Weak: the coordinator must not extend the web view's life past dismantle.
         // Set once from makeUIView.
@@ -323,37 +322,12 @@ struct GameWebView: UIViewRepresentable {
             }
             webView.evaluateJavaScript(GameHostJS.watchPageTheme, completionHandler: nil)
             webView.evaluateJavaScript(GameHostJS.safeZonePush(parent.safeZone), completionHandler: nil)
-            captureFavicon(webView)
             // The page's own name (ground truth over the manifest): drives the Leave
             // bar and feeds the home rejoin card, so games not in the bundled manifest
             // still show a real name instead of the generic fallback. putTitle returns
             // the sanitized text so the bar shows exactly what the card stores.
             if let raw = webView.title, let clean = RecentRoomStore.putTitle(raw) {
                 parent.onTitleChanged(clean)
-            }
-        }
-
-        /// Read the page's declared icon URL (WKWebView has no favicon API), fetch it
-        /// off-main into the current room's slot, so the home rejoin card can show the
-        /// game's own icon instead of a generic play glyph. Once per session; a miss
-        /// (no icon, non-https, off allow-list, bad response) silently leaves the glyph
-        /// in place. The href is untrusted page input, so its host is pinned to the same
-        /// navigation allow-list — otherwise a page could aim the fetch at an arbitrary
-        /// host and leak the user's IP there.
-        private func captureFavicon(_ webView: WKWebView) {
-            guard !faviconCaptured else { return }
-            faviconCaptured = true
-            let allowedDomains = parent.allowedDomains
-            webView.evaluateJavaScript(GameHostJS.faviconHref) { result, _ in
-                guard let href = result as? String, let url = URL(string: href), url.scheme == "https",
-                      allowedDomains.contains(where: { hostInDomain(url.host, $0) }) else { return }
-                Task.detached(priority: .utility) {
-                    guard let (data, response) = try? await URLSession.shared.data(from: url),
-                          (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? false,
-                          data.count <= 512 * 1024,
-                          let image = UIImage(data: data) else { return }
-                    RecentRoomStore.putFavicon(image)
-                }
             }
         }
 

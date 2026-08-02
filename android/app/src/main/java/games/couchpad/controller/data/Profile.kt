@@ -64,15 +64,16 @@ object ProfileStore {
 }
 
 /**
- * Launcher→game identity contract (v1): append the player's name to the join URL so
- * the game can prefill it and skip its own name screen. Live changes are pushed
- * separately via the window.CouchPad.setName() JS bridge (see GameHostScreen).
- * Preserves any existing ?claim and #instance; no-op when there's no name.
+ * Launcher→game identity contract (§1): append the player's name to the join URL so the
+ * game can prefill it and skip its own name screen. `cpName` is also the shell gate —
+ * nothing else sends it — so a no-name profile lands the game in its plain-browser
+ * behavior, which is the right answer when the launcher has no identity to lend it.
+ * Live changes are pushed separately via the window.CouchPad.setName() JS bridge (see
+ * GameHostScreen). Preserves any existing ?claim and #instance.
  */
 fun withProfile(joinUrl: String, profile: Profile): String {
   if (!profile.isSet) return joinUrl
   return joinUrl.toUri().buildUpon()
-    .appendQueryParameter("cpv", "1")
     .appendQueryParameter("cpName", profile.name)
     .build().toString()
 }

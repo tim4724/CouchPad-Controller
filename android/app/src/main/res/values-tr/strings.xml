@@ -3,7 +3,12 @@
          match HexStacker-Party's i18n; informal register (sen) like the rest of the suite. -->
     <string name="home_subtitle">Kumanda</string>
     <string name="about">Hakkında</string>
-    <string name="room_code_label">Oda %1$s</string>
+    <string name="nearby_find">Yakındaki odaları göster</string>
+    <string name="nearby_none">Oda bulunamadı</string>
+    <string name="nearby_searching">Odalar aranıyor…</string>
+    <string name="device_apple_tv">Apple TV</string>
+    <string name="device_android_tv">Android TV</string>
+    <string name="device_web">Tarayıcı</string>
     <string name="status_live">Yayında</string>
     <string name="status_coming_soon">Çok yakında</string>
 

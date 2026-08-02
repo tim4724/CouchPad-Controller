@@ -6,6 +6,15 @@
     <!-- Lets the controller's navigator.vibrate() reach the device — WebView haptics
          are a no-op without this. (Normal permission; no runtime request needed.) -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Contract §8 room discovery (NearbyRooms.kt). Two permissions, different kinds:
+         ACCESS_LOCAL_NETWORK is a DANGEROUS runtime permission (API 36+) and, because we
+         target 37, Local Network Protections block mDNS without it — silently, as a UDP
+         EPERM with nothing thrown, so a missing grant looks exactly like an empty
+         network. Requested from the home screen's "Show rooms nearby" button, never at launch.
+         CHANGE_WIFI_MULTICAST_STATE is normal (no runtime request): several OEMs drop
+         multicast to the app unless a WifiManager.MulticastLock is held. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- In-app QR scanner (ScanScreen). Camera is optional: manual code entry and
          App Links join fine without one, so don't hide the app from camera-less
          devices on Play. -->

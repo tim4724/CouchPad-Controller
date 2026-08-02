@@ -4,7 +4,12 @@
          terse plain-form status chips, so game_end_* are phrased politely here). -->
     <string name="home_subtitle">コントローラー</string>
     <string name="about">このアプリについて</string>
-    <string name="room_code_label">ルーム %1$s</string>
+    <string name="nearby_find">近くのルームを表示</string>
+    <string name="nearby_none">ルームが見つかりません</string>
+    <string name="nearby_searching">ルームを検索中…</string>
+    <string name="device_apple_tv">Apple TV</string>
+    <string name="device_android_tv">Android TV</string>
+    <string name="device_web">ブラウザ</string>
     <string name="status_live">プレイ可能</string>
     <string name="status_coming_soon">近日公開</string>
 

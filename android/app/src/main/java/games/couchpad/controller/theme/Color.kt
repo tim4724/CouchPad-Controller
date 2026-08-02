@@ -1,6 +1,7 @@
 package games.couchpad.controller.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 // INK & CONFETTI — the couchpad.games design tokens (Couch-Games assets/theme.css)
 // mapped onto M3 roles. Neutral charcoal chrome still carries the structure and the
@@ -43,3 +44,17 @@ val SurfaceLightBase = Color(0xFFFBF9F4)
 // --action. CTA container only, never small text: it is 3.4:1 against the light
 // background, so anything below large/bold sizes must use onSurface instead.
 val ActionCoral = Color(0xFFF04A50)
+
+/**
+ * Black or white over [color], whichever wins on WCAG contrast — accents and
+ * game-supplied colors arrive without a paired "on" color. A naive luminance > 0.5
+ * split picks white on saturated mid-tones (a coral like #FF6B6B sits at ~0.33) even
+ * though black reads far better there; the real black/white crossover is at luminance
+ * ≈ 0.179, so compare the two contrasts instead.
+ */
+fun contentColorOn(color: Color): Color {
+  val l = color.luminance()
+  val blackContrast = (l + 0.05f) / 0.05f   // black L = 0
+  val whiteContrast = 1.05f / (l + 0.05f)   // white L = 1
+  return if (blackContrast >= whiteContrast) Color.Black else Color.White
+}

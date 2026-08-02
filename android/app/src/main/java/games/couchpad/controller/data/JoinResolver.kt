@@ -6,6 +6,9 @@ import androidx.core.net.toUri
 import games.couchpad.controller.BuildConfig
 import games.couchpad.controller.R
 
+/** Id of the stand-in game used when a launcher subdomain matches no real game. */
+const val SYNTHETIC_GAME_ID = "couchpad"
+
 /** The suite's canonical launcher domain (couchpad.games links, display fallback). */
 const val LAUNCHER_HOST = "couchpad.games"
 
@@ -150,7 +153,7 @@ object JoinResolver {
   // game — the deployment is still trusted and loads; only the title and
   // room-code format fall back to suite defaults.
   private fun launcherGame() = Game(
-    id = "couchpad",
+    id = SYNTHETIC_GAME_ID,
     name = "CouchPad",
     status = "live",
     accentColor = DefaultAccent,

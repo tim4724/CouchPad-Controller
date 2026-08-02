@@ -3,7 +3,12 @@
          match HexStacker-Party's i18n. -->
     <string name="home_subtitle">控制器</string>
     <string name="about">关于</string>
-    <string name="room_code_label">房间 %1$s</string>
+    <string name="nearby_find">显示附近的房间</string>
+    <string name="nearby_none">未找到房间</string>
+    <string name="nearby_searching">正在搜索房间…</string>
+    <string name="device_apple_tv">Apple TV</string>
+    <string name="device_android_tv">Android TV</string>
+    <string name="device_web">浏览器</string>
     <string name="status_live">已上线</string>
     <string name="status_coming_soon">即将推出</string>
 

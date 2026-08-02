@@ -1,5 +1,7 @@
 package games.couchpad.controller.ui.main
 
+import android.Manifest
+import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -10,13 +12,14 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.border
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +30,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,11 +38,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,6 +48,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -62,54 +66,73 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
-import games.couchpad.controller.data.Favicon
 import games.couchpad.controller.data.Game
 import games.couchpad.controller.data.ManifestStore
 import games.couchpad.controller.data.JoinOutcome
 import games.couchpad.controller.data.JoinResolver
 import games.couchpad.controller.data.LAUNCHER_HOST
+import games.couchpad.controller.data.NearbyAdvert
+import games.couchpad.controller.data.devicePlatform
+import games.couchpad.controller.data.NearbyRoom
+import games.couchpad.controller.data.distinctAdverts
+import games.couchpad.controller.data.nearbyAdverts
+import games.couchpad.controller.data.nearbyRooms
+import games.couchpad.controller.data.resolveNearby
+import games.couchpad.controller.data.localNetworkPermissionGranted
 import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
 import games.couchpad.controller.data.RecentRoom
 import games.couchpad.controller.data.RecentRoomStore
 import games.couchpad.controller.data.SAMPLE_ROOM_CODE
+import games.couchpad.controller.data.ROOM_POLL_MS
 import games.couchpad.controller.data.RoomDirectory
 import games.couchpad.controller.data.RoomLookup
 import games.couchpad.controller.data.resolveTypedCode
 import games.couchpad.controller.data.withProfile
+import androidx.compose.ui.tooling.preview.Preview
+import games.couchpad.controller.theme.CouchPadTheme
+import games.couchpad.controller.ui.preview.CardSamples
 import games.couchpad.controller.ui.legal.LegalLinks
 import games.couchpad.controller.R
 import games.couchpad.controller.ui.components.GameArt
+import games.couchpad.controller.ui.components.GameIcon
+import games.couchpad.controller.ui.components.deviceName
 import games.couchpad.controller.ui.components.JoinButtons
 import games.couchpad.controller.ui.components.annotatedHostLine
 import games.couchpad.controller.ui.components.MirrorHostSystemBars
 import games.couchpad.controller.ui.components.PlayerChip
 import games.couchpad.controller.ui.components.PosterStatusChip
 import games.couchpad.controller.ui.components.stableScreenInsets
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -145,6 +168,54 @@ fun MainScreen(
   var codeError by remember { mutableStateOf<String?>(null) }
   var rejoin by remember { mutableStateOf<RecentRoom?>(null) }
   var infoGame by remember { mutableStateOf<Game?>(null) }
+  // Rooms advertised on the LAN by native display apps (contract §8). Resolved against
+  // `games` on every change, so a manifest refresh re-admits (or drops) an advert
+  // without restarting discovery.
+  var adverts by remember { mutableStateOf<List<NearbyAdvert>>(emptyList()) }
+  // The permission IS the opt-in memory: ungranted → the "Show rooms nearby" button,
+  // granted → discovery runs on every later launch and the rooms are simply there. No
+  // prompt at first launch; the user asks for it once.
+  var canDiscover by remember { mutableStateOf(localNetworkPermissionGranted(context)) }
+  val localNetworkPermission = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission(),
+  ) { granted -> canDiscover = granted }
+  // An advertised code becomes a card only once the relay has resolved it — that call is
+  // what supplies the join URL, `cpp` and the occupancy check. Re-checked on the same
+  // cadence as the rejoin card: both promise "you can enter this", so both have to notice
+  // when the room dies or fills. Lifecycle-gated — no polling while backgrounded.
+  val resolved = remember { mutableStateMapOf<String, NearbyRoom>() }
+  LaunchedEffect(adverts, games) {
+    lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+      while (true) {
+        // One probe per ROOM, not per record: a room announced by its display and by
+        // every phone in it is still one code.
+        val distinct = distinctAdverts(adverts)
+        resolved.keys.retainAll(distinct.map { it.code }.toSet())
+        coroutineScope {
+          distinct.map { advert ->
+            async {
+              val room = resolveNearby(advert, games)
+              if (room == null) resolved.remove(advert.code) else resolved[advert.code] = room
+            }
+          }.awaitAll()
+        }
+        delay(ROOM_POLL_MS)
+      }
+    }
+  }
+  val nearby = remember(resolved.toMap(), rejoin) {
+    nearbyRooms(resolved.values.toList(), exclude = rejoin)
+  }
+  // mDNS discovery never "completes" — it just keeps listening — so a spinner would spin
+  // forever with the TV off. Settle to a plain "not found" after a grace period.
+  var searchSettled by remember { mutableStateOf(false) }
+  LaunchedEffect(canDiscover) {
+    searchSettled = false
+    if (canDiscover) {
+      delay(8_000)
+      searchSettled = true
+    }
+  }
 
   // Every successful join funnels through here: remember the room for one-tap
   // rejoin and open the game host. Closes the scanner too, so leaving the game
@@ -192,6 +263,23 @@ fun MainScreen(
   // nav pop-backs recomposing this screen don't refetch).
   LaunchedEffect(Unit) { ManifestStore.refresh(context) }
 
+  // Browse for nearby rooms only while home is STARTED and the permission is held —
+  // cancelling the collection stops discovery and drops the multicast lock, so nothing
+  // runs in the background or behind the game host.
+  LaunchedEffect(canDiscover) {
+    if (!canDiscover) {
+      adverts = emptyList()
+      return@LaunchedEffect
+    }
+    lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+      try {
+        nearbyAdverts(context).collect { adverts = it }
+      } finally {
+        adverts = emptyList()
+      }
+    }
+  }
+
   // An incoming App Link: a legal-page link opens the in-app doc viewer; anything
   // else is a join and goes through the same name gate as a scan. The URL keeps its
   // locale segment (/en/privacy vs /privacy), so the viewer loads the right variant.
@@ -228,8 +316,10 @@ fun MainScreen(
           rejoin = recent
           return@repeatOnLifecycle
         }
-        when (RoomDirectory.lookup(recent.roomCode, recent.game.roomRelayBase)) {
-          is RoomLookup.Found -> rejoin = recent
+        when (val hit = RoomDirectory.lookup(recent.roomCode, recent.game.roomRelayBase)) {
+          // Full is not gone: keep the slot polled so the card returns when someone
+          // leaves, rather than dropping the room the player was just in.
+          is RoomLookup.Found -> rejoin = recent.takeUnless { hit.isFull }
           RoomLookup.NotFound -> {
             RecentRoomStore.clear()
             rejoin = null
@@ -237,7 +327,7 @@ fun MainScreen(
           }
           RoomLookup.Error -> {} // transient — keep whatever we showed last
         }
-        delay(10_000)
+        delay(ROOM_POLL_MS)
       }
     }
   }
@@ -299,6 +389,34 @@ fun MainScreen(
           ) {
             lastRejoin?.let { room ->
               RejoinCard(room) { resolveAndJoin(room.joinUrl) }
+            }
+          }
+          // "Searching…" / "No rooms found" are claims about having looked and come up
+          // empty — false while a room card is already on screen, rejoin included. The
+          // ask is an offer rather than a claim, so it stays regardless: hiding it behind
+          // a rejoin card would make discovery invisible for the rest of the session.
+          // (No denied state here: on Android a refusal simply leaves the permission
+          // ungranted, so the slot falls back to the ask on its own.)
+          if (!canDiscover || (nearby.isEmpty() && rejoin == null)) {
+            NearbyStatusCard(
+              granted = canDiscover,
+              settled = searchSettled,
+              onAsk = { localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK) },
+            )
+          }
+          // Same retain-the-last-value trick as the rejoin card, so the exit
+          // animation still has content to render after the list empties.
+          var lastNearby by remember { mutableStateOf<List<NearbyRoom>>(emptyList()) }
+          LaunchedEffect(nearby) { if (nearby.isNotEmpty()) lastNearby = nearby }
+          AnimatedVisibility(
+            visible = nearby.isNotEmpty(),
+            enter = fadeIn() + scaleIn(initialScale = 0.96f),
+            exit = fadeOut() + scaleOut(targetScale = 0.96f),
+          ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              lastNearby.forEach { room ->
+                NearbyCard(room) { requireName(AfterName.Join(room.target)) }
+              }
             }
           }
           GamesSection(games, onOpen = { infoGame = it })
@@ -533,78 +651,151 @@ private fun GameEndBanner(message: String?, onDismiss: () -> Unit) {
   }
 }
 
+/**
+ * A room the player can enter right now — the one they just left, or one a display is
+ * advertising. The two are the same object to a player, so they are one card; only where
+ * the pieces come from differs, which is what [RejoinCard] and [NearbyCard] supply.
+ *
+ * Ordinary chrome — the same secondaryContainer the tonal buttons use, so it adapts per
+ * theme instead of sitting as a dark slab on a light screen. The game's colour lives on
+ * the icon and nowhere else: routing brand through the border made every HexStacker card
+ * near-CTA red (its accent is #FF6B6B against coral #F04A50), which both read as an alert
+ * and spent the one colour that's supposed to mean "this is how you play".
+ */
 @Composable
-private fun RejoinCard(room: RecentRoom, onClick: () -> Unit) {
+private fun RoomCard(
+  game: Game,
+  title: String,
+  roomCode: String,
+  /** The display's own label ("Wohnzimmer"). Blank for a rejoin, which never has one. */
+  label: String,
+  /** `cpp` — which box the room is on (§6). Null when the URL declared nothing. */
+  platform: String?,
+  onClick: () -> Unit,
+) {
   val interaction = remember { MutableInteractionSource() }
   val scale = rememberPressScale(interaction)
-  // The controller's own page title (captured this session), falling back to the
-  // manifest's curated name until it's captured.
-  val name = room.title ?: room.game.name
+  val onCard = MaterialTheme.colorScheme.onSecondaryContainer
+  // "Wohnzimmer · Apple TV" — which box, on its own line. Either half may be missing.
+  val locator = listOfNotNull(label.ifBlank { null }, deviceName(platform)).joinToString(" · ")
   Card(
     onClick = onClick,
     modifier = Modifier
       .fillMaxWidth()
       .graphicsLayer { scaleX = scale; scaleY = scale },
     interactionSource = interaction,
-    // Same surface tone as the Join card, not secondaryContainer — the deep tonal
-    // fill is sized for buttons; as a full-width card it reads khaki on the paper bg.
     colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-      contentColor = MaterialTheme.colorScheme.onSurface,
+      containerColor = MaterialTheme.colorScheme.secondaryContainer,
+      contentColor = onCard,
     ),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
   ) {
     Row(
       Modifier.padding(16.dp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      RejoinIcon(room.favicon)
+      GameIcon(game, tint = onCard)
       Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-          name,
+          cardTitle(title, roomCode, onCard.copy(alpha = 0.55f)),
           style = MaterialTheme.typography.titleMedium,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
-        if (room.roomCode.isNotBlank()) {
+        if (locator.isNotBlank()) {
           Text(
-            stringResource(R.string.room_code_label, room.roomCode),
+            locator,
             style = MaterialTheme.typography.bodyMedium,
+            color = onCard.copy(alpha = 0.72f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
           )
         }
       }
-      Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+      Icon(
+        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+        contentDescription = null,
+        tint = onCard.copy(alpha = 0.65f),
+      )
     }
   }
 }
 
-// The rejoin card's leading glyph: the game's captured controller favicon on a tile
-// whose shade is chosen from the icon's OWN content — a dark plate under a
-// light/transparent icon, a white plate under a dark one — so it never washes out
-// against the light card or a same-toned plate. Falls back to a play arrow when
-// nothing's been captured this session.
+/**
+ * The room just left: its title comes from the controller page itself once captured, so
+ * it beats the manifest's curated name. `cpp` rides the join URL (§6), the same string
+ * however the room was reached, so the device name outlives the advertisement it came
+ * from.
+ */
 @Composable
-private fun RejoinIcon(favicon: Favicon?) {
-  if (favicon != null) {
-    val plate = if (favicon.contentIsLight) Color(0xFF202024) else Color.White
-    Box(
-      Modifier
-        .size(48.dp)
-        .clip(RoundedCornerShape(12.dp))
-        .background(plate)
-        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)),
-      contentAlignment = Alignment.Center,
-    ) {
-      // ~10dp of breathing room inside the tile so the icon never touches the edge.
-      Image(
-        favicon.image,
-        contentDescription = null,
-        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)),
-        contentScale = ContentScale.Fit,
-      )
+private fun RejoinCard(room: RecentRoom, onClick: () -> Unit) = RoomCard(
+  game = room.game,
+  title = room.title ?: room.game.name,
+  roomCode = room.roomCode,
+  label = "",
+  platform = remember(room.joinUrl) { devicePlatform(room.joinUrl) },
+  onClick = onClick,
+)
+
+/** A room a display on this network is advertising (contract §8). */
+@Composable
+private fun NearbyCard(room: NearbyRoom, onClick: () -> Unit) = RoomCard(
+  game = room.game,
+  title = room.game.name,
+  roomCode = room.roomCode,
+  label = room.label,
+  platform = room.platform,
+  onClick = onClick,
+)
+
+// "HexStacker A3KX9p" — the room code sits with the thing it belongs to, demoted in
+// color so the name still leads. One annotated string, so a long name truncates the
+// pair as a unit.
+private fun cardTitle(name: String, roomCode: String, codeColor: Color) = buildAnnotatedString {
+  append(name)
+  if (roomCode.isNotBlank()) {
+    withStyle(SpanStyle(color = codeColor)) {
+      append("  ")
+      append(roomCode)
     }
-  } else {
-    Icon(Icons.Filled.PlayArrow, contentDescription = null, Modifier.size(34.dp))
+  }
+}
+
+// What the TV slot shows when there are no rooms to show.
+//
+// The ask is an action, so it takes a button — the room cards are objects you pick from,
+// and giving the ask their shape blurs the two. Tonal, not coral: this is one-time setup
+// that vanishes for good once granted, and it must not outshout the scan CTA you use every
+// session. Metrics match JoinButtons so the three buttons on this screen are one family.
+//
+// Once granted, searching and not-found collapse to a muted line — an idle home screen
+// shouldn't carry a box announcing that a TV simply isn't switched on.
+@Composable
+private fun NearbyStatusCard(granted: Boolean, settled: Boolean, onAsk: () -> Unit) {
+  if (!granted) {
+    FilledTonalButton(onClick = onAsk, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+      Icon(painterResource(R.drawable.ic_nearby), contentDescription = null, Modifier.size(22.dp))
+      Spacer(Modifier.width(10.dp))
+      Text(stringResource(R.string.nearby_find), style = MaterialTheme.typography.titleMedium)
+    }
+    return
+  }
+  Row(
+    Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    if (settled) {
+      Icon(painterResource(R.drawable.ic_nearby), contentDescription = null, Modifier.size(16.dp))
+    } else {
+      CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+    }
+    Text(
+      stringResource(if (settled) R.string.nearby_none else R.string.nearby_searching),
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
   }
 }
 
@@ -722,4 +913,63 @@ private fun CodeEntryDialog(
       TextButton(onClick = onDismiss, enabled = !loading) { Text(stringResource(R.string.cancel)) }
     },
   )
+}
+
+// ---------------------------------------------------------------------------
+// Previews
+//
+// The home screen's room-card states in one strip, fed by CardSamples so the ones that
+// otherwise need a live room — an Android TV display, a game with no manifest icon, a
+// name long enough to truncate — are reachable while editing. The cards are theme
+// chrome, so the light/dark pair is checking that they adapt rather than sitting as a
+// slab. Mirrored by iOS `MainScreen.swift`; a card change wants both.
+//
+// GameIcon decodes from assets, which the IDE renderer supplies; a remote-only icon has
+// no cache here and falls back to the TV glyph.
+// ---------------------------------------------------------------------------
+
+@Preview(name = "Nearby — light", showBackground = true, widthDp = 400)
+@Preview(name = "Nearby — dark", showBackground = true, widthDp = 400, uiMode = UI_MODE_NIGHT_YES)
+@Composable
+private fun NearbyCardsPreview() {
+  PreviewStrip {
+    NearbyStatusCard(granted = false, settled = false, onAsk = {})
+    NearbyStatusCard(granted = true, settled = false, onAsk = {})
+    NearbyStatusCard(granted = true, settled = true, onAsk = {})
+    NearbyCard(CardSamples.nearbyFull) {}
+    NearbyCard(CardSamples.nearbyDeviceOnly) {}
+    NearbyCard(CardSamples.nearbyLabelOnly) {}
+    NearbyCard(CardSamples.nearbyBare) {}
+    NearbyCard(CardSamples.nearbyAndroidTv) {}
+    NearbyCard(CardSamples.nearbyIconless) {}
+    NearbyCard(CardSamples.nearbyLongName) {}
+  }
+}
+
+@Preview(name = "Rejoin — light", showBackground = true, widthDp = 400)
+@Preview(name = "Rejoin — dark", showBackground = true, widthDp = 400, uiMode = UI_MODE_NIGHT_YES)
+@Composable
+private fun RejoinCardsPreview() {
+  PreviewStrip {
+    RejoinCard(CardSamples.rejoinPlain) {}
+    RejoinCard(CardSamples.rejoinIconless) {}
+    RejoinCard(CardSamples.rejoinPageTitle) {}
+    RejoinCard(CardSamples.rejoinNoCode) {}
+    RejoinCard(CardSamples.rejoinWithDevice) {}
+    RejoinCard(CardSamples.rejoinWeb) {}
+  }
+}
+
+// Home's own card spacing and padding, so the previews show the gaps the real screen has.
+@Composable
+private fun PreviewStrip(content: @Composable ColumnScope.() -> Unit) {
+  CouchPadTheme {
+    Surface {
+      Column(
+        Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        content = content,
+      )
+    }
+  }
 }

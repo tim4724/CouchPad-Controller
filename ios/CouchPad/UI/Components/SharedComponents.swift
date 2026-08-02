@@ -227,6 +227,49 @@ struct GameArt: View {
     }
 }
 
+// MARK: - GameIcon
+
+/// A game's square brand mark on a white tile — the manifest `icon`, not the 16:9 cover
+/// (a poster crop is unreadable this small). Falls back to the TV glyph for a game with
+/// no icon, or an advert that resolved to an unknown launcher subdomain. The tile is
+/// white rather than accent-tinted because icons are authored for a light backdrop.
+struct GameIcon: View {
+    let game: Game
+    let tint: Color
+
+    @State private var image: UIImage?
+
+    init(game: Game, tint: Color) {
+        self.game = game
+        self.tint = tint
+        if let icon = game.icon {
+            _image = State(initialValue: ArtCache.cached(forArt: icon))
+        }
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 34, height: 34)
+                    .frame(width: 48, height: 48)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                Image(systemName: "tv")
+                    .font(.system(size: 26))
+                    .foregroundStyle(tint)
+                    .frame(width: 48, height: 48)
+            }
+        }
+        .task(id: game.icon) {
+            guard image == nil, let icon = game.icon else { return }
+            image = await ArtCache.uiImage(forArt: icon)
+        }
+    }
+}
+
 // MARK: - StepRow
 
 /// Numbered instruction row: 28pt solid-primary circle + attributed body text.

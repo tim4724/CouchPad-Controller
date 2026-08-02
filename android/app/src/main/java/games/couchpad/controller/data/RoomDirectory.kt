@@ -16,14 +16,33 @@ import java.net.URL
 // below hands it back filled in (see the Party-Sockets `url` field).
 const val RELAY_BASE = "https://ws.couchpad.games"
 
+/**
+ * How often a room on screen is re-checked against its relay. One cadence for both card
+ * kinds — a rejoin card and a nearby card make the same promise ("you can enter this"),
+ * so they go stale the same way and are refreshed by the same probe.
+ */
+const val ROOM_POLL_MS = 10_000L
+
 sealed interface RoomLookup {
   /**
    * Room exists. [url] is the host-declared controller-URL template; [origin] is the
    * room's declared origin (e.g. a preview deployment host). BOTH are host-declared and
    * UNTRUSTED — resolve them through the manifest allow-list before loading. A host may
    * register an origin but no url template, so [url] can be null while [origin] is set.
+   *
+   * [clients]/[maxClients] are the room's live occupancy, as declared at create. Both
+   * are 0 when the relay omitted them; [isFull] is false in that case rather than
+   * guessing, so a relay that doesn't report occupancy never hides a joinable room.
    */
-  data class Found(val url: String?, val origin: String?) : RoomLookup
+  data class Found(
+    val url: String?,
+    val origin: String?,
+    val clients: Int = 0,
+    val maxClients: Int = 0,
+  ) : RoomLookup {
+    /** The display occupies a slot too, so this is exact, not off by one. */
+    val isFull: Boolean get() = maxClients > 0 && clients >= maxClients
+  }
   data object NotFound : RoomLookup
   data object Error : RoomLookup
 }
@@ -46,7 +65,11 @@ object RoomDirectory {
           val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
           RoomLookup.Found(
             url = json.optString("url", "").ifBlank { null },
-            origin = json.optString("origin", "").ifBlank { null },
+            // The relay sends the literal string "unknown" when a room registered no
+            // origin — not a URL, so treat it as absent.
+            origin = json.optString("origin", "").ifBlank { null }?.takeIf { it != "unknown" },
+            clients = json.optInt("clients", 0),
+            maxClients = json.optInt("maxClients", 0),
           )
         }
         404 -> RoomLookup.NotFound

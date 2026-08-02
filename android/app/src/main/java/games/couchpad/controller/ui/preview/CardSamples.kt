@@ -28,15 +28,19 @@ internal object CardSamples {
     hosts = listOf("hexstacker.com"),
   )
 
-  /** A live game whose manifest carries no icon yet — falls back to the TV glyph. */
+  /**
+   * A live game whose manifest carries no icon — falls back to the TV glyph.
+   * Deliberately fictional: every game in the manifest now ships one, so a sample
+   * borrowing a real game would stop describing this state the moment that changes.
+   */
   val iconless = Game(
-    id = "tinytrack",
-    name = "Tiny Track",
+    id = "example",
+    name = "Example Game",
     status = "live",
     accentColor = Color(0xFF4ECDC4),
     art = null,
-    controllerBaseUrl = "https://tinytrack.games",
-    hosts = listOf("tinytrack.games"),
+    controllerBaseUrl = "https://example.com",
+    hosts = listOf("example.com"),
   )
 
   // MARK: nearby rooms (contract §8 advertisements)

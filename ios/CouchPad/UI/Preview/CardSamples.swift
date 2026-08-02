@@ -19,14 +19,16 @@ enum CardSamples {
         hosts: ["hexstacker.com"]
     )
 
-    /// A live game whose manifest carries no icon yet — falls back to the TV glyph.
+    /// A live game whose manifest carries no icon — falls back to the TV glyph.
+    /// Deliberately fictional: every game in the manifest now ships one, so a sample
+    /// borrowing a real game would stop describing this state the moment that changes.
     static let iconless = Game(
-        id: "tinytrack",
-        name: "Tiny Track",
+        id: "example",
+        name: "Example Game",
         status: "live",
         accentColor: Color(red: 0.31, green: 0.80, blue: 0.77),
-        controllerBaseUrl: "https://tinytrack.games",
-        hosts: ["tinytrack.games"]
+        controllerBaseUrl: "https://example.com",
+        hosts: ["example.com"]
     )
 
     // MARK: - Nearby rooms (contract §8 advertisements)

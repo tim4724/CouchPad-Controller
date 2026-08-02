@@ -73,13 +73,11 @@ object JoinResolver {
     val uri = runCatching { s.toUri() }.getOrNull()
     val host = uri?.host
     if (uri?.scheme == null || host == null) {
-      // Bare code — no origin to load; the sole live game hosts it.
-      return soleLiveGameJoin(games, roomCode = s, claim = null, instance = null)
+      // Bare code — no origin to load, and nothing riding along; the sole live game hosts it.
+      return soleLiveGameJoin(games, roomCode = s, source = null)
     }
 
     val segs = uri.pathSegments
-    val claim = uri.getQueryParameter("claim")
-    val instance = uri.fragment?.let { f -> runCatching { Uri.decode(f) }.getOrDefault(f) }
 
     // Canonical couchpad.games/<CODE> links (bare domain or www) carry no controller
     // origin of their own, so the sole live game hosts them. The App Links filter
@@ -87,7 +85,7 @@ object JoinResolver {
     // non-room 6-char path is rejected by validCode.
     // (Subdomains are preview deployments and load their own origin — below.)
     if (host.equals(LAUNCHER_HOST, true) || host.equals("www.$LAUNCHER_HOST", true)) {
-      return soleLiveGameJoin(games, segs.firstOrNull().orEmpty(), claim, instance)
+      return soleLiveGameJoin(games, segs.firstOrNull().orEmpty(), source = uri)
     }
 
     // A game's own domain, or a launcher subdomain (preview/branch deployment). The
@@ -131,20 +129,25 @@ object JoinResolver {
     return ""
   }
 
-  private fun soleLiveGameJoin(games: List<Game>, roomCode: String, claim: String?, instance: String?): JoinOutcome {
+  /**
+   * Hosts an origin-less input on the sole live game. [source] is the URL it came from, or
+   * null for a bare code, which has no URL to keep.
+   *
+   * Only the ORIGIN is wrong on a canonical link — couchpad.games serves no controller —
+   * so swap that and pass the query and fragment through untouched. Re-attaching params by
+   * name is what silently dropped `cpp` (§6: the join URL is the only place a display ever
+   * declares its platform), and it would drop the next one too.
+   */
+  private fun soleLiveGameJoin(games: List<Game>, roomCode: String, source: Uri?): JoinOutcome {
     val game = games.firstOrNull { it.isLive }
       ?: return JoinOutcome.Failure(R.string.error_no_live_game)
     val base = game.controllerBaseUrl
       ?: return JoinOutcome.Failure(R.string.error_no_controller_url)
-    return joinAt(base, game, roomCode, claim, instance)
-  }
-
-  private fun joinAt(base: String, game: Game, roomCode: String, claim: String?, instance: String?): JoinOutcome {
     if (!validCode(roomCode)) return JoinOutcome.Failure(R.string.error_not_couchpad_room)
     val joinUrl = buildString {
       append(base.trimEnd('/')).append('/').append(roomCode)
-      if (!claim.isNullOrEmpty()) append("?claim=").append(Uri.encode(claim))
-      if (!instance.isNullOrEmpty()) append('#').append(Uri.encode(instance))
+      source?.encodedQuery?.takeIf { it.isNotEmpty() }?.let { append('?').append(it) }
+      source?.encodedFragment?.takeIf { it.isNotEmpty() }?.let { append('#').append(it) }
     }
     return JoinOutcome.Success(game, roomCode, joinUrl)
   }

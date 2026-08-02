@@ -86,39 +86,56 @@ struct NearbyRoom: Identifiable, Equatable {
     let game: Game
     let roomCode: String
     let joinUrl: String
-    /// `cpp` off `joinUrl`: which box the room is on, or nil when it declared nothing.
-    let platform: String?
 
     var id: String { joinUrl }
 
     var target: JoinOutcome { .success(game: game, roomCode: roomCode, joinUrl: joinUrl) }
 
+    /// `cpp` off `joinUrl`: which box the room is on, or nil when it declared nothing.
+    var platform: String? { devicePlatform(fromUrl: joinUrl) }
 }
 
-/// Turns resolved rooms into the card list: drops anything the rejoin card is already
-/// offering, collapses a room advertised twice (a display on two interfaces) into one
-/// card, and sorts for a stable order.
+/// The home screen's room cards.
+struct HomeRooms {
+    /// The rejoin room as the LAN currently advertises it, or nil when nothing on the
+    /// network is offering that room. It is the better source for BOTH halves of the
+    /// card's locator: its own name, and a join URL that came straight from the relay's
+    /// §6 template — the one place `cpp` is guaranteed to be declared.
+    let rejoinAdvert: NearbyRoom?
+    /// Every other advertised room, deduped and in a stable order.
+    let nearby: [NearbyRoom]
+}
+
+/// Turns resolved rooms into the card list in ONE pass: collapses a room advertised twice
+/// (a display on two interfaces) into one card, sorts for a stable order, and folds the
+/// rejoin room's advertisement into the rejoin card.
 ///
-/// `excluding` is the room the rejoin card is currently offering. Leaving a game does not
-/// close the room, so the display keeps advertising it — without this the player lands on
-/// home looking at two cards for the same room. The rejoin card wins: it carries the
-/// captured page title.
-func nearbyRooms(_ rooms: [NearbyRoom], excluding recent: RecentRoom? = nil) -> [NearbyRoom] {
+/// `rejoin` is the room that card is currently offering. Leaving a game does not close the
+/// room, so the display keeps advertising it — without this the player lands on home
+/// looking at two cards for the same room. The rejoin card wins, because it carries the
+/// captured page title, and it inherits the advertisement it displaced: dropping the
+/// duplicate and handing back what it knew are the same match, asked once.
+func homeRooms(_ rooms: [NearbyRoom], rejoin: RecentRoom? = nil) -> HomeRooms {
     // Keyed on ROOM CODE, scoped by GAME: codes are minted per relay (a game may run its
     // own, Game.relayProbeBase), so two games can independently mint the same code and
     // must not collapse into one card. An UNRESOLVED game (a launcher preview subdomain
     // matching no id) collapses every such deployment onto one synthetic id, which
     // discriminates nothing — fall back to the host there, which does.
+    var rejoinAdvert: NearbyRoom?
     var best: [String: NearbyRoom] = [:]
     for room in rooms {
-        if room.isSameRoom(as: recent) { continue }
+        if room.isSameRoom(as: rejoin) {
+            if rejoinAdvert == nil { rejoinAdvert = room }
+            continue
+        }
         let scope = room.game.id == Game.syntheticLauncher.id
             ? (URLComponents(string: room.joinUrl)?.host ?? "")
             : room.game.id
         let key = room.roomCode.isEmpty ? room.joinUrl : "\(scope)/\(room.roomCode)"
         if best[key] == nil { best[key] = room }
     }
-    return best.values.sorted { ($0.label, $0.joinUrl) < ($1.label, $1.joinUrl) }
+    return HomeRooms(rejoinAdvert: rejoinAdvert,
+                     nearby: best.values.sorted { ($0.label, $0.joinUrl) < ($1.label, $1.joinUrl) })
 }
 
 /// Resolves one advertised code against the relay — the same probe a typed code takes,
@@ -152,7 +169,7 @@ func resolveNearby(_ advert: NearbyAdvert, games: [Game]) async -> NearbyRoom? {
             await resolveTypedCode(advert.code, games: games) else { return nil }
     // A relayed record's instance name is the relaying phone's own, not the TV's.
     return NearbyRoom(label: advert.relayed ? "" : advert.label, game: game, roomCode: roomCode,
-                      joinUrl: joinUrl, platform: devicePlatform(fromUrl: joinUrl))
+                      joinUrl: joinUrl)
 }
 
 extension NearbyRoom {

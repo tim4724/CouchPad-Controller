@@ -103,7 +103,7 @@ import games.couchpad.controller.data.devicePlatform
 import games.couchpad.controller.data.NearbyRoom
 import games.couchpad.controller.data.distinctAdverts
 import games.couchpad.controller.data.nearbyAdverts
-import games.couchpad.controller.data.nearbyRooms
+import games.couchpad.controller.data.homeRooms
 import games.couchpad.controller.data.resolveNearby
 import games.couchpad.controller.data.localNetworkPermissionGranted
 import games.couchpad.controller.data.Profile
@@ -203,9 +203,10 @@ fun MainScreen(
       }
     }
   }
-  val nearby = remember(resolved.toMap(), rejoin) {
-    nearbyRooms(resolved.values.toList(), exclude = rejoin)
-  }
+  // The rejoin room's own advertisement folds INTO the rejoin card, name and all, rather
+  // than standing up a second card for the room the player is already being offered.
+  val home = remember(resolved.toMap(), rejoin) { homeRooms(resolved.values.toList(), rejoin) }
+  val nearby = home.nearby
   // mDNS discovery never "completes" — it just keeps listening — so a spinner would spin
   // forever with the TV off. Settle to a plain "not found" after a grace period.
   var searchSettled by remember { mutableStateOf(false) }
@@ -316,10 +317,13 @@ fun MainScreen(
           rejoin = recent
           return@repeatOnLifecycle
         }
-        when (val hit = RoomDirectory.lookup(recent.roomCode, recent.game.roomRelayBase)) {
-          // Full is not gone: keep the slot polled so the card returns when someone
-          // leaves, rather than dropping the room the player was just in.
-          is RoomLookup.Found -> rejoin = recent.takeUnless { hit.isFull }
+        when (RoomDirectory.lookup(recent.roomCode, recent.game.roomRelayBase)) {
+          // Offered even when the room reads FULL. One of those slots is very likely this
+          // player's own, held for them by the relay, which takes a stored clientId back
+          // into it — the game only treats full as fatal for a FRESH joiner. Hiding the
+          // card here locks someone out of the room they were just in; a rejoin that
+          // genuinely bounces costs one page load and lands on the `game_full` banner.
+          is RoomLookup.Found -> rejoin = recent
           RoomLookup.NotFound -> {
             RecentRoomStore.clear()
             rejoin = null
@@ -388,7 +392,7 @@ fun MainScreen(
             exit = fadeOut() + scaleOut(targetScale = 0.96f),
           ) {
             lastRejoin?.let { room ->
-              RejoinCard(room) { resolveAndJoin(room.joinUrl) }
+              RejoinCard(room, home.rejoinAdvert) { resolveAndJoin(room.joinUrl) }
             }
           }
           // "Searching…" / "No rooms found" are claims about having looked and come up
@@ -667,7 +671,7 @@ private fun RoomCard(
   game: Game,
   title: String,
   roomCode: String,
-  /** The display's own label ("Wohnzimmer"). Blank for a rejoin, which never has one. */
+  /** The display's own label ("Wohnzimmer"). Blank when nothing on the LAN names the room. */
   label: String,
   /** `cpp` — which box the room is on (§6). Null when the URL declared nothing. */
   platform: String?,
@@ -724,17 +728,22 @@ private fun RoomCard(
 
 /**
  * The room just left: its title comes from the controller page itself once captured, so
- * it beats the manifest's curated name. `cpp` rides the join URL (§6), the same string
- * however the room was reached, so the device name outlives the advertisement it came
- * from.
+ * it beats the manifest's curated name.
+ *
+ * [advert] is the same room as the LAN is currently advertising it, when it still is
+ * (`HomeRooms.rejoinAdvert`) — the room's own name, and a join URL straight off the
+ * relay's §6 template. That template is the one place `cpp` is guaranteed to be declared;
+ * the URL we remembered is whatever route the player took in, which may have been a bare
+ * code that never named a box. So the advertisement leads and the remembered URL backs it
+ * up, which is what keeps the device name once the display goes quiet.
  */
 @Composable
-private fun RejoinCard(room: RecentRoom, onClick: () -> Unit) = RoomCard(
+private fun RejoinCard(room: RecentRoom, advert: NearbyRoom? = null, onClick: () -> Unit) = RoomCard(
   game = room.game,
   title = room.title ?: room.game.name,
   roomCode = room.roomCode,
-  label = "",
-  platform = remember(room.joinUrl) { devicePlatform(room.joinUrl) },
+  label = advert?.label.orEmpty(),
+  platform = advert?.platform ?: devicePlatform(room.joinUrl),
   onClick = onClick,
 )
 
@@ -956,6 +965,9 @@ private fun RejoinCardsPreview() {
     RejoinCard(CardSamples.rejoinPageTitle) {}
     RejoinCard(CardSamples.rejoinNoCode) {}
     RejoinCard(CardSamples.rejoinWithDevice) {}
+    // The room's display is still advertising: its name joins the locator, and its
+    // relay-declared platform stands in for a remembered URL that named no box.
+    RejoinCard(CardSamples.rejoinPlain, CardSamples.nearbyFull) {}
     RejoinCard(CardSamples.rejoinWeb) {}
   }
 }

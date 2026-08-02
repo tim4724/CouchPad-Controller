@@ -91,31 +91,50 @@ data class NearbyRoom(
   val game: Game,
   val roomCode: String,
   val joinUrl: String,
-  /** `cpp` off [joinUrl]: which box the room is on, or null when it declared nothing. */
-  val platform: String?,
 ) {
   val target: JoinOutcome.Success get() = JoinOutcome.Success(game, roomCode, joinUrl)
+
+  /** `cpp` off [joinUrl]: which box the room is on, or null when it declared nothing. */
+  val platform: String? get() = devicePlatform(joinUrl)
 }
 
+/** The home screen's room cards. */
+data class HomeRooms(
+  /**
+   * The rejoin room as the LAN currently advertises it, or null when nothing on the
+   * network is offering that room. It is the better source for BOTH halves of the
+   * card's locator: its own name, and a join URL that came straight from the relay's
+   * §6 template — the one place `cpp` is guaranteed to be declared.
+   */
+  val rejoinAdvert: NearbyRoom?,
+  /** Every other advertised room, deduped and in a stable order. */
+  val nearby: List<NearbyRoom>,
+)
+
 /**
- * Turns resolved rooms into the card list: drops anything the rejoin card is already
- * offering, collapses a room advertised twice (a display on two interfaces) into one
- * card, and sorts for a stable order.
+ * Turns resolved rooms into the card list in ONE pass: collapses a room advertised twice
+ * (a display on two interfaces) into one card, sorts for a stable order, and folds the
+ * rejoin room's advertisement into the rejoin card.
  *
- * [exclude] is the room the rejoin card is currently offering. Leaving a game does not
- * close the room, so the display keeps advertising it — without this the player lands
- * on home looking at two cards for the same room. The rejoin card wins: it carries the
- * captured page title.
+ * [rejoin] is the room that card is currently offering. Leaving a game does not close the
+ * room, so the display keeps advertising it — without this the player lands on home
+ * looking at two cards for the same room. The rejoin card wins, because it carries the
+ * captured page title, and it inherits the advertisement it displaced: dropping the
+ * duplicate and handing back what it knew are the same match, asked once.
  */
-fun nearbyRooms(rooms: List<NearbyRoom>, exclude: RecentRoom? = null): List<NearbyRoom> {
+fun homeRooms(rooms: List<NearbyRoom>, rejoin: RecentRoom? = null): HomeRooms {
   // Keyed on ROOM CODE, scoped by GAME: codes are minted per relay (a game may run its
   // own, Game.relayProbeBase), so two games can independently mint the same code and
   // must not collapse into one card. An UNRESOLVED game (a launcher preview subdomain
   // matching no id) collapses every such deployment onto one synthetic id, which
   // discriminates nothing — fall back to the host there, which does.
+  var rejoinAdvert: NearbyRoom? = null
   val best = LinkedHashMap<String, NearbyRoom>()
   for (room in rooms) {
-    if (room.isSameRoomAs(exclude)) continue
+    if (room.isSameRoomAs(rejoin)) {
+      if (rejoinAdvert == null) rejoinAdvert = room
+      continue
+    }
     val scope = if (room.game.id == SYNTHETIC_GAME_ID) {
       runCatching { room.joinUrl.toUri().host }.getOrNull().orEmpty()
     } else {
@@ -124,7 +143,7 @@ fun nearbyRooms(rooms: List<NearbyRoom>, exclude: RecentRoom? = null): List<Near
     val key = if (room.roomCode.isBlank()) room.joinUrl else scope + "/" + room.roomCode
     best.putIfAbsent(key, room)
   }
-  return best.values.sortedWith(compareBy({ it.label }, { it.joinUrl }))
+  return HomeRooms(rejoinAdvert, best.values.sortedWith(compareBy({ it.label }, { it.joinUrl })))
 }
 
 /**
@@ -155,7 +174,6 @@ suspend fun resolveNearby(advert: NearbyAdvert, games: List<Game>): NearbyRoom? 
     game = hit.game,
     roomCode = hit.roomCode,
     joinUrl = hit.joinUrl,
-    platform = devicePlatform(hit.joinUrl),
   )
 }
 

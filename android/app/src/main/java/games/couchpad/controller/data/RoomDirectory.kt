@@ -111,6 +111,13 @@ suspend fun resolveTypedCode(code: String, games: List<Game>): JoinOutcome = cor
   val results = relays.map { base -> async { RoomDirectory.lookup(trimmed, base) } }.awaitAll()
 
   val founds = results.filterIsInstance<RoomLookup.Found>()
+  // Deliberately NOT refused when full, though the lookup reports it: a full room still
+  // takes its own players back (the relay swaps a stored clientId into the slot it is
+  // holding for them), and from a code alone we cannot tell that player from a stranger.
+  // Refusing here locks someone out of the room they are already in. Let the load happen
+  // and let the relay decide — a stranger bounces back on `game_full`, which the shell
+  // already turns into a banner. Only the nearby list, which never offers a room the
+  // player has a slot in, can safely act on `isFull`.
   val foundUrl = founds.firstOrNull { it.url != null }?.url
   val foundOrigin = founds.firstOrNull { it.origin != null }?.origin
   when {

@@ -99,8 +99,10 @@ enum CardSamples {
             label: label,
             game: game,
             roomCode: "BiBz3b",
-            joinUrl: "https://hexstacker.com/BiBz3b",
-            platform: platform
+            // `cpp` rides the join URL (§6) and nothing else carries it, so a sample
+            // declares its platform the same way a real room does — there is no state
+            // where the two disagree.
+            joinUrl: "https://hexstacker.com/BiBz3b" + (platform.map { "?cpp=\($0)" } ?? "")
         )
     }
 

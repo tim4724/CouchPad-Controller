@@ -143,9 +143,13 @@ Client → relay:  create { clientId, maxClients, url? }
   still findable via that `origin`.
 - The template may carry a `cpp` query arg naming the display: `tvos`, `androidtv`, or
   `web` (a browser-based display, which by definition can't advertise over mDNS but can
-  register a template). The URL is the **only** place a display declares itself, so every
-  join path — scan, typed code, rejoin, nearby tap (§8) — reads it from the same string,
-  and it survives into the rejoin card after the room is gone.
+  register a template). A join URL is the only place a display declares itself, and the
+  **template** is the only URL guaranteed to carry it — a display may deliberately keep
+  its QR clean, on the grounds that whoever scans it is already looking at the box. So a
+  typed code and a §8 nearby tap see `cpp` whenever the relay answers with a template; a
+  scan may not, and the URL remembered from one won't either. The launcher therefore
+  prefers the live advertisement's resolved URL for a rejoin card and falls back to the
+  remembered one, which is what still names the box once the room is gone.
 - The value is machine-readable and fixed-vocabulary; there is no free-text field for a
   model or browser name. The launcher renders the wording ("Apple TV") itself, localized,
   so it stays consistent and translatable without a display update, and no display can

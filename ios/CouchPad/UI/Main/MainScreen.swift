@@ -84,8 +84,12 @@ struct MainScreen: View {
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
 
+                    // The rejoin room's own advertisement folds INTO the rejoin card, name
+                    // and all, rather than standing up a second card for the room the
+                    // player is already being offered.
+                    let home = homeRooms(Array(resolvedNearby.values), rejoin: rejoin)
                     if let rejoin {
-                        RejoinCard(room: rejoin) {
+                        RejoinCard(room: rejoin, advert: home.rejoinAdvert) {
                             resolveAndJoin(rejoin.joinUrl)
                         }
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -96,8 +100,7 @@ struct MainScreen: View {
                     // included. The ask is an offer rather than a claim, so it stays
                     // regardless: hiding it behind a rejoin card would make discovery
                     // invisible for the rest of the session.
-                    let nearbyRoomList = nearbyRooms(Array(resolvedNearby.values), excluding: rejoin)
-                    if nearbyState == .ask || (nearbyRoomList.isEmpty && rejoin == nil) {
+                    if nearbyState == .ask || (home.nearby.isEmpty && rejoin == nil) {
                         NearbyStatusCard(
                             state: nearbyState,
                             onAsk: {
@@ -112,7 +115,7 @@ struct MainScreen: View {
                         )
                         .transition(.opacity)
                     }
-                    ForEach(nearbyRoomList) { room in
+                    ForEach(home.nearby) { room in
                         NearbyCard(room: room) { requireName(.join(room.target)) }
                             .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
@@ -486,10 +489,13 @@ struct MainScreen: View {
             if Task.isCancelled { return }
             switch result {
             case .found:
-                // Full is not gone: keep the slot polled so the card returns when someone
-                // leaves, rather than dropping the room the player was just in.
-                let room = result.isFull ? nil : recent
-                withAnimation(.spring(duration: 0.45)) { rejoin = room }
+                // Offered even when the room reads FULL. One of those slots is very
+                // likely this player's own, held for them by the relay, which takes a
+                // stored clientId back into it — the game only treats full as fatal for
+                // a FRESH joiner. Hiding the card here locks someone out of the room
+                // they were just in; a rejoin that genuinely bounces costs one page load
+                // and lands on the `game_full` banner.
+                withAnimation(.spring(duration: 0.45)) { rejoin = recent }
             case .notFound:
                 RecentRoomStore.clear()
                 withAnimation(.spring(duration: 0.45)) {
@@ -595,7 +601,7 @@ private struct RoomCard: View {
     let game: Game
     let title: String
     let roomCode: String
-    /// The display's own label ("Wohnzimmer"). Blank for a rejoin, which never has one.
+    /// The display's own label ("Wohnzimmer"). Blank when nothing on the LAN names the room.
     let label: String
     /// `cpp` — which box the room is on (§6). Nil when the URL declared nothing.
     let platform: String?
@@ -648,19 +654,25 @@ private struct RoomCard: View {
 }
 
 /// The room just left: its title comes from the controller page itself once captured, so
-/// it beats the manifest's curated name. `cpp` rides the join URL (§6), the same string
-/// however the room was reached, so the device name outlives the advertisement it came
-/// from.
+/// it beats the manifest's curated name.
+///
+/// `advert` is the same room as the LAN is currently advertising it, when it still is
+/// (`HomeRooms.rejoinAdvert`) — the room's own name, and a join URL straight off the
+/// relay's §6 template. That template is the one place `cpp` is guaranteed to be declared;
+/// the URL we remembered is whatever route the player took in, which may have been a bare
+/// code that never named a box. So the advertisement leads and the remembered URL backs it
+/// up, which is what keeps the device name once the display goes quiet.
 private struct RejoinCard: View {
     let room: RecentRoom
+    var advert: NearbyRoom? = nil
     let onTap: () -> Void
 
     var body: some View {
         RoomCard(game: room.game,
                  title: room.title ?? room.game.name,
                  roomCode: room.roomCode,
-                 label: "",
-                 platform: devicePlatform(fromUrl: room.joinUrl),
+                 label: advert?.label ?? "",
+                 platform: advert?.platform ?? devicePlatform(fromUrl: room.joinUrl),
                  onTap: onTap)
     }
 }
@@ -912,6 +924,9 @@ private struct PreviewStrip<Content: View>: View {
         RejoinCard(room: CardSamples.rejoinPageTitle) {}
         RejoinCard(room: CardSamples.rejoinNoCode) {}
         RejoinCard(room: CardSamples.rejoinWithDevice) {}
+        // The room's display is still advertising: its name joins the locator, and its
+        // relay-declared platform stands in for a remembered URL that named no box.
+        RejoinCard(room: CardSamples.rejoinPlain, advert: CardSamples.nearbyFull) {}
         RejoinCard(room: CardSamples.rejoinWeb) {}
     }
 }

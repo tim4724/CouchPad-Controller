@@ -162,10 +162,11 @@ fun deviceName(platform: String?): String? = when (platform) {
 }
 
 /**
- * A game's square brand mark on a white tile — the manifest `icon`, not the 16:9 cover
- * (a poster crop is unreadable this small). Falls back to the TV glyph for a game with
- * no icon, or an advert that resolved to an unknown launcher subdomain. The tile is
- * white rather than accent-tinted because icons are authored for a light backdrop.
+ * A game's square brand mark — the manifest `icon`, not the 16:9 cover (a poster crop is
+ * unreadable this small). Falls back to the TV glyph for a game with no icon, or an
+ * advert that resolved to an unknown launcher subdomain. The mark fills the tile and is
+ * clipped to it: icons ship in their own app-icon frame (rounded square, own backdrop),
+ * so a plate underneath would only show as a ring around a frame.
  */
 @Composable
 fun GameIcon(game: Game, tint: Color, modifier: Modifier = Modifier) {
@@ -178,12 +179,12 @@ fun GameIcon(game: Game, tint: Color, modifier: Modifier = Modifier) {
   }
   val bitmap = img
   if (bitmap != null) {
-    Box(
-      modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Color.White),
-      contentAlignment = Alignment.Center,
-    ) {
-      Image(bitmap, contentDescription = null, Modifier.size(34.dp), contentScale = ContentScale.Fit)
-    }
+    Image(
+      bitmap,
+      contentDescription = null,
+      modifier.size(48.dp).clip(RoundedCornerShape(12.dp)),
+      contentScale = ContentScale.Fit,
+    )
   } else {
     Box(modifier.size(48.dp), contentAlignment = Alignment.Center) {
       Icon(painterResource(R.drawable.ic_tv), contentDescription = null, Modifier.size(34.dp), tint = tint)

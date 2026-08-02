@@ -27,7 +27,7 @@ data class Game(
   val maxPlayers: Int? = null,   // rendered via the game_players_* plurals (GameSheets)
   val video: String? = null,     // https URL of a muted gameplay loop, cached on demand (TrailerCache)
   val accentColor: Color,
-  val art: String?,              // asset-relative path, e.g. "artwork/hexstacker-16x9.webp"
+  val art: String?,              // asset-relative path, e.g. "artwork/hexstacker-16x9-v2.webp"
   // Square brand mark, same asset-path + cache rules as [art]. Distinct from the
   // 16:9 cover: a poster crop is unreadable at icon size (NearbyCard).
   val icon: String? = null,

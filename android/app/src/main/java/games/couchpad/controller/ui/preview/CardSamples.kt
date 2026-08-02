@@ -22,8 +22,8 @@ internal object CardSamples {
     name = "HexStacker",
     status = "live",
     accentColor = Color(0xFFFF6B6B),
-    art = "artwork/hexstacker-16x9.webp",
-    icon = "artwork/hexstacker-icon.png",
+    art = "artwork/hexstacker-16x9-v2.webp",
+    icon = "artwork/hexstacker-icon-v2.png",
     controllerBaseUrl = "https://hexstacker.com",
     hosts = listOf("hexstacker.com"),
   )

@@ -6,8 +6,8 @@
       "status": "live",
       "minPlayers": 1,
       "maxPlayers": 8,
-      "art": "/artwork/hexstacker-16x9.webp",
-      "icon": "/artwork/hexstacker-icon.png",
+      "art": "/artwork/hexstacker-16x9-v2.webp",
+      "icon": "/artwork/hexstacker-icon-v2.png",
       "video": "https://hexstacker.com/artwork/trailer.mp4",
       "accentColor": "#FF6B6B",
       "controllerBaseUrl": "https://hexstacker.com",
@@ -22,7 +22,8 @@
       "status": "soon",
       "minPlayers": 1,
       "maxPlayers": 4,
-      "art": "/artwork/tinytrack-16x9.webp",
+      "art": "/artwork/tinytrack-16x9-v2.webp",
+      "icon": "/artwork/tinytrack-icon.png",
       "accentColor": "#4ECDC4"
     },
     {

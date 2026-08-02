@@ -13,8 +13,8 @@ enum CardSamples {
         name: "HexStacker",
         status: "live",
         accentColor: Color(red: 1.0, green: 0.42, blue: 0.42),
-        art: "artwork/hexstacker-16x9.webp",
-        icon: "artwork/hexstacker-icon.png",
+        art: "artwork/hexstacker-16x9-v2.webp",
+        icon: "artwork/hexstacker-icon-v2.png",
         controllerBaseUrl: "https://hexstacker.com",
         hosts: ["hexstacker.com"]
     )

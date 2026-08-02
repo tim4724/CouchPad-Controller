@@ -78,9 +78,11 @@ fails the check. Run it after any string change.
   repo), persist it, and render from it — so a new game or status flip is one
   site deploy, no app update. Art the current build didn't ship is downloaded
   into a URL-keyed cache that is never revalidated, and shipped art is matched
-  by file name — so a **changed image must get a new file name (or a `?v=`
-  bump) in the served manifest**; changed bytes under an unchanged URL go
-  unnoticed by design, same as the site's CSS/JS versioning.
+  by file name — so a **changed image must get a new file name** (e.g.
+  `hexstacker-16x9-v2.webp`) in the served manifest and in both bundles; changed
+  bytes under an unchanged name go unnoticed by design. Not a `?v=` bump: the
+  query string lands inside the file name both bundle lookups use, so every app
+  would re-download art it already ships.
 - `android/app/src/main/java/games/couchpad/controller/` — `data/` (manifest
   model, join resolution, relay probe, LAN room discovery, prefs), `ui/main/`
   (home), `ui/game/` (WebView game host), `theme/`.

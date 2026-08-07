@@ -100,6 +100,7 @@ import games.couchpad.controller.ui.components.hideNavigationBar
 import games.couchpad.controller.ui.components.themeLightBarIcons
 import games.couchpad.controller.ui.main.ProfileSheet
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 import org.json.JSONObject
 
@@ -270,14 +271,20 @@ private fun GameHostContent(
 
   // Publish the safe zone to the page as CSS vars on <html> (CONTRACT.md §5), in
   // CSS px. Reads state at CALL time — the WebView factory captures this closure once.
+  //
+  // ceil, not round: an inset that lands mid-pixel must cover the obstruction, never
+  // stop half a pixel short of it. It also makes these agree with the same edges seen
+  // through env(safe-area-inset-*), which Chromium rounds up off the synthetic cutout
+  // below — rounding to nearest left the two channels 1px apart on fractional edges.
   fun pushSafeZone() {
     val d = density.density
+    fun cssPx(px: Int) = ceil(px / d).toInt()
     webView?.evaluateJavascript(
       "(() => { const s = document.documentElement.style;" +
-        " s.setProperty('--cp-safe-top', '${(chromeHeightPx / d).roundToInt()}px');" +
-        " s.setProperty('--cp-safe-left', '${(safeLeftPx / d).roundToInt()}px');" +
-        " s.setProperty('--cp-safe-right', '${(safeRightPx / d).roundToInt()}px');" +
-        " s.setProperty('--cp-safe-bottom', '${(safeBottomPx / d).roundToInt()}px'); })()",
+        " s.setProperty('--cp-safe-top', '${cssPx(chromeHeightPx)}px');" +
+        " s.setProperty('--cp-safe-left', '${cssPx(safeLeftPx)}px');" +
+        " s.setProperty('--cp-safe-right', '${cssPx(safeRightPx)}px');" +
+        " s.setProperty('--cp-safe-bottom', '${cssPx(safeBottomPx)}px'); })()",
       null,
     )
   }

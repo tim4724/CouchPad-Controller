@@ -28,17 +28,23 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CouchPad">
-        <!-- Portrait-only for now — the home and every current game controller are
-             portrait; revisit per-game when a landscape controller ships. -->
-        <!-- configChanges="uiMode": a dark-mode flip (incl. scheduled ones) must not
-             recreate the activity — that destroys the game-host WebView and bounces the
-             player's live relay socket. Compose re-themes via LocalConfiguration; the
-             system-bar icon contrast is re-applied in onConfigurationChanged. -->
+        <!-- screenOrientation is the DEFAULT, not a lock: the launcher's own screens are
+             portrait, and a game host reverts to this on leave. A controller page that
+             asks for landscape (CONTRACT.md §10) overrides it at runtime via
+             setRequestedOrientation. -->
+        <!-- configChanges: none of these may recreate the activity — recreation destroys
+             the game-host WebView and bounces the player's live relay socket.
+              - uiMode: a dark-mode flip (incl. scheduled ones). Compose re-themes via
+                LocalConfiguration; bar icon contrast is re-applied in onConfigurationChanged.
+              - orientation + screenSize/screenLayout/smallestScreenSize: the §10 rotation
+                itself. These travel together — a rotation reports all four, so handling
+                only `orientation` still recreates. Compose re-lays out and the game host
+                re-publishes the safe zone off the new insets. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:configChanges="uiMode"
+            android:configChanges="uiMode|orientation|screenSize|screenLayout|smallestScreenSize"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

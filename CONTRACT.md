@@ -106,15 +106,21 @@ zone is published two ways:
 
 1. **Standard CSS**: with `viewport-fit=cover`, the launcher folds its chrome and the
    display cutout/gutter into `env(safe-area-inset-*)`, so the standard notch machinery
-   just works.
+   works where the engine cooperates.
 2. **Launcher vars** (authoritative): `--cp-safe-top/-left/-right/-bottom` on
    `document.documentElement` — CSS px, live-updated, re-set on every navigation. These
-   don't rely on the engine's cutout plumbing, which bails in some cases (e.g. Android
-   split-screen).
+   don't rely on the engine's cutout plumbing, which bails in more cases than you'd
+   hope — Android's WebView can read all-zero `env()` even full-screen. The vars, not
+   `env()`, are the values to trust; the `max()` pattern below folds both in.
 
 Horizontal insets align with the chrome's *content*, not just the cutout, so a top row
 anchored to the safe zone lines up with the launcher's controls — expect a small non-zero
 value even with no notch.
+
+**Left and right are always equal**, on both platforms. A landscape cutout sits on one
+side only, but the launcher levels the pair to the larger, so a layout centered in the
+safe box is centered on the physical screen. Don't try to recover which side the camera
+is on from these — that difference is deliberately not published.
 
 Recommended pattern — correct in the shell AND in a plain browser:
 
@@ -309,10 +315,66 @@ during the swipe, so a game arming for a non-obvious reason should say so in its
 Arming also brings Android's navigation bar back on screen for as long as it lasts — while
 hidden, the system spends the first edge swipe revealing it instead of going back, which
 would cost the player their first gesture. **So `--cp-safe-bottom` grows while armed** (by
-the gesture pill, typically 24px) and shrinks again on disarm: one more reason to treat the
-safe zone as live rather than reading it once at startup. iOS is unaffected — its back
+the gesture pill, typically 24px) and shrinks again on disarm — except for a 3-button-nav
+player in landscape, where the bar sits on a *side* and it is the (levelled, §5) side
+insets that grow instead. One more reason to treat the safe zone as live rather than
+reading it once at startup. iOS is unaffected — its back
 gesture is the launcher's own recognizer, not a system one, and its home indicator is
 always in the safe area.
+
+## 10. Game → launcher, screen orientation: `setOrientation(mode)`
+
+The launcher is portrait. A controller whose layout wants the long edge across — a
+steering wheel, a wide track pad, a landscape mini-map — asks for landscape, moment by
+moment.
+
+```js
+window.CouchPadHost?.setOrientation?.('landscape');   // match started
+window.CouchPadHost?.setOrientation?.('portrait');    // back to the lobby
+```
+
+The launcher *implements* `setOrientation`, the game *calls* it. **Default `'portrait'`**,
+including before the first call and after every page load — an orientation never outlives
+the page that asked for it. Only the literal `'landscape'` rotates; every other value,
+including a non-string, means portrait.
+
+| Mode | The device |
+|------|-----------|
+| `'portrait'` *(default)* | locked portrait — a controller that never asks can't be rotated out from under the player |
+| `'landscape'` | turns to landscape and follows the sensor **between the two landscape orientations**, so either hand works; it will not fall back to portrait |
+
+**Call it as early as you can.** The bridge exists before your first script runs, so a
+landscape-only controller that calls from a `<head>` script rotates while the launcher's
+own "Joining…" cover is still up — the player never sees the turn. Deciding later (after
+the socket connects, say) is fine and supported; it just rotates in view.
+
+Make that an **external** `<head>` script (`<script src="…">`, not deferred), not an
+inline one. Game origins typically ship `script-src 'self'`, which blocks inline script
+outright — an inline early call silently never runs, and the page comes up portrait with
+nothing to say why. Same reason the checklist tells you to keep contract code in your own
+bundle.
+
+**The safe zone changes shape, not just size** (§5). In landscape the launcher's chrome
+still occupies the top, but the display cutout moves to a *side* inset — `--cp-safe-left`
+or `--cp-safe-right` becomes the large one, and which side it is depends on which way the
+player turned the phone. A layout that hard-codes "the notch is on top" breaks here. The
+vars are re-published on every rotation, so read them live rather than at startup.
+
+Inert in a plain browser: `CouchPadHost` doesn't exist, so the optional call is a no-op
+and the page keeps whatever the browser and the user's rotation lock were doing. A game
+that needs landscape in the browser too should keep its own CSS/`screen.orientation`
+handling — this bridge does not replace it.
+
+Platform notes, for behavior a game can observe: a rotation does **not** reload the page
+or drop the relay socket on either platform — the same document keeps running, so state
+in JS survives. What the game does see is a `resize`, a changed
+`window.matchMedia('(orientation: landscape)')`, and re-published `--cp-safe-*` vars.
+Android additionally rotates on the sensor even with the system's own rotation lock on —
+the launcher's request outranks it. On either platform, a player holding the phone flat
+may see the turn settle a beat later, since there is no gravity vector to pick a side
+from. In Android split-screen the system ignores orientation
+requests entirely — the page keeps the shape it has, and the request takes effect when
+the app is full-screen again.
 
 ## Checklist for a new game
 
@@ -329,7 +391,9 @@ always in the safe area.
 9. *(Optional)* Arm the system back gesture with `enableSystemBack(true)` where back is
    welcome, disarm the moment it isn't, and implement `window.CouchPad.back()` if there's
    something to close (§9).
-10. *(Native display apps only)* Advertise the room over `_couchpad._tcp` so the launcher
+10. *(Optional)* Ask for landscape with `setOrientation('landscape')` if the controller
+    wants it — as early as possible — and handle the side-moving safe zone (§10).
+11. *(Native display apps only)* Advertise the room over `_couchpad._tcp` so the launcher
     can offer one-tap join (§8).
 
 Every touchpoint above has a live reference implementation — a stand-in controller

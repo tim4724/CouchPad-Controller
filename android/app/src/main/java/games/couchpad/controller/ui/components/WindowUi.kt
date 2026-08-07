@@ -68,10 +68,10 @@ val stableScreenInsets: WindowInsets
   @Composable get() = WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
 
 /**
- * Hide the navigation bar only (revealable with a transient swipe) — the app's one
- * bar-hiding recipe. Nav hidden + transient-by-swipe is exactly the state that lifts
- * the system's 200dp-per-edge cap on gesture-exclusion rects (the status bar is not
- * part of that condition), which the game host depends on — see GameHostScreen.
+ * Hide the navigation bar only (revealable with a transient swipe). Nav hidden +
+ * transient-by-swipe is exactly the state that lifts the system's 200dp-per-edge cap
+ * on gesture-exclusion rects (the status bar is not part of that condition), which
+ * the game host depends on — see GameHostScreen.
  */
 fun hideNavigationBar(window: Window, view: View) {
   WindowCompat.getInsetsController(window, view).run {
@@ -82,11 +82,11 @@ fun hideNavigationBar(window: Window, view: View) {
 
 /**
  * A sheet/dialog is its OWN window: opened over a host with hidden bars, it would
- * bring them back. Mirror the host's state per bar type — in-game it's only ever the
- * nav bar that's hidden (and not even that once the page arms system back), so an
- * all-or-nothing probe would never match. Probes the live insets on every call, so it
- * tracks that mid-game. No-op when the host shows its bars normally, so every overlay
- * can call this unconditionally.
+ * bring them back. Mirror the host's state per bar type — in-game the hidden set is
+ * the nav bar (unless the page armed system back) plus, in landscape, the status bar,
+ * so an all-or-nothing probe would rarely match. Probes the live insets on every call,
+ * so it tracks both mid-game. No-op when the host shows its bars normally, so every
+ * overlay can call this unconditionally.
  */
 @Composable
 fun MirrorHostSystemBars() {

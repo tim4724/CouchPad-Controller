@@ -3,6 +3,7 @@ package games.couchpad.controller.ui.game
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.Rect
@@ -81,6 +82,7 @@ import androidx.core.view.DisplayCutoutCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import games.couchpad.controller.R
@@ -171,6 +173,9 @@ private fun GameHostContent(
   // Has the page armed the system back gesture (CONTRACT.md §9)? Default false —
   // the safe state: edges excluded, LEAVE the only exit. Reset on every navigation.
   var systemBackEnabled by remember { mutableStateOf(false) }
+  // Has the page asked for landscape (CONTRACT.md §10)? Default false — the launcher's
+  // portrait. Reset on every navigation, like the §9 arming.
+  var landscape by remember { mutableStateOf(false) }
   val displayTitle = pageTitle ?: title
   val surfaceArgb = MaterialTheme.colorScheme.surface.toArgb()
   // The bridge/WebView client outlive recompositions but must call the CURRENT
@@ -197,7 +202,22 @@ private fun GameHostContent(
       onGameEnded = { if (exited.compareAndSet(false, true)) currentOnGameEnd(it) },
       onThemeChanged = { currentOnPageTheme(it) },
       onSystemBackEnabled = { systemBackEnabled = it },
+      onLandscape = { landscape = it },
     )
+  }
+
+  // The page's requested orientation (CONTRACT.md §10). SENSOR_LANDSCAPE, not a fixed
+  // one: a controller held either way round must land right side up, and the launcher
+  // has no idea which hand the player uses. Portrait stays locked — a controller that
+  // hasn't asked for landscape must not rotate into one by accident mid-match.
+  //
+  // Safe because the activity handles `orientation` in configChanges (see the manifest):
+  // this rotates the window WITHOUT recreating the activity, so the WebView — and the
+  // player's live relay socket — survive it.
+  LaunchedEffect(landscape) {
+    context.findActivity()?.requestedOrientation =
+      if (landscape) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+      else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
   }
 
   // Relay this room to the local network while we're in it, so the next player can tap
@@ -208,7 +228,7 @@ private fun GameHostContent(
     onDispose { NearbyAdvertiser.stop() }
   }
 
-  // Hide ONLY the nav bar while in a game — the status bar stays. Hidden-nav +
+  // The nav bar: hidden in a game regardless of orientation. Hidden-nav +
   // transient-by-swipe is exactly the state that LIFTS the system's 200dp-per-edge
   // cap on gesture exclusion, so the WebView's exclusion rects (set below) can
   // cover the whole play area.
@@ -229,14 +249,45 @@ private fun GameHostContent(
     }
   }
 
-  // On leave the nav bar comes back and the status-icon appearance (changed by page
-  // theming below) is re-derived from the theme — a captured value would be stale if
-  // the theme flipped mid-game (uiMode no longer recreates the activity).
+  // The status bar: hidden only in landscape, where its height comes off the axis a
+  // landscape controller has least of. iOS gets this for free (UIKit auto-hides the
+  // status bar in a compact-height size class), so matching here keeps the same
+  // controller the same size on both apps rather than handing Android players a
+  // shorter screen.
+  //
+  // Deliberately NOT tied to systemBackEnabled, unlike the nav bar above: the
+  // exclusion-cap lift is a nav-bar-only condition (see hideNavigationBar), and back
+  // never starts from the top edge, so neither reason to un-hide on arming applies.
+  // That keeps the top inset out of §9's arming story — it moves on rotation alone.
+  // Games need no change either way: --cp-safe-top is already live and §10 already
+  // tells them the zone reshapes when it turns.
+  //
+  // Sets the transient-by-swipe behavior itself rather than inheriting whatever
+  // hideNavigationBar last set on this window: same value, but a hidden bar with no
+  // behavior set is one the player cannot swipe back, and nothing orders these two
+  // effects.
+  LaunchedEffect(landscape) {
+    val window = context.findActivity()?.window ?: return@LaunchedEffect
+    WindowCompat.getInsetsController(window, view).run {
+      systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+      if (landscape) hide(WindowInsetsCompat.Type.statusBars())
+      else show(WindowInsetsCompat.Type.statusBars())
+    }
+  }
+
+  // On leave BOTH bars come back (systemBars, not navigationBars — a landscape game
+  // also hid the status bar), the launcher's portrait is restored (§10 — home is
+  // portrait, and an orientation the game asked for must not outlive it), and the
+  // status-icon appearance (changed by page theming below) is re-derived from the
+  // theme — a captured value would be stale if the theme flipped mid-game (uiMode no
+  // longer recreates the activity).
   DisposableEffect(Unit) {
-    val controller = context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
+    val activity = context.findActivity()
+    val controller = activity?.window?.let { WindowCompat.getInsetsController(it, view) }
     onDispose {
+      activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
       controller?.run {
-        show(WindowInsetsCompat.Type.navigationBars())
+        show(WindowInsetsCompat.Type.systemBars())
         isAppearanceLightStatusBars = themeLightBarIcons(context)
       }
     }
@@ -298,19 +349,29 @@ private fun GameHostContent(
   val barContent = pageTheme.bar?.let(::contentColorOn)
 
   // Safe-zone geometry, measured off the real layout (window px). Top is the
-  // chrome's full extent (inset + LEAVE bar). Right reaches the name chip's edge;
-  // the gap beyond the cutout is the chrome's content gutter, mirrored onto the
-  // left so the page lines up with the close icon — each side still adds its own
-  // cutout overhang. Bottom is the cutout, or the nav bar once an armed page brings
-  // it back — reported as visible insets, so this is 0 again while it is hidden.
+  // chrome's full extent (inset + LEAVE bar). Both sides get ONE shared value — the
+  // largest of the side cutout, a side-mounted nav bar and the chip's gutter — so the
+  // page lines up with the close icon and the name chip alike. Bottom is the cutout,
+  // or the nav bar once an armed page brings it back — reported as visible insets, so
+  // this is 0 again while it is hidden.
   var chromeHeightPx by remember { mutableStateOf(0) }
   var chromeWidthPx by remember { mutableStateOf(0) }
   var chipRightPx by remember { mutableStateOf(0) }
   val cutout = WindowInsets.displayCutout
-  val cutoutLeft = cutout.getLeft(density, layoutDirection)
-  val cutoutRight = cutout.getRight(density, layoutDirection)
   val cutoutBottom = cutout.getBottom(density)
-  val navBottom = WindowInsets.navigationBars.getBottom(density)
+  val navBars = WindowInsets.navigationBars
+  val navBottom = navBars.getBottom(density)
+  // ONE side inset for the chrome's padding and both published sides: the larger
+  // cutout — plus the nav bar's sides, because in landscape the 3-BUTTON bar sits on
+  // a side, not the bottom, so a §9-armed page bringing it back would otherwise cover
+  // "safe" game UI (and the chip). Visible insets: all zero while the bars are hidden,
+  // and the gesture pill lands in navBottom, so nothing changes outside that one case.
+  val sideInsetPx = maxOf(
+    cutout.getLeft(density, layoutDirection),
+    cutout.getRight(density, layoutDirection),
+    navBars.getLeft(density, layoutDirection),
+    navBars.getRight(density, layoutDirection),
+  )
   var safeLeftPx by remember { mutableStateOf(0) }
   var safeRightPx by remember { mutableStateOf(0) }
   var safeBottomPx by remember { mutableStateOf(0) }
@@ -342,15 +403,24 @@ private fun GameHostContent(
     chromeHeightPx,
     chromeWidthPx,
     chipRightPx,
-    cutoutLeft,
-    cutoutRight,
+    sideInsetPx,
     cutoutBottom,
     navBottom,
     webView,
   ) {
-    safeRightPx = if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx).coerceAtLeast(cutoutRight) else cutoutRight
-    val gutter = (safeRightPx - cutoutRight).coerceAtLeast(0)
-    safeLeftPx = cutoutLeft + gutter
+    // ONE horizontal inset for both sides, measured off the chip. The chrome is padded
+    // symmetrically (see above), so this already carries the larger side obstruction
+    // plus the chrome's content gutter — no per-side mirroring left to do.
+    //
+    // Levelling is parity, not preference: UIKit reports the notch inset on BOTH sides
+    // in landscape, so iOS hands the same page a symmetric box. Publishing the lopsided
+    // pair here only offered detail a cross-platform controller has to throw away, at
+    // the cost of the two apps disagreeing about the same page. In portrait the cutout
+    // is on the top edge, so both sides were already equal and this changes nothing.
+    val side =
+      if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx).coerceAtLeast(sideInsetPx) else sideInsetPx
+    safeLeftPx = side
+    safeRightPx = side
     safeBottomPx = maxOf(cutoutBottom, navBottom)
     pushSafeZone()
     webView?.requestApplyInsets()
@@ -419,8 +489,12 @@ private fun GameHostContent(
           // Re-assert the name on each load (belt-and-suspenders with cpName).
           webViewClient = AllowListWebViewClient(
             allowed,
-            // Arming must not outlive the page that meant it (CONTRACT.md §9).
-            onNavigationStart = { systemBackEnabled = false },
+            // Neither the §9 arming nor the §10 orientation may outlive the page that
+            // asked for it — both revert to the launcher's default on every navigation.
+            onNavigationStart = {
+              systemBackEnabled = false
+              landscape = false
+            },
             onLoaded = {
               loading = false
               injectName(profile.name)
@@ -510,10 +584,18 @@ private fun GameHostContent(
             1f to barColor.copy(alpha = 0f),
           ),
         )
+        // Top from the bars; horizontal SYMMETRIC rather than per-side. A landscape
+        // cutout is on one side only, and padding the chrome by the raw per-side inset
+        // put the X and the name chip on a different box than the (levelled) safe zone
+        // we publish to the page — the chip sat nearer the edge than any game UI is
+        // allowed to. Padding both sides by the larger keeps launcher chrome and page
+        // content on the same margin, and makes the gutter measured off the chip below
+        // symmetric by construction.
         .windowInsetsPadding(
           WindowInsets.statusBars.union(WindowInsets.displayCutout)
-            .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-        ),
+            .only(WindowInsetsSides.Top),
+        )
+        .padding(horizontal = with(density) { sideInsetPx.toDp() }),
     ) {
       LeaveBar(
         title = displayTitle,
@@ -662,6 +744,7 @@ private class CouchPadHostBridge(
   private val onGameEnded: (String?) -> Unit,
   private val onThemeChanged: (PageTheme) -> Unit,
   private val onSystemBackEnabled: (Boolean) -> Unit,
+  private val onLandscape: (Boolean) -> Unit,
 ) {
   private val fired = AtomicBoolean(false)
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -688,5 +771,15 @@ private class CouchPadHostBridge(
   @JavascriptInterface
   fun enableSystemBack(enabled: Boolean) {
     mainHandler.post { onSystemBackEnabled(enabled) }
+  }
+
+  // The orientation the controller wants right now (CONTRACT.md §10). Not fire-once:
+  // a game may run its lobby portrait and its match landscape. Only the literal
+  // "landscape" rotates; every other value — including a non-string, which the JS
+  // bridge hands over as null — means portrait.
+  @JavascriptInterface
+  fun setOrientation(mode: String?) {
+    val wantsLandscape = mode == "landscape"
+    mainHandler.post { onLandscape(wantsLandscape) }
   }
 }

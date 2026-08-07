@@ -81,14 +81,24 @@ final class RootHostingController: UIHostingController<RootView> {
     override var preferredStatusBarStyle: UIStatusBarStyle {
         ChromeState.shared.statusBarStyle ?? .default
     }
+
+    /// The only view controller in the window, so this narrows the Info.plist's
+    /// landscape-inclusive superset down to what the current screen actually allows
+    /// (CONTRACT.md §10). Portrait everywhere except a game host whose page asked
+    /// for landscape — home must not rotate just because the plist permits it.
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        ChromeState.shared.orientation
+    }
 }
 
 // MARK: - Chrome state
 
-/// Status-bar style override for the game host (its chrome can be game-colored).
-/// Home indicator and edge-gesture deferral are NOT here — those use SwiftUI's
-/// view-scoped persistentSystemOverlays/defersSystemGestures on GameHostScreen,
-/// which cannot leak past that view's lifetime.
+/// Status-bar style and interface orientation for the game host (its chrome can be
+/// game-colored, and its page can ask for landscape). Home indicator and edge-gesture
+/// deferral are NOT here — those use SwiftUI's view-scoped persistentSystemOverlays/
+/// defersSystemGestures on GameHostScreen, which cannot leak past that view's lifetime.
+/// Orientation can't work that way: it is a window-scene property, and the reset must
+/// be driven by the ROUTE (see AppRouter) so a pop can't leave home stuck in landscape.
 @MainActor final class ChromeState {
 
     static let shared = ChromeState()
@@ -99,8 +109,26 @@ final class RootHostingController: UIHostingController<RootView> {
         didSet { host?.setNeedsStatusBarAppearanceUpdate() }
     }
 
+    /// What the current screen allows (CONTRACT.md §10). `.landscape` covers both
+    /// orientations rather than picking one: a controller held either way round must
+    /// land right side up, and the launcher has no idea which hand the player uses.
+    var orientation: UIInterfaceOrientationMask = .portrait {
+        didSet {
+            guard oldValue != orientation else { return }
+            // Order matters. setNeedsUpdate… makes UIKit re-read the root VC's
+            // supportedInterfaceOrientations (already the new mask — this is a didSet);
+            // requestGeometryUpdate then actually turns the window. Without the first
+            // call the geometry request is rejected against the stale mask; without the
+            // second the device only rotates if the player physically turns the phone.
+            host?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            host?.view.window?.windowScene?
+                .requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
+        }
+    }
+
     func reset() {
         statusBarStyle = nil
+        orientation = .portrait
     }
 
     private init() {}

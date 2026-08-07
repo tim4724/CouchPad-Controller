@@ -101,8 +101,16 @@ targets:
           - _couchpad._tcp
         UILaunchScreen:
           UIColorName: LaunchBackground
+        # The app-wide SUPERSET, not what any screen allows: landscape is listed only so
+        # a controller page can ask for it (CONTRACT.md §10). The window's root view
+        # controller narrows this per screen (RootHostingController.supportedInterface-
+        # Orientations → ChromeState.orientation), and everything outside a game host —
+        # home, scan, About — stays portrait. Dropping landscape here would make the §10
+        # request a silent no-op; dropping the root VC's narrowing would let home rotate.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIRequiresFullScreen: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

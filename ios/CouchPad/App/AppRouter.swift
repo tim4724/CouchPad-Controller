@@ -167,7 +167,8 @@ struct RootView: View {
         }
         .cpThemed()
         .environment(router.messages)
-        // Keep-awake and status-bar style follow the ROUTE, not view lifecycle:
+        // Keep-awake, status-bar style and the §10 interface orientation follow the
+        // ROUTE, not view lifecycle:
         // onAppear/onDisappear don't fire reliably across NavigationStack
         // push/pop. (Indicator/edge-gesture chrome is view-scoped SwiftUI on
         // GameHostScreen and needs no reset.)

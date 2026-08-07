@@ -97,6 +97,7 @@ struct GameWebView: UIViewRepresentable {
     let onLoaded: () -> Void           // first painted frame (the injected __firstFrame signal)
     let onGameEnd: (String?) -> Void   // fire-once
     let onLeave: () -> Void            // an armed back gesture the page didn't consume (§9)
+    let onLandscape: (Bool) -> Void    // the orientation the page is asking for (§10)
     @Binding var failed: Bool          // main-doc load failed — drives the retry overlay
     let reloadToken: Int               // bumped by Retry → re-issue the join request
     let onThemeChanged: (PageTheme) -> Void
@@ -104,7 +105,7 @@ struct GameWebView: UIViewRepresentable {
 
     init(joinUrl: String, allowedDomains: [String], playerName: String, safeZone: SafeZone,
          onLoaded: @escaping () -> Void, onGameEnd: @escaping (String?) -> Void,
-         onLeave: @escaping () -> Void,
+         onLeave: @escaping () -> Void, onLandscape: @escaping (Bool) -> Void,
          failed: Binding<Bool>, reloadToken: Int,
          onThemeChanged: @escaping (PageTheme) -> Void,
          onTitleChanged: @escaping (String) -> Void) {
@@ -115,6 +116,7 @@ struct GameWebView: UIViewRepresentable {
         self.onLoaded = onLoaded
         self.onGameEnd = onGameEnd
         self.onLeave = onLeave
+        self.onLandscape = onLandscape
         self._failed = failed
         self.reloadToken = reloadToken
         self.onThemeChanged = onThemeChanged
@@ -336,11 +338,13 @@ struct GameWebView: UIViewRepresentable {
             reportLoadFailure(error)
         }
 
-        /// Arming must not outlive the page that meant it (CONTRACT.md §9). Main frame
-        /// only, and not fired for same-document navigations — a page that pushes
-        /// history mid-session keeps whatever it armed.
+        /// Neither the §9 arming nor the §10 orientation may outlive the page that asked
+        /// for it — both revert to the launcher's default here. Main frame only, and not
+        /// fired for same-document navigations, so a page that pushes history mid-session
+        /// keeps both.
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             backEdgeGesture?.isEnabled = false
+            parent.onLandscape(false)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -402,6 +406,10 @@ struct GameWebView: UIViewRepresentable {
                 // Not fire-once: games arm and disarm repeatedly (a dialog opening and
                 // closing). The shim already coerced to a boolean, so only "true" arms.
                 backEdgeGesture?.isEnabled = (body["value"] as? String) == "true"
+            case "setOrientation":
+                // Not fire-once: a game may run its lobby portrait and its match
+                // landscape. The shim already narrowed to the two legal keywords.
+                parent.onLandscape((body["value"] as? String) == "landscape")
             default:
                 break
             }

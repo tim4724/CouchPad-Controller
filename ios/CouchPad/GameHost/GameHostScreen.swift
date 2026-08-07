@@ -81,20 +81,21 @@ struct GameHostScreen: View {
     }
 
     /// Safe-zone geometry (points, ints). Top is the chrome's full extent (inset +
-    /// Leave bar). Right reaches the name chip's edge; the gap beyond the cutout is
-    /// the chrome's content gutter, mirrored onto the left so the page lines up with
-    /// the close icon — each side still adds its own cutout overhang. Bottom is the
-    /// bare cutout (no chrome there).
+    /// Leave bar). Both sides get ONE shared value — the larger cutout or the chip's
+    /// gutter, whichever wins — so the page lines up with the close icon and the name
+    /// chip alike. Bottom is the bare cutout (no chrome there).
     private var computedSafeZone: SafeZone {
         let safeTop = chromeHeight
-        let safeRight = chromeWidth > 0 ? max(chromeWidth - chipRight, cutout.trailing) : cutout.trailing
-        let gutter = max(safeRight - cutout.trailing, 0)
-        let safeLeft = cutout.leading + gutter
+        // Level the two sides to the larger — see the matching note in Android's
+        // GameHostScreen. The chrome above is padded symmetrically too, so its own X and
+        // name chip sit on this same box rather than beside it.
+        let sideCutout = max(cutout.leading, cutout.trailing)
+        let side = chromeWidth > 0 ? max(chromeWidth - chipRight, sideCutout) : sideCutout
         let safeBottom = cutout.bottom
         return SafeZone(
             top: Int(safeTop.rounded()),
-            left: Int(safeLeft.rounded()),
-            right: Int(safeRight.rounded()),
+            left: Int(side.rounded()),
+            right: Int(side.rounded()),
             bottom: Int(safeBottom.rounded())
         )
     }
@@ -116,6 +117,10 @@ struct GameHostScreen: View {
                 onLoaded: { withAnimation(.easeOut(duration: 0.3)) { loading = false } },
                 onGameEnd: onGameEnd,
                 onLeave: onLeave,
+                // The page's requested orientation (CONTRACT.md §10). Goes straight to
+                // ChromeState — it drives the window scene, not this view's layout, and
+                // the route-driven reset there is what guarantees home is portrait again.
+                onLandscape: { ChromeState.shared.orientation = $0 ? .landscape : .portrait },
                 failed: $failed,
                 reloadToken: reloadToken,
                 onThemeChanged: { pageTheme = $0 },
@@ -240,8 +245,10 @@ struct GameHostScreen: View {
                 onChipRight: { chipRight = $0 }
             )
             .padding(.top, cutout.top)
-            .padding(.leading, cutout.leading)
-            .padding(.trailing, cutout.trailing)
+            // Symmetric, matching the safe zone we publish (§5): a landscape cutout is on
+            // one side only, but levelling both keeps the chrome's own controls on the
+            // same box the page is told to stay inside.
+            .padding(.horizontal, max(cutout.leading, cutout.trailing))
         }
         .frame(maxWidth: .infinity)
         .background(
@@ -262,7 +269,11 @@ struct GameHostScreen: View {
             chromeHeight = size.height
             chromeWidth = size.width
         }
-        .ignoresSafeArea(edges: .top)
+        // Horizontal too, not just top: SwiftUI would otherwise inset this view by the
+        // safe area AND we add `cutout` padding above it, double-counting the notch —
+        // invisible in portrait (0 there), but in landscape it pushed the X and the name
+        // chip twice the cutout off each edge. Our explicit padding is the only inset.
+        .ignoresSafeArea(edges: [.top, .horizontal])
     }
 }
 

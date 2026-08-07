@@ -63,14 +63,14 @@ func gameEndMessage(_ reason: String?) -> String {
 
 enum GameHostJS {
     /// Document-start user script (all frames): defines
-    /// `window.CouchPadHost.{gameEnded,themeChanged,enableSystemBack}` posting
-    /// `{type, value}` to `window.webkit.messageHandlers.cpHost`. Idempotent — the
-    /// shim must exist on every page load/navigation, but never redefine an
+    /// `window.CouchPadHost.{gameEnded,themeChanged,enableSystemBack,setOrientation}`
+    /// posting `{type, value}` to `window.webkit.messageHandlers.cpHost`. Idempotent —
+    /// the shim must exist on every page load/navigation, but never redefine an
     /// already-installed bridge.
     ///
-    /// `enableSystemBack` coerces to a real boolean here, so the native side sees the
-    /// contract's strict `=== true` (Android gets the same for free from its typed
-    /// JS bridge) rather than JS truthiness.
+    /// `enableSystemBack` and `setOrientation` narrow to a boolean / the two legal
+    /// keywords here, so the native side sees the contract's strict comparison (Android
+    /// gets the same for free from its typed JS bridge) rather than JS truthiness.
     static let bridgeShim = """
     (function () {
       if (window.CouchPadHost) { return; }
@@ -85,7 +85,10 @@ enum GameHostJS {
       window.CouchPadHost = {
         gameEnded: function (reason) { post('gameEnded', reason); },
         themeChanged: function (json) { post('themeChanged', json); },
-        enableSystemBack: function (on) { post('enableSystemBack', on === true); }
+        enableSystemBack: function (on) { post('enableSystemBack', on === true); },
+        setOrientation: function (mode) {
+          post('setOrientation', mode === 'landscape' ? 'landscape' : 'portrait');
+        }
       };
     })();
     """

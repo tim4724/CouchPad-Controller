@@ -184,7 +184,13 @@ enum GamesManifest {
 
         let relayProbeBase = httpsURL(obj["relayProbeBase"])?.trimmingTrailingSlashes()
 
-        let hosts = (obj["hosts"] as? [Any])?.compactMap { $0 as? String } ?? []
+        // Strictly strings — a malformed hosts array fails the whole parse (Android
+        // matches), keeping the documented all-or-nothing promise instead of silently
+        // shipping a shorter allow-list than the other platform.
+        let hosts = try ((obj["hosts"] as? [Any]) ?? []).map { element -> String in
+            guard let host = element as? String else { throw ParseError() }
+            return host
+        }
 
         return Game(id: id, name: name, status: status,
                     minPlayers: minPlayers, maxPlayers: maxPlayers, video: video, accentColor: accentColor,
@@ -240,10 +246,16 @@ func parseHexColor(_ s: String) -> Color {
     return Color(cpHex: value)
 }
 
+private let hostnameAlphabet = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789.-")
+
 /// Case-insensitive: host == domain || host ends with "." + domain. nil host → false.
+/// The host arrives percent-DECODED from URLComponents, so anything outside the
+/// hostname alphabet (an embedded "/", say, from "evil.com%2f.example.com") must
+/// never suffix-match — the raw string is what gets loaded.
 func hostInDomain(_ host: String?, _ domain: String) -> Bool {
     guard let host else { return false }
     let h = host.lowercased()
+    guard h.unicodeScalars.allSatisfy(hostnameAlphabet.contains) else { return false }
     let d = domain.lowercased()
     return h == d || h.hasSuffix("." + d)
 }

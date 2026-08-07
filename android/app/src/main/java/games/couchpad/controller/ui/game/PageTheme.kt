@@ -56,7 +56,11 @@ internal val WATCH_PAGE_THEME_JS = """
     if (window.__cgThemePush) { window.__cgThemePush(); return; }
     const read = (name) => {
       const metas = [...document.querySelectorAll('meta[name="' + name + '"]')];
-      const m = metas.find((x) => !x.media || matchMedia(x.media).matches) ?? metas[0];
+      // getAttribute, not the .media IDL property — the property only exists on
+      // Chromium builds with media-aware theme-color, and an old WebView without it
+      // would read every meta as media-less and take the first regardless of query.
+      const q = (x) => x.getAttribute('media');
+      const m = metas.find((x) => !q(x) || matchMedia(q(x)).matches) ?? metas[0];
       if (!m || !m.content || !CSS.supports('color', m.content)) return null;
       const el = document.createElement('div');
       el.style.color = m.content;

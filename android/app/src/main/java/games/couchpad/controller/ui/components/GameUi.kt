@@ -198,10 +198,12 @@ fun GameIcon(game: Game, tint: Color, modifier: Modifier = Modifier) {
  */
 fun annotatedHostLine(template: String, host: String, hostColor: Color): AnnotatedString =
   buildAnnotatedString {
+    // A translation missing the placeholder degrades to template-then-host rather
+    // than crashing — the same shape iOS falls back to.
     val at = template.indexOf("%1\$s")
-    append(template.substring(0, at))
+    append(if (at >= 0) template.substring(0, at) else template)
     withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = hostColor)) { append(host) }
-    append(template.substring(at + 4))
+    if (at >= 0) append(template.substring(at + 4))
   }
 
 /** Numbered instruction row. */

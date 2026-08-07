@@ -101,15 +101,28 @@ object RoomDirectory {
 suspend fun resolveTypedCode(code: String, games: List<Game>): JoinOutcome = coroutineScope {
   val trimmed = code.trim()
   if (trimmed.isEmpty()) return@coroutineScope JoinOutcome.Failure(R.string.error_enter_room_code)
-  val sole = games.singleOrNull { it.isLive }
+  val results = probeRelays(trimmed, games)
+  resolveLookups(trimmed, results, games)
+}
 
-  // Race the game's own relay (first, so it wins ties) and the shared directory.
+/** The relays a code is checked against: the game's own relay first (so it wins ties),
+ * then the shared directory. Probed in parallel. */
+suspend fun probeRelays(code: String, games: List<Game>): List<RoomLookup> = coroutineScope {
+  val sole = games.singleOrNull { it.isLive }
   val relays = buildList {
     sole?.relayProbeBase?.let(::add)
     if (RELAY_BASE !in this) add(RELAY_BASE)
   }
-  val results = relays.map { base -> async { RoomDirectory.lookup(trimmed, base) } }.awaitAll()
+  relays.map { base -> async { RoomDirectory.lookup(code, base) } }.awaitAll()
+}
 
+/**
+ * The decision table over already-fetched lookups — separate from [resolveTypedCode] so
+ * a caller that probed for its own reasons ([resolveNearby]'s fullness check) resolves
+ * from those results instead of probing the same relays a second time.
+ */
+fun resolveLookups(trimmed: String, results: List<RoomLookup>, games: List<Game>): JoinOutcome {
+  val sole = games.singleOrNull { it.isLive }
   val founds = results.filterIsInstance<RoomLookup.Found>()
   // Deliberately NOT refused when full, though the lookup reports it: a full room still
   // takes its own players back (the relay swaps a stored clientId into the slot it is
@@ -120,7 +133,7 @@ suspend fun resolveTypedCode(code: String, games: List<Game>): JoinOutcome = cor
   // player has a slot in, can safely act on `isFull`.
   val foundUrl = founds.firstOrNull { it.url != null }?.url
   val foundOrigin = founds.firstOrNull { it.origin != null }?.origin
-  when {
+  return when {
     // A relay knows the room and handed back the controller URL — load exactly that.
     foundUrl != null -> JoinResolver.resolve(foundUrl, games)
     // No URL template, but the room declared its origin (e.g. a preview deployment on a

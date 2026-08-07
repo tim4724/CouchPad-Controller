@@ -150,24 +150,15 @@ func homeRooms(_ rooms: [NearbyRoom], rejoin: RecentRoom? = nil) -> HomeRooms {
 func resolveNearby(_ advert: NearbyAdvert, games: [Game]) async -> NearbyRoom? {
     guard advert.code.count == CP.roomCodeLength,
           advert.code.allSatisfy({ CP.base58.contains($0) }) else { return nil }
-    let sole = games.filter(\.isLive).count == 1 ? games.first(where: \.isLive) : nil
-    var bases: [String] = []
-    if let probe = sole?.relayProbeBase { bases.append(probe) }
-    if !bases.contains(CP.relayBase) { bases.append(CP.relayBase) }
-
-    let lookups = await withTaskGroup(of: RoomLookup.self) { group -> [RoomLookup] in
-        for base in bases {
-            group.addTask { await RoomDirectory.lookup(code: advert.code, relayBase: base) }
-        }
-        var out: [RoomLookup] = []
-        for await result in group { out.append(result) }
-        return out
-    }
+    // One probe round serves both the fullness check and the URL resolution — this runs
+    // on every 10s poll tick per advertised room, so a second identical round would
+    // double the relay traffic for nothing.
+    let lookups = await probeRelays(advert.code, games: games)
     let founds = lookups.filter { if case .found = $0 { return true } else { return false } }
     guard !founds.isEmpty, !founds.contains(where: { $0.isFull }) else { return nil }
 
     guard case .success(let game, let roomCode, let joinUrl) =
-            await resolveTypedCode(advert.code, games: games) else { return nil }
+            resolveLookups(advert.code, results: lookups, games: games) else { return nil }
     // A relayed record's instance name is the relaying phone's own, not the TV's.
     return NearbyRoom(label: advert.relayed ? "" : advert.label, game: game, roomCode: roomCode,
                       joinUrl: joinUrl)

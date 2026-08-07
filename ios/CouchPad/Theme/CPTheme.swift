@@ -177,17 +177,9 @@ extension View {
 // MARK: - Typography (Dynamic Type text styles; M3-role names kept at call sites)
 
 extension Font {
-    static let cpDisplayLarge = Font.largeTitle
-    static let cpHeadlineLarge = Font.largeTitle
-    static let cpHeadlineMedium = Font.title
-    static let cpHeadlineSmall = Font.title2
-    static let cpTitleLarge = Font.title2
     static let cpTitleMedium = Font.headline
-    static let cpTitleSmall = Font.subheadline.weight(.medium)
     static let cpBodyLarge = Font.body
     static let cpBodyMedium = Font.subheadline
-    static let cpBodySmall = Font.footnote
     static let cpLabelLarge = Font.subheadline.weight(.medium)
     static let cpLabelMedium = Font.footnote.weight(.medium)
-    static let cpLabelSmall = Font.caption.weight(.medium)
 }

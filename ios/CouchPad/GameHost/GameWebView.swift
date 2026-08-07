@@ -103,26 +103,6 @@ struct GameWebView: UIViewRepresentable {
     let onThemeChanged: (PageTheme) -> Void
     let onTitleChanged: (String) -> Void  // the page's <title>, trimmed & non-empty
 
-    init(joinUrl: String, allowedDomains: [String], playerName: String, safeZone: SafeZone,
-         onLoaded: @escaping () -> Void, onGameEnd: @escaping (String?) -> Void,
-         onLeave: @escaping () -> Void, onLandscape: @escaping (Bool) -> Void,
-         failed: Binding<Bool>, reloadToken: Int,
-         onThemeChanged: @escaping (PageTheme) -> Void,
-         onTitleChanged: @escaping (String) -> Void) {
-        self.joinUrl = joinUrl
-        self.allowedDomains = allowedDomains
-        self.playerName = playerName
-        self.safeZone = safeZone
-        self.onLoaded = onLoaded
-        self.onGameEnd = onGameEnd
-        self.onLeave = onLeave
-        self.onLandscape = onLandscape
-        self._failed = failed
-        self.reloadToken = reloadToken
-        self.onThemeChanged = onThemeChanged
-        self.onTitleChanged = onTitleChanged
-    }
-
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -149,7 +129,8 @@ struct GameWebView: UIViewRepresentable {
         let webView = CPWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
         // Match the dark chrome while the page is blank — kills the white flash.
-        let surface = UIColor(red: 0x0F / 255.0, green: 0x0F / 255.0, blue: 0x11 / 255.0, alpha: 1.0)
+        // CPPalette.dark.surface (#110F17) — keep in sync with CPTheme.swift.
+        let surface = UIColor(red: 0x11 / 255.0, green: 0x0F / 255.0, blue: 0x17 / 255.0, alpha: 1.0)
         webView.backgroundColor = surface
         webView.scrollView.backgroundColor = surface
         webView.scrollView.contentInsetAdjustmentBehavior = .never
@@ -160,7 +141,15 @@ struct GameWebView: UIViewRepresentable {
         webView.isInspectable = true
         #endif
         webView.navigationDelegate = coordinator
+        webView.uiDelegate = coordinator
         webView.syntheticSafeAreaInsets = safeZone.uiEdgeInsets
+        // The Leave bar and home rejoin card follow the page's own <title> — KVO, not
+        // a didFinish sample, because a controller SPA typically sets its title well
+        // after the load finishes (once the relay socket connects).
+        coordinator.titleObservation = webView.observe(\.title, options: [.new]) { [weak coordinator] webView, _ in
+            let title = webView.title
+            DispatchQueue.main.async { coordinator?.titleChanged(title) }
+        }
         // The system back gesture, off until the page arms it (CONTRACT.md §9). WebKit's
         // own allowsBackForwardNavigationGestures can't serve here: it drives web history
         // and never reaches back(), and the launcher — not the page's history — owns the
@@ -206,11 +195,14 @@ struct GameWebView: UIViewRepresentable {
             webView.evaluateJavaScript(GameHostJS.safeZonePush(safeZone), completionHandler: nil)
         }
 
-        // A Retry tap bumps reloadToken → re-issue the original join request (reload()
-        // is a no-op when the failed navigation never committed, e.g. offline at join).
+        // A Retry tap bumps reloadToken. Reload the page the controller is actually on
+        // when one ever committed (parity with Android's reload()); when nothing did
+        // (offline at join — reload() is a no-op there) re-issue the join request.
         if reloadToken != coordinator.lastReloadToken {
             coordinator.lastReloadToken = reloadToken
-            if let url = URL(string: joinUrl) {
+            if webView.url != nil {
+                webView.reload()
+            } else if let url = URL(string: joinUrl) {
                 webView.load(URLRequest(url: url))
             }
         }
@@ -219,6 +211,7 @@ struct GameWebView: UIViewRepresentable {
     /// Tear the web view down so the game's WebSocket/audio fully stop the moment we pop.
     static func dismantleUIView(_ webView: CPWebView, coordinator: Coordinator) {
         coordinator.isTearingDown = true
+        coordinator.titleObservation = nil
         NotificationCenter.default.removeObserver(coordinator)
         webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "cpHost")
@@ -228,12 +221,13 @@ struct GameWebView: UIViewRepresentable {
         }
     }
 
-    @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         var parent: GameWebView
         var isTearingDown = false
         var lastInjectedName = ""
         var lastPushedZone = SafeZone()
         var lastReloadToken = 0
+        var titleObservation: NSKeyValueObservation?
         // Fire-once for the game-reported end — a game spamming gameEnded must pop
         // home only once. (A load failure is NOT terminal: it flips `failed` for the
         // retry overlay, so it doesn't gate on this.)
@@ -318,9 +312,15 @@ struct GameWebView: UIViewRepresentable {
             }
             #endif
             if scheme == "http" || scheme == "https" {
-                // Off-list (plain http is never in-app, even on an allowed domain) → browser.
+                // Off-list (plain http is never in-app, even on an allowed domain) →
+                // browser, but only a main-frame link the player actually tapped: a
+                // page can mint subframe/scripted navigations at will, and each would
+                // otherwise yank the player out of the match. The rest cancel silently.
                 decisionHandler(.cancel)
-                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                if navigationAction.navigationType == .linkActivated,
+                   navigationAction.targetFrame?.isMainFrame != false {
+                    UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                }
                 return
             }
             // javascript:, file:, custom schemes, … — blocked entirely.
@@ -351,6 +351,36 @@ struct GameWebView: UIViewRepresentable {
             reportLoadFailure(error)
         }
 
+        /// The web-content process died (OOM kill while backgrounded, or a crash).
+        /// Route it to the same in-place retry as a network failure — WKWebView
+        /// recovers by loading again, which is exactly what Retry does. Without this
+        /// the player would face a blank page whose join cover already faded.
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            guard !isTearingDown, !didEnd else { return }
+            parent.failed = true
+        }
+
+        /// No popups: a target=_blank / window.open navigation loads in THIS web view
+        /// (vetted by the same decidePolicyFor allow-list), matching Android's
+        /// single-window WebView instead of silently discarding the click.
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                     for navigationAction: WKNavigationAction,
+                     windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
+            }
+            return nil
+        }
+
+        /// The page's own name (ground truth over the manifest): drives the Leave bar
+        /// and feeds the home rejoin card, so games not in the bundled manifest show a
+        /// real name instead of the generic fallback. putTitle returns the sanitized
+        /// text so the bar shows exactly what the card stores.
+        func titleChanged(_ raw: String?) {
+            guard !isTearingDown, let raw, let clean = RecentRoomStore.putTitle(raw) else { return }
+            parent.onTitleChanged(clean)
+        }
+
         private func reportLoadFailure(_ error: Error) {
             // Ignore our own teardown and a game already ended.
             guard !isTearingDown, !didEnd else { return }
@@ -367,20 +397,14 @@ struct GameWebView: UIViewRepresentable {
         /// either — one fading the cover before content exists is the bug, not a
         /// safety net (a stalled page keeps the honest spinner, and Leave stays
         /// available in the chrome above it; load failures surface the retry cover
-        /// through the error callbacks).
+        /// through the error callbacks). The page's <title> needs nothing here — the
+        /// KVO observer set up in makeUIView tracks it continuously.
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             if let js = GameHostJS.nameInjection(name: parent.playerName) {
                 webView.evaluateJavaScript(js, completionHandler: nil)
             }
             webView.evaluateJavaScript(GameHostJS.watchPageTheme, completionHandler: nil)
             webView.evaluateJavaScript(GameHostJS.safeZonePush(parent.safeZone), completionHandler: nil)
-            // The page's own name (ground truth over the manifest): drives the Leave
-            // bar and feeds the home rejoin card, so games not in the bundled manifest
-            // still show a real name instead of the generic fallback. putTitle returns
-            // the sanitized text so the bar shows exactly what the card stores.
-            if let raw = webView.title, let clean = RecentRoomStore.putTitle(raw) {
-                parent.onTitleChanged(clean)
-            }
         }
 
         /// The game→launcher half of the contract (v1). All arguments are untrusted page input.

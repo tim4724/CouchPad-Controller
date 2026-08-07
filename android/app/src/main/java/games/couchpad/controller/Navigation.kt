@@ -25,6 +25,7 @@ import games.couchpad.controller.ui.game.GameHostScreen
 import games.couchpad.controller.ui.legal.LegalLinks
 import games.couchpad.controller.ui.legal.WebDocScreen
 import games.couchpad.controller.ui.main.MainScreen
+import kotlinx.coroutines.delay
 
 @Composable
 fun MainNavigation(deepLink: String? = null, onDeepLinkConsumed: () -> Unit = {}) {
@@ -37,6 +38,16 @@ fun MainNavigation(deepLink: String? = null, onDeepLinkConsumed: () -> Unit = {}
   // shows it as a banner in the home rejoin slot (survives the pop because it lives
   // here, above the destroyed GameHost entry).
   var gameEndBanner by remember { mutableStateOf<String?>(null) }
+  // Auto-dismiss lives HERE, not in the banner composable: pushing GameHost disposes
+  // the Main entry (cancelling any view-scoped timer) without clearing the state, and
+  // a banner from a session the player already moved past must not greet the next
+  // pop-back. Mirrors iOS, where MessageCenter owns the timer above the nav stack.
+  LaunchedEffect(gameEndBanner) {
+    if (gameEndBanner != null) {
+      delay(5_000)
+      gameEndBanner = null
+    }
+  }
 
   // An external App Link routes through MainScreen (which owns the name gate + join).
   // Pop back to Main first so it's the active entry and can handle it.

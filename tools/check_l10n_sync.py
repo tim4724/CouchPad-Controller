@@ -49,7 +49,6 @@ ANDROID_ONLY = {
     "flashlight_off",
     "scan_hint",
     "camera_access_needed",
-    "camera_access_rationale",
     "allow_camera_access",
     # Same button as iOS's "Allow in Settings", translated separately because the two
     # point at differently-named destinations: Android deep-links to the app's own
@@ -63,7 +62,6 @@ IOS_ONLY = {
     # AVFoundation scanner UI / failure modes (Android's CameraX copy differs)
     "Scan the room QR code",
     "The code is on your TV.",
-    "Camera permission denied",
     "Camera unavailable",
     "No camera available",
     "Unable to scan with this camera",

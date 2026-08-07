@@ -429,17 +429,6 @@ struct AppSheetContainer<Content: View>: View {
 }
 
 extension View {
-    func appSheet<Content: View>(
-        isPresented: Binding<Bool>,
-        onDismiss: (() -> Void)? = nil,
-        surfaceTint: Color? = nil,
-        @ViewBuilder content: @escaping () -> Content
-    ) -> some View {
-        sheet(isPresented: isPresented, onDismiss: onDismiss) {
-            AppSheetContainer(surfaceTint: surfaceTint, content: content)
-        }
-    }
-
     func appSheet<Item: Identifiable, Content: View>(
         item: Binding<Item?>,
         onDismiss: (() -> Void)? = nil,

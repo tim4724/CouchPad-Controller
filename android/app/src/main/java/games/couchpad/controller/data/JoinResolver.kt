@@ -12,9 +12,13 @@ const val SYNTHETIC_GAME_ID = "couchpad"
 /** The suite's canonical launcher domain (couchpad.games links, display fallback). */
 const val LAUNCHER_HOST = "couchpad.games"
 
-/** True when [host] is [domain] itself or any subdomain of it (case-insensitive). */
+/** True when [host] is [domain] itself or any subdomain of it (case-insensitive).
+ * The host arrives percent-DECODED from the URI parser, so anything outside the
+ * hostname alphabet (an embedded '/', say, from "evil.com%2f.example.com") must
+ * never suffix-match — the raw string is what gets loaded. */
 fun hostInDomain(host: String?, domain: String): Boolean {
   val h = host?.lowercase() ?: return false
+  if (h.any { it !in 'a'..'z' && it !in '0'..'9' && it != '.' && it != '-' }) return false
   val d = domain.lowercase()
   return h == d || h.endsWith(".$d")
 }

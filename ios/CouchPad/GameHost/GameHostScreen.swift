@@ -92,11 +92,14 @@ struct GameHostScreen: View {
         let sideCutout = max(cutout.leading, cutout.trailing)
         let side = chromeWidth > 0 ? max(chromeWidth - chipRight, sideCutout) : sideCutout
         let safeBottom = cutout.bottom
+        // Ceil, not round, matching Android: an inset that lands mid-point must cover
+        // the obstruction, never stop short — and it keeps --cp-safe-* from losing to
+        // the unrounded env() values the synthetic insets publish.
         return SafeZone(
-            top: Int(safeTop.rounded()),
-            left: Int(side.rounded()),
-            right: Int(side.rounded()),
-            bottom: Int(safeBottom.rounded())
+            top: Int(safeTop.rounded(.up)),
+            left: Int(side.rounded(.up)),
+            right: Int(side.rounded(.up)),
+            bottom: Int(safeBottom.rounded(.up))
         )
     }
 
@@ -129,7 +132,9 @@ struct GameHostScreen: View {
             .ignoresSafeArea()
 
             // "Joining…" cover that fades away once the controller has painted.
-            if loading {
+            // (Not while failed — the retry cover replaces it, like Android's
+            // loading=false on failure.)
+            if loading && !failed {
                 loadingCover
                     .zIndex(1)
                     .transition(.opacity)
@@ -190,7 +195,9 @@ struct GameHostScreen: View {
             NearbyAdvertiser.shared.start(roomCode: room.roomCode)
             defer { NearbyAdvertiser.shared.stop() }
             // Park until the task is cancelled — i.e. until this screen goes away.
-            try? await Task.sleep(for: .seconds(60 * 60 * 24))
+            // A loop rather than one capped sleep so no session length outlives the
+            // advertisement; each hourly wake is a no-op.
+            while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
         }
     }
 

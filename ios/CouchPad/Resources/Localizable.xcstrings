@@ -136,6 +136,70 @@
         }
       }
     },
+    "Allow camera access to scan the code on your TV — or type the room code instead." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erlaube den Zugriff auf die Kamera, um den Code zu scannen, oder gib den Raumcode ein."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permite el acceso a la cámara para escanear el código de tu TV, o escribe el código de sala en su lugar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autorise l’accès à la caméra pour scanner le code sur ta TV, ou saisis le code de la salle."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Consenti l’accesso alla fotocamera per scansionare il codice sulla TV, oppure inserisci il codice della stanza."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テレビのコードをスキャンするにはカメラへのアクセスを許可してください。または、ルームコードを直接入力することもできます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV의 코드를 스캔하려면 카메라 접근을 허용하세요. 또는 방 코드를 직접 입력할 수도 있어요."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permita o acesso à câmera para escanear o código na sua TV, ou digite o código da sala."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разреши доступ к камере, чтобы отсканировать код на телевизоре, или введи код комнаты вручную."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV'deki kodu taramak için kamera erişimine izin ver ya da oda kodunu elle gir."
+          }
+        },
+        "zh" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许使用相机来扫描电视上的二维码，或者直接输入房间代码。"
+          }
+        }
+      }
+    },
     "Android TV" : {
       "localizations" : {
         "de" : {
@@ -324,71 +388,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "浏览器"
-          }
-        }
-      }
-    },
-    "Camera permission denied" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kamerazugriff verweigert"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Permiso de cámara denegado"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Accès à la caméra refusé"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Permesso fotocamera negato"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "カメラへのアクセスが拒否されました"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "카메라 권한이 거부됐어요"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Permissão da câmera negada"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Доступ к камере запрещён"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kamera izni reddedildi"
-          }
-        },
-        "zh" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "相机权限被拒绝"
           }
         }
       }

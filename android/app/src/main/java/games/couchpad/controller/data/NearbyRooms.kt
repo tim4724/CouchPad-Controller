@@ -13,9 +13,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import java.net.ServerSocket
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -162,16 +159,13 @@ fun homeRooms(rooms: List<NearbyRoom>, rejoin: RecentRoom? = null): HomeRooms {
  */
 suspend fun resolveNearby(advert: NearbyAdvert, games: List<Game>): NearbyRoom? {
   if (!validRoomCode(advert.code)) return null
-  val sole = games.singleOrNull { it.isLive }
-  val bases = buildList {
-    sole?.relayProbeBase?.let(::add)
-    if (RELAY_BASE !in this) add(RELAY_BASE)
-  }
-  val founds = coroutineScope {
-    bases.map { async { RoomDirectory.lookup(advert.code, it) } }.awaitAll()
-  }.filterIsInstance<RoomLookup.Found>()
+  // One probe round serves both the fullness check and the URL resolution — this runs
+  // on every 10s poll tick per advertised room, so a second identical round would
+  // double the relay traffic for nothing.
+  val results = probeRelays(advert.code, games)
+  val founds = results.filterIsInstance<RoomLookup.Found>()
   if (founds.isEmpty() || founds.any { it.isFull }) return null
-  val hit = resolveTypedCode(advert.code, games) as? JoinOutcome.Success ?: return null
+  val hit = resolveLookups(advert.code, results, games) as? JoinOutcome.Success ?: return null
   return NearbyRoom(
     // A relayed record's instance name is the relaying phone's own, not the TV's.
     label = if (advert.relayed) "" else advert.label,
@@ -210,6 +204,27 @@ fun localNetworkPermissionGranted(context: Context): Boolean =
 
 private const val ASK_PREFS = "cp_nearby_ask"
 private const val ASKED_KEY = "asked"
+private const val OPTED_IN_KEY = "opted_in"
+
+/**
+ * Has the player asked for nearby discovery? On API 37+ the permission grant IS the
+ * memory (ungranted → the ask button, granted → discovery just runs). Below
+ * enforcement there is no permission to remember with — [localNetworkPermissionGranted]
+ * is unconditionally true — so a stored flag stands in, mirroring iOS's NearbyOptIn.
+ * Without it every pre-37 device would browse and relay-advertise on the LAN from
+ * launch, which §8 forbids ("the launcher asks only when the player asks for it").
+ */
+fun nearbyOptedIn(context: Context): Boolean =
+  if (Build.VERSION.SDK_INT >= 37) {
+    localNetworkPermissionGranted(context)
+  } else {
+    context.getSharedPreferences(ASK_PREFS, Context.MODE_PRIVATE).getBoolean(OPTED_IN_KEY, false)
+  }
+
+/** The pre-enforcement opt-in: no permission to ask for, so the tap is the grant. */
+fun setNearbyOptedIn(context: Context) {
+  context.getSharedPreferences(ASK_PREFS, Context.MODE_PRIVATE).edit { putBoolean(OPTED_IN_KEY, true) }
+}
 
 /**
  * Record that the local-network request has been shown at least once. Call it at the
@@ -265,9 +280,10 @@ fun localNetworkPermanentlyDenied(context: Context, activity: Activity?): Boolea
  * relayed record proposes no origin and grants a relaying phone no more trust than the
  * display has. `cpr=1` marks the instance name as not-a-room-label.
  *
- * NEVER prompts. It advertises only if the local-network permission is ALREADY held —
- * granted by this player for their own discovery — so nobody is ever asked for a
- * capability that benefits someone else. Ungranted simply means no relay.
+ * NEVER prompts. It advertises only if the player has ALREADY opted into nearby
+ * discovery ([nearbyOptedIn] — the permission grant on API 37+, the stored opt-in
+ * below) — so nobody is ever asked for, or silently given, a capability that benefits
+ * someone else. Not opted in simply means no relay.
  */
 object NearbyAdvertiser {
 
@@ -278,7 +294,7 @@ object NearbyAdvertiser {
   @Synchronized
   fun start(context: Context, roomCode: String) {
     if (registration != null || roomCode.isBlank()) return
-    if (!localNetworkPermissionGranted(context)) return
+    if (!nearbyOptedIn(context)) return
     val app = context.applicationContext
     val nsd = app.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
     // NsdManager advertises a port, so bind a real (unused) one. Nothing ever dials it —
@@ -294,7 +310,9 @@ object NearbyAdvertiser {
     }
     val listener = object : NsdManager.RegistrationListener {
       override fun onServiceRegistered(info: NsdServiceInfo) {}
-      override fun onRegistrationFailed(info: NsdServiceInfo, errorCode: Int) {}
+      // Async failure: we aren't advertising after all — release the socket and the
+      // stored state instead of believing we are until the room ends.
+      override fun onRegistrationFailed(info: NsdServiceInfo, errorCode: Int) = failed(this)
       override fun onServiceUnregistered(info: NsdServiceInfo) {}
       override fun onUnregistrationFailed(info: NsdServiceInfo, errorCode: Int) {}
     }
@@ -315,6 +333,13 @@ object NearbyAdvertiser {
     manager = null
     registration = null
     socket = null
+  }
+
+  // Guarded on identity: a stale callback from a listener a later start() replaced
+  // must not tear down the current registration.
+  @Synchronized
+  private fun failed(listener: NsdManager.RegistrationListener) {
+    if (registration === listener) stop()
   }
 }
 
@@ -402,7 +427,12 @@ fun nearbyAdverts(context: Context): Flow<List<NearbyAdvert>> = callbackFlow {
     }
 
     override fun onServiceLost(info: NsdServiceInfo) {
-      val removed = synchronized(lock) { found.remove(info.serviceName) != null }
+      val removed = synchronized(lock) {
+        // Purge the resolve queue too, or a lost-while-queued service resolves later
+        // and re-enters `found` as a ghost that never goes away.
+        pending.removeAll { it.serviceName == info.serviceName }
+        found.remove(info.serviceName) != null
+      }
       if (removed) emit()
     }
   }

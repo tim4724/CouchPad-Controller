@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -112,6 +113,8 @@ import games.couchpad.controller.data.clearLocalNetworkAsked
 import games.couchpad.controller.data.localNetworkPermanentlyDenied
 import games.couchpad.controller.data.localNetworkPermissionGranted
 import games.couchpad.controller.data.markLocalNetworkAsked
+import games.couchpad.controller.data.nearbyOptedIn
+import games.couchpad.controller.data.setNearbyOptedIn
 import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
 import games.couchpad.controller.data.RecentRoom
@@ -179,10 +182,11 @@ fun MainScreen(
   // `games` on every change, so a manifest refresh re-admits (or drops) an advert
   // without restarting discovery.
   var adverts by remember { mutableStateOf<List<NearbyAdvert>>(emptyList()) }
-  // The permission IS the opt-in memory: ungranted → the "Show rooms nearby" button,
-  // granted → discovery runs on every later launch and the rooms are simply there. No
-  // prompt at first launch; the user asks for it once.
-  var canDiscover by remember { mutableStateOf(localNetworkPermissionGranted(context)) }
+  // Opt-in gates discovery: ungranted → the "Show rooms nearby" button, granted →
+  // discovery runs on every later launch and the rooms are simply there. On API 37+
+  // the permission is the opt-in memory; below enforcement a stored flag stands in
+  // (see nearbyOptedIn). No prompt at first launch; the user asks for it once.
+  var canDiscover by remember { mutableStateOf(nearbyOptedIn(context)) }
   // …unless the ask has been refused into a lock, at which point the button would be a
   // control that does nothing (see localNetworkPermanentlyDenied).
   var discoveryLocked by remember {
@@ -191,8 +195,8 @@ fun MainScreen(
   // Re-read both from the system, and drop the asked-once record while the permission is
   // held — see clearLocalNetworkAsked for why a grant has to forget it.
   fun refreshDiscovery() {
-    canDiscover = localNetworkPermissionGranted(context)
-    if (canDiscover) clearLocalNetworkAsked(context)
+    canDiscover = nearbyOptedIn(context)
+    if (localNetworkPermissionGranted(context)) clearLocalNetworkAsked(context)
     discoveryLocked = localNetworkPermanentlyDenied(context, context.findActivity())
   }
   val localNetworkPermission = rememberLauncherForActivityResult(
@@ -443,8 +447,14 @@ fun MainScreen(
             NearbyStatusCard(
               state = nearbyState,
               onAsk = {
-                markLocalNetworkAsked(context)
-                localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                if (Build.VERSION.SDK_INT >= 37) {
+                  markLocalNetworkAsked(context)
+                  localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                } else {
+                  // No permission to ask for below enforcement — the tap is the grant.
+                  setNearbyOptedIn(context)
+                  refreshDiscovery()
+                }
               },
               onOpenSettings = {
                 context.startActivity(
@@ -528,7 +538,9 @@ fun MainScreen(
           showScanner = false
           onOpenLegalDoc(url)
         },
-        onEnterCode = { codeError = null; showCodeEntry = true },
+        // Close the camera too: left running behind the dialog it would keep
+        // decoding and could join mid-keystroke off a QR still in frame.
+        onEnterCode = { showScanner = false; codeError = null; showCodeEntry = true },
         onClose = { showScanner = false },
       )
     }
@@ -650,20 +662,16 @@ private fun rememberPressScale(interaction: MutableInteractionSource): Float {
 }
 
 // The game-end notice: a high-contrast strip in the rejoin slot. Auto-dismisses after
-// 5s; a tap or a horizontal swipe dismisses it early. Enter/exit mirror the rejoin card
-// so the two stack cleanly when both are present.
+// 5s (timer in MainNavigation — it must survive this entry being disposed under a
+// pushed game host); a tap or a horizontal swipe dismisses it early. Enter/exit mirror
+// the rejoin card so the two stack cleanly when both are present.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GameEndBanner(message: String?, onDismiss: () -> Unit) {
   // Retain the last text so the exit animation still has content after `message` clears.
   var lastMessage by remember { mutableStateOf<String?>(null) }
-
   LaunchedEffect(message) {
-    if (message != null) {
-      lastMessage = message
-      delay(5_000)
-      onDismiss()
-    }
+    if (message != null) lastMessage = message
   }
 
   AnimatedVisibility(

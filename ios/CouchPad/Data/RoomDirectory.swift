@@ -81,12 +81,14 @@ func resolveTypedCode(_ code: String, games: [Game]) async -> JoinOutcome {
     if trimmed.isEmpty {
         return .failure(message: String(localized: "Enter a room code."))
     }
+    return resolveLookups(trimmed, results: await probeRelays(trimmed, games: games), games: games)
+}
 
-    // The SINGLE live game (nil if zero or more than one is live).
+/// The relays a code is checked against: the game's own relay first (so it wins ties),
+/// then the shared directory. Probed in parallel, relay order preserved in the results.
+func probeRelays(_ code: String, games: [Game]) async -> [RoomLookup] {
     let liveGames = games.filter { $0.isLive }
     let sole: Game? = liveGames.count == 1 ? liveGames[0] : nil
-
-    // Relay list, order matters: the sole game's own relay first (wins ties), shared relay deduped.
     var relays: [String] = []
     if let probeBase = sole?.relayProbeBase {
         relays.append(probeBase)
@@ -94,19 +96,26 @@ func resolveTypedCode(_ code: String, games: [Game]) async -> JoinOutcome {
     if !relays.contains(CP.relayBase) {
         relays.append(CP.relayBase)
     }
-
-    // Probe all in parallel, preserving relay order in the results.
     var results = [RoomLookup](repeating: .error, count: relays.count)
     await withTaskGroup(of: (Int, RoomLookup).self) { group in
         for (index, relay) in relays.enumerated() {
             group.addTask {
-                (index, await RoomDirectory.lookup(code: trimmed, relayBase: relay))
+                (index, await RoomDirectory.lookup(code: code, relayBase: relay))
             }
         }
         for await (index, result) in group {
             results[index] = result
         }
     }
+    return results
+}
+
+/// The decision table over already-fetched lookups — separate from `resolveTypedCode` so
+/// a caller that probed for its own reasons (`resolveNearby`'s fullness check) resolves
+/// from those results instead of probing the same relays a second time.
+func resolveLookups(_ trimmed: String, results: [RoomLookup], games: [Game]) -> JoinOutcome {
+    let liveGames = games.filter { $0.isLive }
+    let sole: Game? = liveGames.count == 1 ? liveGames[0] : nil
 
     // Deliberately NOT refused when full, though the lookup reports it: a full room still
     // takes its own players back (the relay swaps a stored clientId into the slot it is

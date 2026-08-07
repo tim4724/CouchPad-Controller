@@ -40,6 +40,13 @@ enum Route: Hashable {
     }
 
     func push(_ route: Route) {
+        // One live game host at a time: a second join racing the first (rejoin card
+        // tapped while a typed code resolves, or a double-tap) must not stack two
+        // running WebViews. Android needs no guard — its joins all pass through
+        // launchJoin on a single Main entry that leaves the screen on the first one.
+        if case .gameHost = route, path.contains(where: { if case .gameHost = $0 { return true } else { return false } }) {
+            return
+        }
         path.append(route)
     }
 
@@ -136,6 +143,8 @@ struct RootView: View {
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .gameHost(let params):
+                        // Nav-bar hiding and back-button suppression live on
+                        // GameHostScreen itself.
                         GameHostScreen(
                             joinUrl: params.joinUrl,
                             title: params.title,
@@ -143,8 +152,6 @@ struct RootView: View {
                             onLeave: { router.pop() },
                             onGameEnd: { router.gameEnded(reason: $0) }
                         )
-                        .navigationBarBackButtonHidden(true)
-                        .toolbar(.hidden, for: .navigationBar)
                     case .about:
                         AboutScreen(
                             onOpenPrivacy: { router.push(.webDoc(WebDocParams(url: CP.privacyURL, title: String(localized: "Privacy Policy")))) },

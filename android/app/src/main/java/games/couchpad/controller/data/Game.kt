@@ -77,7 +77,14 @@ object GamesManifest {
         art = g.optNonBlank("art")?.removePrefix("/"),
         icon = g.optNonBlank("icon")?.removePrefix("/"),
         controllerBaseUrl = g.optHttpsUrl("controllerBaseUrl"),
-        hosts = if (hostsArr != null) (0 until hostsArr.length()).map { hostsArr.getString(it) } else emptyList(),
+        // Strictly strings (getString would coerce a stray object/number into a junk
+        // allow-list entry) — a malformed hosts array fails the whole parse, keeping
+        // the documented all-or-nothing promise. iOS matches.
+        hosts = if (hostsArr != null) {
+          (0 until hostsArr.length()).map { hostsArr.get(it) as? String ?: error("hosts[$it]") }
+        } else {
+          emptyList()
+        },
         relayProbeBase = g.optHttpsUrl("relayProbeBase")?.trimEnd('/'),
       )
     }
@@ -109,9 +116,10 @@ private fun JSONObject.optNonBlank(name: String): String? = optString(name, "").
 private fun JSONObject.optHttpsUrl(name: String): String? =
   optNonBlank(name)?.takeIf { it.startsWith("https://") }
 
-/** A positive integer field, or null if absent/blank/non-numeric. */
+/** A positive integer field, or null if absent/non-numeric. Strictly a number —
+ * optInt would coerce the string "8", which iOS's `as? Int` rejects. */
 private fun JSONObject.optIntOrNull(name: String): Int? =
-  if (has(name) && !isNull(name)) optInt(name).takeIf { it > 0 } else null
+  (opt(name) as? Int)?.takeIf { it > 0 }
 
 fun parseHexColor(hex: String): Color = runCatching {
   val c = hex.removePrefix("#")

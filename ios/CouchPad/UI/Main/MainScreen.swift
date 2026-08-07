@@ -215,6 +215,14 @@ struct MainScreen: View {
         .ignoresSafeArea(.keyboard)
         .onChange(of: deepLink, initial: true) { _, newValue in
             guard let link = newValue else { return }
+            // The router already popped to Main — clear anything presented over it,
+            // or the cover/sheet would sit on top of the game host this link pushes.
+            scanRequest = nil
+            infoGame = nil
+            profileRequest = nil
+            pendingSheetAction = nil
+            afterName = nil
+            showCodeEntry = false
             // A legal-page App Link opens the in-app doc viewer; anything else is a
             // join. The URL keeps its locale segment (/en/privacy vs /privacy), so
             // the viewer loads the right variant.
@@ -238,9 +246,15 @@ struct MainScreen: View {
         // gating as the rejoin poll, and it keeps the Local Network prompt off the
         // game host and off a first launch nobody asked anything of yet.
         .onChange(of: isTopVisible, initial: true) { _, visible in
+            if visible {
+                // Re-read the profile on pop-back: a rename inside the game host writes
+                // the store, and home's chip — and the next join's cpName — must follow.
+                // (Android gets this for free: its Main entry is disposed under the game
+                // host, so the remembered load re-runs on return.)
+                profile = ProfileStore.load()
+            }
             if visible && nearbyOptedIn { nearby.start() } else { nearby.stop() }
         }
-        .onDisappear { nearby.stop() }
         // Re-checked on the same cadence as the rejoin card: both promise "you can enter
         // this", so both have to notice when the room dies or fills. Tied to the browse
         // task's lifetime, so nothing polls while this screen isn't the visible top.
@@ -285,7 +299,7 @@ struct MainScreen: View {
             TextField("e.g. \(CP.sampleRoomCode)", text: $codeText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-            Button("Cancel", role: .cancel) { codeError = nil }
+            Button("Cancel", role: .cancel) { codeError = nil; codeText = "" }
             Button("Play") { submitCode(codeText) }
                 .disabled(codeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
@@ -295,8 +309,17 @@ struct MainScreen: View {
                 Text("The code is on your TV.")
             }
         }
-        .fullScreenCover(item: $scanRequest) { request in
-            QRScannerScreen { result in
+        .fullScreenCover(item: $scanRequest, onDismiss: {
+            // Deferred, like the info sheet's actions: presenting the alert while the
+            // cover is still dismissing would be dropped by UIKit.
+            if let action = pendingSheetAction {
+                pendingSheetAction = nil
+                requireName(action)
+            }
+        }) { request in
+            // The scanner validates payloads itself (games passed in), so .code only
+            // arrives for a value that resolves.
+            QRScannerScreen(games: request.games) { result in
                 scanRequest = nil
                 switch result {
                 case .code(let raw):
@@ -316,6 +339,8 @@ struct MainScreen: View {
                         errorTick += 1
                         messages.showToast(message)
                     }
+                case .enterCode:
+                    pendingSheetAction = .enterCode
                 case .failure(let message):
                     errorTick += 1
                     messages.showToast(String(localized: "Scanner unavailable: \(message)"), long: true)

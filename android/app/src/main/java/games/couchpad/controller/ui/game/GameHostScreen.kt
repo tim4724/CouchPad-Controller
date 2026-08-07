@@ -14,6 +14,9 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -56,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -158,6 +162,9 @@ private fun GameHostContent(
   val density = LocalDensity.current
   val layoutDirection = LocalLayoutDirection.current
   var webView by remember { mutableStateOf<WebView?>(null) }
+  // Bumped when the renderer dies — a WebView can't be reused after that, so the
+  // key() below swaps in a fresh one that re-issues the join.
+  var webViewKey by remember { mutableStateOf(0) }
   val allowed = remember(allowedHosts) { (allowedHosts + LAUNCHER_HOST).map { it.lowercase() } }
   var profile by remember { mutableStateOf(ProfileStore.load(context)) }
   var showProfile by remember { mutableStateOf(false) }
@@ -427,11 +434,12 @@ private fun GameHostContent(
   }
 
   // Keep status-bar icons contrasting against the (possibly game-colored) bar strip.
-  // Also keyed on uiMode: a mid-game theme flip re-runs MainActivity.applyEdgeToEdge,
-  // which stomps this, so re-assert after it.
+  // Also keyed on uiMode AND orientation: every configuration change re-runs
+  // MainActivity.applyEdgeToEdge, which stomps this, and a §10 rotation is a
+  // configuration change too — so re-assert after any of them.
   val lightStatusIcons = barTarget.luminance() > 0.5f
-  val uiMode = LocalConfiguration.current.uiMode
-  LaunchedEffect(lightStatusIcons, uiMode) {
+  val config = LocalConfiguration.current
+  LaunchedEffect(lightStatusIcons, config.uiMode, config.orientation) {
     context.findActivity()?.window?.let {
       WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = lightStatusIcons
     }
@@ -441,8 +449,13 @@ private fun GameHostContent(
     // The game surface spans the FULL physical screen — the chrome floats above it,
     // and the page keeps its interactive UI inside the published safe zone.
     Box(Modifier.fillMaxSize()) {
+      key(webViewKey) {
       AndroidView(
         modifier = Modifier.fillMaxSize(),
+        // Defined teardown ordering (the view is detached first), unlike a
+        // DisposableEffect racing AndroidView's own disposal. Also runs for a
+        // renderer-death swap, so the dead instance is destroyed too.
+        onRelease = { it.destroy() },
         factory = { ctx ->
         // Never expose a player's live game socket to chrome://inspect in production.
         val debuggable = (ctx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -510,6 +523,14 @@ private fun GameHostContent(
                 failed = true
               }
             },
+            onRenderGone = {
+              if (!exited.get()) {
+                webView = null
+                failed = false
+                loading = true
+                webViewKey++
+              }
+            },
           )
           webChromeClient = object : WebChromeClient() {
             // The page's own name (ground truth over the manifest): drives the LEAVE
@@ -522,6 +543,18 @@ private fun GameHostContent(
               if (failed || title == null) return
               RecentRoomStore.putTitle(title)?.let { pageTitle = it }
             }
+
+            // JS dialogs are answered silently, matching iOS (which has no dialog
+            // chrome at all without a WKUIDelegate): the launcher never shows UI the
+            // page conjured, and a looping alert() must not wedge the shell.
+            override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult) =
+              true.also { result.confirm() }
+
+            override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult) =
+              true.also { result.cancel() }
+
+            override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: JsPromptResult) =
+              true.also { result.cancel() }
           }
           keepScreenOn = true
           addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> applyGestureExclusion(v) }
@@ -532,6 +565,7 @@ private fun GameHostContent(
         }
         },
       )
+      }
       // "Joining…" cover that fades away once the controller has painted.
       // (Qualified: the ColumnScope overload would otherwise shadow this one.)
       androidx.compose.animation.AnimatedVisibility(
@@ -626,10 +660,6 @@ private fun GameHostContent(
     )
   }
 
-  // Tear the WebView down on leave so the game's WebSocket/audio fully stop.
-  DisposableEffect(Unit) {
-    onDispose { webView?.destroy() }
-  }
 }
 
 // The launcher-owned chrome floating over the game: Close (leaving a live game
@@ -689,6 +719,7 @@ private class AllowListWebViewClient(
   private val onNavigationStart: () -> Unit,
   private val onLoaded: () -> Unit,
   private val onConnectionError: () -> Unit,
+  private val onRenderGone: () -> Unit,
 ) : WebViewClient() {
   // Main-frame only, and deliberately not fired for same-document navigations —
   // a page that pushes history mid-session keeps whatever it armed.
@@ -701,15 +732,28 @@ private class AllowListWebViewClient(
     if (scheme == "https" && allowedDomains.any { hostInDomain(host, it) }) return false // load in-place
     // Debug only: keep http(s) navigations to a LAN dev host in-app (see [isPrivateHost]).
     if (BuildConfig.DEBUG && isPrivateHost(host) && (scheme == "http" || scheme == "https")) return false
-    if (scheme == "http" || scheme == "https") openExternally(view.context, url) // off-list → browser
+    // Off-list http(s) → browser, but only a main-frame navigation the player gestured
+    // for: a page can mint subframe/scripted navigations at will, and each would
+    // otherwise yank the player out of the match into the browser.
+    if ((scheme == "http" || scheme == "https") && request.isForMainFrame && request.hasGesture()) {
+      openExternally(view.context, url)
+    }
     return true // everything not explicitly allowed is blocked from the WebView
   }
 
   // A network-level failure of the MAIN document (no connection, DNS/connect/timeout —
-  // NOT a 4xx/5xx, which arrives via onReceivedHttpError and means the host answered).
-  // Subresource failures are the page's own problem and ignored.
+  // NOT a 4xx/5xx, which means the host answered and renders the server's own body,
+  // same as iOS). Subresource failures are the page's own problem and ignored.
   override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
     if (request.isForMainFrame) onConnectionError()
+  }
+
+  // The renderer died (OOM kill while backgrounded, or a crash) — returning false
+  // here would take the whole app down with it. The WebView instance can't be reused
+  // after this; the host swaps in a fresh one and re-issues the join.
+  override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+    onRenderGone()
+    return true
   }
 
   // Fade the cover on the first DRAW of the loaded page, not on load: the page's JS
@@ -718,7 +762,7 @@ private class AllowListWebViewClient(
   // actually been rendered. Deliberately no time-based fallback — fading the cover
   // before content exists is the bug, not a safety net (a stalled page keeps the
   // honest spinner and Leave stays available; load failures surface the retry cover
-  // via onReceivedError/onReceivedHttpError).
+  // via onReceivedError).
   override fun onPageFinished(view: WebView, url: String) {
     view.postVisualStateCallback(0, object : WebView.VisualStateCallback() {
       override fun onComplete(requestId: Long) = onLoaded()

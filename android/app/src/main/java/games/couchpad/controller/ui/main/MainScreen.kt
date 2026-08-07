@@ -375,11 +375,14 @@ fun MainScreen(
         // Sits OUTSIDE the 16dp content margin (owns its own padding, like the
         // in-game LeaveBar) so the title and name chip align across screens.
         HomeTopBar(profile = profile, onEditProfile = { showProfile = true }, onOpenAbout = onOpenAbout)
+        // One rhythm for the whole stack: the banner, every room card and every poster
+        // are cards in a single list, so they all sit 12dp apart. The one real break is
+        // rooms-you-can-enter → the catalog, which GamesSection pads for.
         Column(
           Modifier
             .padding(horizontal = 16.dp)
             .padding(top = 8.dp),
-          verticalArrangement = Arrangement.spacedBy(20.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
           // The game-end notice sits at the top of the content, above the rejoin card
           // (which is only present when the room is still alive). A high-contrast strip
@@ -428,7 +431,7 @@ fun MainScreen(
               }
             }
           }
-          GamesSection(games, onOpen = { infoGame = it })
+          GamesSection(games, Modifier.padding(top = 8.dp), onOpen = { infoGame = it })
           Spacer(Modifier.height(with(LocalDensity.current) { joinCardHeightPx.toDp() } + 12.dp))
         }
       }
@@ -814,8 +817,8 @@ private fun NearbyStatusCard(granted: Boolean, settled: Boolean, onAsk: () -> Un
 
 // Every game — live or coming soon — gets the same full-width poster card.
 @Composable
-private fun GamesSection(games: List<Game>, onOpen: (Game) -> Unit) {
-  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun GamesSection(games: List<Game>, modifier: Modifier = Modifier, onOpen: (Game) -> Unit) {
+  Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
     games.forEach { game -> GameCard(game, onOpen) }
   }
 }

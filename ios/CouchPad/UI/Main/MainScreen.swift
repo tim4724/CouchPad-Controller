@@ -75,7 +75,10 @@ struct MainScreen: View {
             palette.background.ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 20) {
+                // One rhythm for the whole stack: the banner, every room card and every
+                // poster are cards in a single list, so they all sit 12 apart. The one
+                // real break is rooms-you-can-enter → the catalog, padded for below.
+                VStack(spacing: 12) {
                     // The game-end notice sits atop the content, above the rejoin card
                     // (present only while the room is alive) — a high-contrast strip
                     // where the player's eye already is, not a bottom overlay.
@@ -125,6 +128,7 @@ struct MainScreen: View {
                             GameCard(game: game) { infoGame = game }
                         }
                     }
+                    .padding(.top, 8)
 
                     Color.clear
                         .frame(height: joinCardHeight + 12)

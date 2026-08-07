@@ -25,11 +25,12 @@ let platformAndroidTV = "androidtv"
 /// A browser-based display: no mDNS advertisement possible, only a §6 template.
 let platformWeb = "web"
 
-/// Which box a room is on, as its join URL declares it (`cpp`, §6). The URL is the only
-/// carrier, and always comes from the relay — a §8 advertisement carries just a code — so this reads
-/// the same way whatever route the room arrived by, and survives into the rejoin card
-/// once the advertisement is gone. Nil unless the URL declared a value we know: the wire
-/// sends a code and nothing else, so a display can never put its own text on a card.
+/// Which box a room is on, as `url` declares it (`cpp`, §6). A URL is the only carrier,
+/// and always comes from the relay — a §8 advertisement carries just a code — so this
+/// reads the same way whatever route the room arrived by. Nil unless the URL declared a
+/// value we know: the wire sends a code and nothing else, so a display can never put its
+/// own text on a card. Reading it off a URL is a point-in-time answer; holding on to it
+/// once a room has answered is `RecentRoomStore`'s job.
 func devicePlatform(fromUrl url: String) -> String? {
     let raw = URLComponents(string: url)?.queryItems?.first { $0.name == "cpp" }?.value
     let p = raw?.trimmingCharacters(in: .whitespaces).lowercased()

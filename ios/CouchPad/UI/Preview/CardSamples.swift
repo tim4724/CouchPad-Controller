@@ -84,9 +84,9 @@ enum CardSamples {
     /// A resolved target naming its box through `cpp` (§6).
     static let rejoinWithDevice = rejoin(joinUrl: "https://hexstacker.com/BiBz3b?cpp=tvos")
 
-    /// A browser display: it can't advertise over mDNS, so `web` only ever reaches a
-    /// rejoin card — via the QR or typed code that got the player in.
-    static let rejoinWeb = rejoin(joinUrl: "https://hexstacker.com/BiBz3b?cpp=web")
+    /// A browser display, named off the §6 template alone: it can't advertise over mDNS,
+    /// and its QR need not carry `cpp`, so the room's own URL never says "web".
+    static let rejoinWeb = rejoin(platform: platformWeb)
 
     // MARK: - Builders
 
@@ -106,13 +106,20 @@ enum CardSamples {
         )
     }
 
+    // A remembered room learns its platform off the relay's §6 template, so unlike a
+    // nearby room it can name a box its own URL doesn't — hence the separate knob.
     private static func rejoin(
         game: Game = hexStacker,
         roomCode: String = "BiBz3b",
         joinUrl: String = "https://hexstacker.com/BiBz3b",
-        title: String? = nil
+        title: String? = nil,
+        platform: String? = nil
     ) -> RecentRoom {
-        RecentRoom(game: game, joinUrl: joinUrl, roomCode: roomCode, title: title)
+        RecentRoom(game: game,
+                   joinUrl: joinUrl,
+                   roomCode: roomCode,
+                   title: title,
+                   platform: platform ?? devicePlatform(fromUrl: joinUrl))
     }
 
 }

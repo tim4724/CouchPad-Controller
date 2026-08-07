@@ -488,14 +488,20 @@ struct MainScreen: View {
             let result = await RoomDirectory.lookup(code: recent.roomCode, relayBase: recent.game.roomRelayBase)
             if Task.isCancelled { return }
             switch result {
-            case .found:
+            case .found(let url, _, _, _):
                 // Offered even when the room reads FULL. One of those slots is very
                 // likely this player's own, held for them by the relay, which takes a
                 // stored clientId back into it — the game only treats full as fatal for
                 // a FRESH joiner. Hiding the card here locks someone out of the room
                 // they were just in; a rejoin that genuinely bounces costs one page load
                 // and lands on the `game_full` banner.
-                withAnimation(.spring(duration: 0.45)) { rejoin = recent }
+                //
+                // The probe also carries the §6 template, so the room names its box here
+                // even when nothing on the LAN is advertising it — re-read the slot to
+                // pick that up.
+                RecentRoomStore.putPlatform(fromTemplate: url)
+                let room = RecentRoomStore.current() ?? recent
+                withAnimation(.spring(duration: 0.45)) { rejoin = room }
             case .notFound:
                 RecentRoomStore.clear()
                 withAnimation(.spring(duration: 0.45)) {
@@ -657,11 +663,10 @@ private struct RoomCard: View {
 /// it beats the manifest's curated name.
 ///
 /// `advert` is the same room as the LAN is currently advertising it, when it still is
-/// (`HomeRooms.rejoinAdvert`) — the room's own name, and a join URL straight off the
-/// relay's §6 template. That template is the one place `cpp` is guaranteed to be declared;
-/// the URL we remembered is whatever route the player took in, which may have been a bare
-/// code that never named a box. So the advertisement leads and the remembered URL backs it
-/// up, which is what keeps the device name once the display goes quiet.
+/// (`HomeRooms.rejoinAdvert`) — the only source of the room's own NAME, and the freshest
+/// source of its platform. Never the only source of that, though: an advertisement is
+/// transient — a browser room is advertised only by the phones in it, so it stops naming
+/// its box moments after this one leaves — so the platform lives on the room itself.
 private struct RejoinCard: View {
     let room: RecentRoom
     var advert: NearbyRoom? = nil
@@ -672,7 +677,7 @@ private struct RejoinCard: View {
                  title: room.title ?? room.game.name,
                  roomCode: room.roomCode,
                  label: advert?.label ?? "",
-                 platform: advert?.platform ?? devicePlatform(fromUrl: room.joinUrl),
+                 platform: advert?.platform ?? room.platform,
                  onTap: onTap)
     }
 }

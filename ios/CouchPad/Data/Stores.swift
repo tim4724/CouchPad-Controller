@@ -97,18 +97,22 @@ enum ProfileStore {
 /// The room this phone is in or just left, with everything the home rejoin card needs.
 /// `joinUrl` omits cpName — re-wrapped with the current name at rejoin. `title` is
 /// captured from the controller page mid-session, so it's nil until then; the card's
-/// glyph comes from the manifest `icon`, not the page.
+/// glyph comes from the manifest `icon`, not the page. `platform` is which box the room
+/// is on, off the first URL that declared it — the join URL at `RecentRoomStore.remember`,
+/// else the relay's template at `RecentRoomStore.putPlatform`.
 struct RecentRoom {
     let game: Game
     let joinUrl: String
     let roomCode: String
     let title: String?
+    let platform: String?
 }
 
 /// Single-slot, in-memory memory of the current room. Deliberately not persisted:
 /// rejoin is a same-session convenience, so the slot dies with the process and ages
 /// out after `ttl` — a fresh launch simply shows no card. `remember` sets the base at
-/// join; the title arrives later, captured in-game.
+/// join, platform included when the join URL declares one; the title arrives later,
+/// captured in-game, and so does the platform when that URL named no box.
 enum RecentRoomStore {
 
     private static let ttl: TimeInterval = 20 * 60
@@ -119,6 +123,7 @@ enum RecentRoomStore {
     private static var joinUrl = ""
     private static var roomCode = ""
     private static var title: String?
+    private static var platform: String?
     private static var savedAt = Date.distantPast
 
     static func remember(game: Game, joinUrl: String, roomCode: String) {
@@ -127,7 +132,19 @@ enum RecentRoomStore {
         self.joinUrl = joinUrl
         self.roomCode = roomCode
         title = nil
+        platform = devicePlatform(fromUrl: joinUrl)
         savedAt = Date()
+    }
+
+    /// Learns the room's `cpp` off `templateUrl` — the relay's §6 template, the one URL
+    /// guaranteed to declare it (the join URL the player arrived on is not: a display may
+    /// keep its QR clean). Sticky, because every other carrier is transient — a display's
+    /// advertisement dies with the display, and a browser room is advertised only by the
+    /// phones in it, so it stops naming its box moments after this one leaves.
+    static func putPlatform(fromTemplate templateUrl: String?) {
+        lock.lock(); defer { lock.unlock() }
+        guard game != nil, platform == nil else { return }
+        platform = templateUrl.flatMap { devicePlatform(fromUrl: $0) }
     }
 
     /// Sanitizes `raw` (trim, collapse whitespace, cap length), stores it as the
@@ -154,7 +171,7 @@ enum RecentRoomStore {
             clearLocked()
             return nil
         }
-        return RecentRoom(game: game, joinUrl: joinUrl, roomCode: roomCode, title: title)
+        return RecentRoom(game: game, joinUrl: joinUrl, roomCode: roomCode, title: title, platform: platform)
     }
 
     static func clear() {
@@ -168,6 +185,7 @@ enum RecentRoomStore {
         joinUrl = ""
         roomCode = ""
         title = nil
+        platform = nil
         savedAt = .distantPast
     }
 }

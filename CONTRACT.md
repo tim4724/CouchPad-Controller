@@ -148,9 +148,10 @@ Client → relay:  create { clientId, maxClients, url? }
   **template** is the only URL guaranteed to carry it — a display may deliberately keep
   its QR clean, on the grounds that whoever scans it is already looking at the box. So a
   typed code and a §8 nearby tap see `cpp` whenever the relay answers with a template; a
-  scan may not, and the URL remembered from one won't either. The launcher therefore
-  prefers the live advertisement's resolved URL for a rejoin card and falls back to the
-  remembered one, which is what still names the box once the room is gone.
+  scan may not, and the URL remembered from one won't either. The launcher therefore takes
+  `cpp` from wherever it first appears — including the template returned by the liveness
+  probe below — and keeps it for as long as it offers the room, rather than re-reading it
+  off a URL that may never have carried it.
 - The value is machine-readable and fixed-vocabulary; there is no free-text field for a
   model or browser name. The launcher renders the wording ("Apple TV") itself, localized,
   so it stays consistent and translatable without a display update, and no display can

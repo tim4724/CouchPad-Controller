@@ -99,7 +99,6 @@ import games.couchpad.controller.data.JoinOutcome
 import games.couchpad.controller.data.JoinResolver
 import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.data.NearbyAdvert
-import games.couchpad.controller.data.devicePlatform
 import games.couchpad.controller.data.NearbyRoom
 import games.couchpad.controller.data.distinctAdverts
 import games.couchpad.controller.data.nearbyAdverts
@@ -317,13 +316,19 @@ fun MainScreen(
           rejoin = recent
           return@repeatOnLifecycle
         }
-        when (RoomDirectory.lookup(recent.roomCode, recent.game.roomRelayBase)) {
+        when (val lookup = RoomDirectory.lookup(recent.roomCode, recent.game.roomRelayBase)) {
           // Offered even when the room reads FULL. One of those slots is very likely this
           // player's own, held for them by the relay, which takes a stored clientId back
           // into it — the game only treats full as fatal for a FRESH joiner. Hiding the
           // card here locks someone out of the room they were just in; a rejoin that
           // genuinely bounces costs one page load and lands on the `game_full` banner.
-          is RoomLookup.Found -> rejoin = recent
+          //
+          // The probe also carries the §6 template, so the room names its box here even
+          // when nothing on the LAN is advertising it — re-read the slot to pick that up.
+          is RoomLookup.Found -> {
+            RecentRoomStore.putPlatform(lookup.url)
+            rejoin = RecentRoomStore.current() ?: recent
+          }
           RoomLookup.NotFound -> {
             RecentRoomStore.clear()
             rejoin = null
@@ -731,11 +736,10 @@ private fun RoomCard(
  * it beats the manifest's curated name.
  *
  * [advert] is the same room as the LAN is currently advertising it, when it still is
- * (`HomeRooms.rejoinAdvert`) — the room's own name, and a join URL straight off the
- * relay's §6 template. That template is the one place `cpp` is guaranteed to be declared;
- * the URL we remembered is whatever route the player took in, which may have been a bare
- * code that never named a box. So the advertisement leads and the remembered URL backs it
- * up, which is what keeps the device name once the display goes quiet.
+ * (`HomeRooms.rejoinAdvert`) — the only source of the room's own NAME, and the freshest
+ * source of its platform. Never the only source of that, though: an advertisement is
+ * transient — a browser room is advertised only by the phones in it, so it stops naming
+ * its box moments after this one leaves — so the platform lives on the room itself.
  */
 @Composable
 private fun RejoinCard(room: RecentRoom, advert: NearbyRoom? = null, onClick: () -> Unit) = RoomCard(
@@ -743,7 +747,7 @@ private fun RejoinCard(room: RecentRoom, advert: NearbyRoom? = null, onClick: ()
   title = room.title ?: room.game.name,
   roomCode = room.roomCode,
   label = advert?.label.orEmpty(),
-  platform = advert?.platform ?: devicePlatform(room.joinUrl),
+  platform = advert?.platform ?: room.platform,
   onClick = onClick,
 )
 

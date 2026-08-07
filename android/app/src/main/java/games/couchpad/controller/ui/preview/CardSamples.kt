@@ -5,7 +5,9 @@ import games.couchpad.controller.data.Game
 import games.couchpad.controller.data.NearbyRoom
 import games.couchpad.controller.data.PLATFORM_ANDROID_TV
 import games.couchpad.controller.data.PLATFORM_TVOS
+import games.couchpad.controller.data.PLATFORM_WEB
 import games.couchpad.controller.data.RecentRoom
+import games.couchpad.controller.data.devicePlatform
 
 /**
  * Sample rooms for the home-screen card previews (MainScreen.kt). Only states that
@@ -87,9 +89,9 @@ internal object CardSamples {
   /** A resolved target naming its box through `cpp` (§6). */
   val rejoinWithDevice = rejoin(joinUrl = "https://hexstacker.com/BiBz3b?cpp=tvos")
 
-  /** A browser display: it can't advertise over mDNS, so `web` only ever reaches a
-   *  rejoin card — via the QR or typed code that got the player in. */
-  val rejoinWeb = rejoin(joinUrl = "https://hexstacker.com/BiBz3b?cpp=web")
+  /** A browser display, named off the §6 template alone: it can't advertise over mDNS,
+   *  and its QR need not carry `cpp`, so the room's own URL never says "web". */
+  val rejoinWeb = rejoin(platform = PLATFORM_WEB)
 
   private fun nearby(
     label: String,
@@ -104,15 +106,19 @@ internal object CardSamples {
     joinUrl = "https://hexstacker.com/BiBz3b" + platform?.let { "?cpp=$it" }.orEmpty(),
   )
 
+  // A remembered room learns its platform off the relay's §6 template, so unlike a nearby
+  // room it can name a box its own URL doesn't — hence the separate knob.
   private fun rejoin(
     game: Game = hexStacker,
     roomCode: String = "BiBz3b",
     joinUrl: String = "https://hexstacker.com/BiBz3b",
     title: String? = null,
+    platform: String? = devicePlatform(joinUrl),
   ) = RecentRoom(
     game = game,
     joinUrl = joinUrl,
     roomCode = roomCode,
     title = title,
+    platform = platform,
   )
 }

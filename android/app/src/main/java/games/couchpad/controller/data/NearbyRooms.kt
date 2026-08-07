@@ -45,11 +45,12 @@ const val PLATFORM_ANDROID_TV = "androidtv"
 const val PLATFORM_WEB = "web"
 
 /**
- * Which box a room is on, as its join URL declares it (`cpp`, §6). The URL is the only
- * carrier, and it always comes from the relay — a §8 advertisement carries just a room
- * code — so this reads the same way whatever route the room arrived by, and survives
- * into the rejoin card once the advertisement is gone. Null unless a value we know was
- * declared: the vocabulary is fixed, so a display can never put its own text on a card.
+ * Which box a room is on, as [url] declares it (`cpp`, §6). A URL is the only carrier,
+ * and it always comes from the relay — a §8 advertisement carries just a room code — so
+ * this reads the same way whatever route the room arrived by. Null unless a value we know
+ * was declared: the vocabulary is fixed, so a display can never put its own text on a
+ * card. Reading it off a URL is a point-in-time answer; holding on to it once a room has
+ * answered is [RecentRoomStore]'s job.
  */
 fun devicePlatform(url: String): String? {
   val uri = runCatching { url.toUri() }.getOrNull() ?: return null

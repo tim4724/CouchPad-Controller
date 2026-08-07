@@ -102,8 +102,10 @@ struct MainScreen: View {
                     // come up empty — false while a room card is already on screen, rejoin
                     // included. The ask is an offer rather than a claim, so it stays
                     // regardless: hiding it behind a rejoin card would make discovery
-                    // invisible for the rest of the session.
-                    if nearbyState == .ask || (home.nearby.isEmpty && rejoin == nil) {
+                    // invisible for the rest of the session. So does the denied button,
+                    // which is the same offer by another route.
+                    if nearbyState == .ask || nearbyState == .denied
+                        || (home.nearby.isEmpty && rejoin == nil) {
                         NearbyStatusCard(
                             state: nearbyState,
                             onAsk: {
@@ -714,12 +716,11 @@ private func cardTitle(_ name: String, _ roomCode: String, codeColor: Color) -> 
 
 /// Where discovery currently stands, when it has no room to show for it.
 enum NearbyStatus {
-    /// Never opted in — the only state that asks for anything, so the only one that
-    /// earns a full card.
+    /// Never opted in.
     case ask
     case searching
     case none
-    /// iOS only: Local Network was denied, which is unrecoverable in-app.
+    /// Local Network was denied, which is unrecoverable in-app.
     case denied
 }
 
@@ -730,9 +731,11 @@ enum NearbyStatus {
 /// that vanishes for good once granted, and it must not outshout the scan CTA you use every
 /// session. Metrics match JoinButtons so the three buttons on this screen are one family.
 ///
+/// `denied` takes that same button: it is the ask, just pointed at the one place that can
+/// still answer it, so giving it a different shape would read as a different feature.
+///
 /// Once granted, searching and not-found collapse to a muted line — an idle home screen
-/// shouldn't carry a box announcing that a TV simply isn't switched on. `denied` is a line
-/// too, but tappable: it's the only route out of a denial.
+/// shouldn't carry a box announcing that a TV simply isn't switched on.
 private struct NearbyStatusCard: View {
     let state: NearbyStatus
     let onAsk: () -> Void
@@ -743,34 +746,38 @@ private struct NearbyStatusCard: View {
     var body: some View {
         switch state {
         case .ask:
-            // Explicit tonal fill, matching JoinButtons' "Enter code manually" — see the
-            // note there on why `.bordered` can't be used.
-            Button(action: onAsk) {
-                Label("Show rooms nearby", systemImage: "antenna.radiowaves.left.and.right")
-                    .font(.cpTitleMedium)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-            }
-            .buttonStyle(.plain)
-            .background(
-                palette.secondaryContainer,
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
-            .foregroundStyle(palette.onSecondaryContainer)
+            askButton(Text("Show rooms nearby"), action: onAsk)
+        case .denied:
+            askButton(Text("Allow in Settings"), action: onOpenSettings)
         case .searching:
             statusLine(Text("Searching for TVs…"), showsProgress: true)
         case .none:
             statusLine(Text("No TV found"), showsProgress: false)
-        case .denied:
-            Button(action: onOpenSettings) {
-                statusLine(Text("Allow local network access in Settings"), showsProgress: false)
-            }
-            .buttonStyle(.plain)
         }
     }
 
+    /// Explicit tonal fill, matching JoinButtons' "Enter code manually" — see the note
+    /// there on why `.bordered` can't be used.
+    private func askButton(_ text: Text, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(
+                title: { text },
+                icon: { Image(systemName: "antenna.radiowaves.left.and.right") }
+            )
+            .font(.cpTitleMedium)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+        }
+        .buttonStyle(.plain)
+        .background(
+            palette.secondaryContainer,
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .foregroundStyle(palette.onSecondaryContainer)
+    }
+
     /// A 48pt minimum height keeps the muted states interchangeable without the cards
-    /// below moving, and gives `denied` a real touch target.
+    /// below moving.
     private func statusLine(_ text: Text, showsProgress: Bool) -> some View {
         HStack(spacing: 10) {
             if showsProgress {

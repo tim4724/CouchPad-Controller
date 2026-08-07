@@ -1,13 +1,16 @@
 package games.couchpad.controller.data
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.net.toUri
 import java.net.ServerSocket
 import kotlinx.coroutines.async
@@ -204,6 +207,53 @@ fun localNetworkPermissionGranted(context: Context): Boolean =
   Build.VERSION.SDK_INT < 37 ||
     ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) ==
     PackageManager.PERMISSION_GRANTED
+
+private const val ASK_PREFS = "cp_nearby_ask"
+private const val ASKED_KEY = "asked"
+
+/**
+ * Record that the local-network request has been shown at least once. Call it at the
+ * launch site, not in the result callback — a request the system refuses to prompt for
+ * still counts as asked.
+ *
+ * The flag exists only to disambiguate [localNetworkPermanentlyDenied]; it is NOT an
+ * opt-in memory (the permission itself is that, see MainScreen).
+ */
+fun markLocalNetworkAsked(context: Context) {
+  context.getSharedPreferences(ASK_PREFS, Context.MODE_PRIVATE).edit { putBoolean(ASKED_KEY, true) }
+}
+
+/**
+ * Forget that we ever asked. Called whenever the permission is seen granted, because a
+ * grant that is later revoked from Settings brings the request dialog back — the next
+ * refusal has to start counting from zero, or the stale flag would read a perfectly
+ * askable permission as locked.
+ */
+fun clearLocalNetworkAsked(context: Context) {
+  context.getSharedPreferences(ASK_PREFS, Context.MODE_PRIVATE).edit { remove(ASKED_KEY) }
+}
+
+/**
+ * The ask button has become a dead control: Android 11+ locks a permission after two
+ * denials, and every later request then returns denied without ever showing a dialog.
+ * Only the app's own settings page can undo that, so this is what decides whether the
+ * slot offers a request or a route to Settings.
+ *
+ * `shouldShowRequestPermissionRationale` alone can't answer it — it is false both for
+ * "never asked" and for "locked". The scanner tells them apart in memory because it
+ * requests on entry; discovery is asked for by hand, so the fact that we asked has to
+ * survive the process ([markLocalNetworkAsked]).
+ */
+fun localNetworkPermanentlyDenied(context: Context, activity: Activity?): Boolean {
+  if (activity == null || localNetworkPermissionGranted(context)) return false
+  if (!context.getSharedPreferences(ASK_PREFS, Context.MODE_PRIVATE).getBoolean(ASKED_KEY, false)) {
+    return false
+  }
+  return !ActivityCompat.shouldShowRequestPermissionRationale(
+    activity,
+    Manifest.permission.ACCESS_LOCAL_NETWORK,
+  )
+}
 
 /**
  * Re-advertises the room this phone is in, so the next player can tap instead of scan.

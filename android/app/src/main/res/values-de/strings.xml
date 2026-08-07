@@ -3,6 +3,7 @@
          HexStacker-Party's i18n; informal register (du) like the rest of the suite. -->
     <string name="home_subtitle">Controller</string>
     <string name="about">Info</string>
+    <string name="nearby_denied">In App-Einstellungen erlauben</string>
     <string name="nearby_find">Räume in der Nähe anzeigen</string>
     <string name="nearby_none">Keine Räume gefunden</string>
     <string name="nearby_searching">Suche nach Räumen…</string>

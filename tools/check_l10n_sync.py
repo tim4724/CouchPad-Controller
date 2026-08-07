@@ -51,6 +51,11 @@ ANDROID_ONLY = {
     "camera_access_needed",
     "camera_access_rationale",
     "allow_camera_access",
+    # Same button as iOS's "Allow in Settings", translated separately because the two
+    # point at differently-named destinations: Android deep-links to the app's own
+    # settings page, and Apple's Settings app is "Réglages"/"Ajustes" where Android's
+    # is not. Each locale names them however it reads shortest on a one-line button.
+    "nearby_denied",
 }
 
 # iOS keys with no Android counterpart, with the reason why.
@@ -66,9 +71,9 @@ IOS_ONLY = {
     "QR scanning is not supported on this device",
     "Scanner unavailable: %@",
     "Version %@ (%@)",   # version footer: Android shows the version name only
-    # iOS-only: a denied Local Network permission is unrecoverable in-app, so iOS
-    # points at Settings. Android just falls back to its ask card.
-    "Allow local network access in Settings",
+    # Android has the same button (nearby_denied) but names its own destination — see
+    # the note there.
+    "Allow in Settings",
 }
 
 problems = []

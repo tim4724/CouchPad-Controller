@@ -3,6 +3,7 @@
          match HexStacker-Party's i18n; informal register (tu) like the rest of the suite. -->
     <string name="home_subtitle">Controller</string>
     <string name="about">Informazioni</string>
+    <string name="nearby_denied">Consenti nelle impostazioni</string>
     <string name="nearby_find">Mostra le stanze nelle vicinanze</string>
     <string name="nearby_none">Nessuna stanza trovata</string>
     <string name="nearby_searching">Ricerca di stanze…</string>

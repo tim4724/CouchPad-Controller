@@ -72,66 +72,66 @@
         }
       }
     },
-    "Allow local network access in Settings" : {
+    "Allow in Settings" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zugriff auf lokales Netzwerk in den Einstellungen erlauben"
+            "value" : "In Einstellungen erlauben"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Permite el acceso a la red local en Ajustes"
+            "value" : "Permitir en Ajustes"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autorise l'accès au réseau local dans Réglages"
+            "value" : "Autoriser dans Réglages"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Consenti l'accesso alla rete locale in Impostazioni"
+            "value" : "Consenti in Impostazioni"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定でローカルネットワークへのアクセスを許可"
+            "value" : "設定で許可"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "설정에서 로컬 네트워크 접근을 허용하세요"
+            "value" : "설정에서 허용"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Permita o acesso à rede local nos Ajustes"
+            "value" : "Permitir nos Ajustes"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Разрешите доступ к локальной сети в Настройках"
+            "value" : "Разрешить в Настройках"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ayarlar'da yerel ağ erişimine izin ver"
+            "value" : "Ayarlar'da izin ver"
           }
         },
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在设置中允许访问本地网络"
+            "value" : "在设置中允许"
           }
         }
       }

@@ -1,7 +1,10 @@
 package games.couchpad.controller.ui.main
 
 import android.Manifest
+import android.content.Intent
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
+import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -91,6 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import games.couchpad.controller.data.Game
@@ -104,7 +108,10 @@ import games.couchpad.controller.data.distinctAdverts
 import games.couchpad.controller.data.nearbyAdverts
 import games.couchpad.controller.data.homeRooms
 import games.couchpad.controller.data.resolveNearby
+import games.couchpad.controller.data.clearLocalNetworkAsked
+import games.couchpad.controller.data.localNetworkPermanentlyDenied
 import games.couchpad.controller.data.localNetworkPermissionGranted
+import games.couchpad.controller.data.markLocalNetworkAsked
 import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
 import games.couchpad.controller.data.RecentRoom
@@ -123,6 +130,7 @@ import games.couchpad.controller.R
 import games.couchpad.controller.ui.components.GameArt
 import games.couchpad.controller.ui.components.GameIcon
 import games.couchpad.controller.ui.components.deviceName
+import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.JoinButtons
 import games.couchpad.controller.ui.components.annotatedHostLine
 import games.couchpad.controller.ui.components.MirrorHostSystemBars
@@ -175,9 +183,25 @@ fun MainScreen(
   // granted → discovery runs on every later launch and the rooms are simply there. No
   // prompt at first launch; the user asks for it once.
   var canDiscover by remember { mutableStateOf(localNetworkPermissionGranted(context)) }
+  // …unless the ask has been refused into a lock, at which point the button would be a
+  // control that does nothing (see localNetworkPermanentlyDenied).
+  var discoveryLocked by remember {
+    mutableStateOf(localNetworkPermanentlyDenied(context, context.findActivity()))
+  }
+  // Re-read both from the system, and drop the asked-once record while the permission is
+  // held — see clearLocalNetworkAsked for why a grant has to forget it.
+  fun refreshDiscovery() {
+    canDiscover = localNetworkPermissionGranted(context)
+    if (canDiscover) clearLocalNetworkAsked(context)
+    discoveryLocked = localNetworkPermanentlyDenied(context, context.findActivity())
+  }
   val localNetworkPermission = rememberLauncherForActivityResult(
     ActivityResultContracts.RequestPermission(),
-  ) { granted -> canDiscover = granted }
+  ) { refreshDiscovery() }
+  // Coming back from Settings after a grant there — no callback fires, so re-probe. This
+  // is also what makes a hand-edited permission take effect without a relaunch. (A revoke
+  // arrives as a process kill instead, so the initializers above cover that direction.)
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshDiscovery() }
   // An advertised code becomes a card only once the relay has resolved it — that call is
   // what supplies the join URL, `cpp` and the occupancy check. Re-checked on the same
   // cadence as the rejoin card: both promise "you can enter this", so both have to notice
@@ -406,14 +430,30 @@ fun MainScreen(
           // "Searching…" / "No rooms found" are claims about having looked and come up
           // empty — false while a room card is already on screen, rejoin included. The
           // ask is an offer rather than a claim, so it stays regardless: hiding it behind
-          // a rejoin card would make discovery invisible for the rest of the session.
-          // (No denied state here: on Android a refusal simply leaves the permission
-          // ungranted, so the slot falls back to the ask on its own.)
-          if (!canDiscover || (nearby.isEmpty() && rejoin == null)) {
+          // a rejoin card would make discovery invisible for the rest of the session. So
+          // does the denied button, which is the same offer by another route.
+          val nearbyState = when {
+            discoveryLocked -> NearbyStatus.Denied
+            !canDiscover -> NearbyStatus.Ask
+            searchSettled -> NearbyStatus.None
+            else -> NearbyStatus.Searching
+          }
+          val offering = nearbyState == NearbyStatus.Ask || nearbyState == NearbyStatus.Denied
+          if (offering || (nearby.isEmpty() && rejoin == null)) {
             NearbyStatusCard(
-              granted = canDiscover,
-              settled = searchSettled,
-              onAsk = { localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK) },
+              state = nearbyState,
+              onAsk = {
+                markLocalNetworkAsked(context)
+                localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+              },
+              onOpenSettings = {
+                context.startActivity(
+                  Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null),
+                  ),
+                )
+              },
             )
           }
           // Same retain-the-last-value trick as the rejoin card, so the exit
@@ -778,6 +818,16 @@ private fun cardTitle(name: String, roomCode: String, codeColor: Color) = buildA
   }
 }
 
+// Where discovery currently stands, when it has no room to show for it.
+private enum class NearbyStatus {
+  // Not granted yet.
+  Ask,
+  Searching,
+  None,
+  // Refused until the system stopped prompting, which is unrecoverable in-app.
+  Denied,
+}
+
 // What the TV slot shows when there are no rooms to show.
 //
 // The ask is an action, so it takes a button — the room cards are objects you pick from,
@@ -785,18 +835,29 @@ private fun cardTitle(name: String, roomCode: String, codeColor: Color) = buildA
 // that vanishes for good once granted, and it must not outshout the scan CTA you use every
 // session. Metrics match JoinButtons so the three buttons on this screen are one family.
 //
+// Denied takes that same button: it is the ask, just pointed at the one place that can
+// still answer it, so giving it a different shape would read as a different feature.
+//
 // Once granted, searching and not-found collapse to a muted line — an idle home screen
 // shouldn't carry a box announcing that a TV simply isn't switched on.
 @Composable
-private fun NearbyStatusCard(granted: Boolean, settled: Boolean, onAsk: () -> Unit) {
-  if (!granted) {
-    FilledTonalButton(onClick = onAsk, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+private fun NearbyStatusCard(state: NearbyStatus, onAsk: () -> Unit, onOpenSettings: () -> Unit) {
+  if (state == NearbyStatus.Ask || state == NearbyStatus.Denied) {
+    val denied = state == NearbyStatus.Denied
+    FilledTonalButton(
+      onClick = if (denied) onOpenSettings else onAsk,
+      modifier = Modifier.fillMaxWidth().height(56.dp),
+    ) {
       Icon(painterResource(R.drawable.ic_nearby), contentDescription = null, Modifier.size(22.dp))
       Spacer(Modifier.width(10.dp))
-      Text(stringResource(R.string.nearby_find), style = MaterialTheme.typography.titleMedium)
+      Text(
+        stringResource(if (denied) R.string.nearby_denied else R.string.nearby_find),
+        style = MaterialTheme.typography.titleMedium,
+      )
     }
     return
   }
+  val settled = state == NearbyStatus.None
   Row(
     Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -949,9 +1010,10 @@ private fun CodeEntryDialog(
 @Composable
 private fun NearbyCardsPreview() {
   PreviewStrip {
-    NearbyStatusCard(granted = false, settled = false, onAsk = {})
-    NearbyStatusCard(granted = true, settled = false, onAsk = {})
-    NearbyStatusCard(granted = true, settled = true, onAsk = {})
+    NearbyStatusCard(NearbyStatus.Ask, onAsk = {}, onOpenSettings = {})
+    NearbyStatusCard(NearbyStatus.Searching, onAsk = {}, onOpenSettings = {})
+    NearbyStatusCard(NearbyStatus.None, onAsk = {}, onOpenSettings = {})
+    NearbyStatusCard(NearbyStatus.Denied, onAsk = {}, onOpenSettings = {})
     NearbyCard(CardSamples.nearbyFull) {}
     NearbyCard(CardSamples.nearbyDeviceOnly) {}
     NearbyCard(CardSamples.nearbyLabelOnly) {}

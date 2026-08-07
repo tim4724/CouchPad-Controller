@@ -4,6 +4,7 @@
     <!-- Home -->
     <string name="home_subtitle">Controller</string>
     <string name="about">About</string>
+    <string name="nearby_denied">Allow in app settings</string>
     <string name="nearby_find">Show rooms nearby</string>
     <string name="nearby_none">No rooms found</string>
     <string name="nearby_searching">Searching for rooms…</string>

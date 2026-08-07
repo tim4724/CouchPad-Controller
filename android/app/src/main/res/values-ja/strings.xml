@@ -4,6 +4,7 @@
          terse plain-form status chips, so game_end_* are phrased politely here). -->
     <string name="home_subtitle">コントローラー</string>
     <string name="about">このアプリについて</string>
+    <string name="nearby_denied">アプリ設定で許可</string>
     <string name="nearby_find">近くのルームを表示</string>
     <string name="nearby_none">ルームが見つかりません</string>
     <string name="nearby_searching">ルームを検索中…</string>

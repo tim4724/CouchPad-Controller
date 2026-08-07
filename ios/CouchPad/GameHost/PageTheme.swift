@@ -63,9 +63,14 @@ func gameEndMessage(_ reason: String?) -> String {
 
 enum GameHostJS {
     /// Document-start user script (all frames): defines
-    /// `window.CouchPadHost.{gameEnded,themeChanged}` posting `{type, value}` to
-    /// `window.webkit.messageHandlers.cpHost`. Idempotent — the shim must exist on
-    /// every page load/navigation, but never redefine an already-installed bridge.
+    /// `window.CouchPadHost.{gameEnded,themeChanged,enableSystemBack}` posting
+    /// `{type, value}` to `window.webkit.messageHandlers.cpHost`. Idempotent — the
+    /// shim must exist on every page load/navigation, but never redefine an
+    /// already-installed bridge.
+    ///
+    /// `enableSystemBack` coerces to a real boolean here, so the native side sees the
+    /// contract's strict `=== true` (Android gets the same for free from its typed
+    /// JS bridge) rather than JS truthiness.
     static let bridgeShim = """
     (function () {
       if (window.CouchPadHost) { return; }
@@ -79,8 +84,26 @@ enum GameHostJS {
       }
       window.CouchPadHost = {
         gameEnded: function (reason) { post('gameEnded', reason); },
-        themeChanged: function (json) { post('themeChanged', json); }
+        themeChanged: function (json) { post('themeChanged', json); },
+        enableSystemBack: function (on) { post('enableSystemBack', on === true); }
       };
+    })();
+    """
+
+    /// Delivers a system back gesture to the page (CONTRACT.md §9), evaluated only
+    /// while the page has armed system back.
+    ///
+    /// Resolves to `true` — the ONLY result that keeps the player in the game — when
+    /// the game both implements `back()` and returns a literal `true` from it. A
+    /// missing handler, a falsy/absent return (including a Promise, which is why §9
+    /// requires a synchronous decision) or a throw all resolve to `false`, and the
+    /// launcher leaves.
+    static let deliverBack = """
+    (function () {
+      try {
+        return window.CouchPad && typeof window.CouchPad.back === 'function' &&
+          window.CouchPad.back() === true;
+      } catch (e) { return false; }
     })();
     """
 

@@ -82,9 +82,11 @@ fun hideNavigationBar(window: Window, view: View) {
 
 /**
  * A sheet/dialog is its OWN window: opened over a host with hidden bars, it would
- * bring them back. Mirror the host's state per bar type — in-game only the nav bar
- * is hidden, so an all-or-nothing probe would never match. No-op when the host
- * shows its bars normally, so every overlay can call this unconditionally.
+ * bring them back. Mirror the host's state per bar type — in-game it's only ever the
+ * nav bar that's hidden (and not even that once the page arms system back), so an
+ * all-or-nothing probe would never match. Probes the live insets on every call, so it
+ * tracks that mid-game. No-op when the host shows its bars normally, so every overlay
+ * can call this unconditionally.
  */
 @Composable
 fun MirrorHostSystemBars() {

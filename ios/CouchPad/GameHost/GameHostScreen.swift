@@ -5,7 +5,8 @@ import UIKit
 /// chrome is always dark, like a video player — the games are dark and a bright
 /// bar above them would be jarring. The game surface spans the full physical
 /// screen; the chrome floats above it and the page is told where the safe zone
-/// is (CSS vars + synthetic safe-area). Leaving is explicit: Leave is the ONLY exit.
+/// is (CSS vars + synthetic safe-area). Leaving is explicit: Leave is the only exit
+/// unless the page arms the system back gesture (CONTRACT.md §9).
 struct GameHostScreen: View {
     let joinUrl: String
     let title: String
@@ -114,6 +115,7 @@ struct GameHostScreen: View {
                 safeZone: computedSafeZone,
                 onLoaded: { withAnimation(.easeOut(duration: 0.3)) { loading = false } },
                 onGameEnd: onGameEnd,
+                onLeave: onLeave,
                 failed: $failed,
                 reloadToken: reloadToken,
                 onThemeChanged: { pageTheme = $0 },
@@ -142,7 +144,9 @@ struct GameHostScreen: View {
         // The game surface never resizes for anything — the keyboard overlays it,
         // like a video player.
         .ignoresSafeArea(.keyboard)
-        // Leave is the only exit: no back button, no interactive pop.
+        // No back button and no interactive pop: the only way out of a live match is
+        // the Leave bar, or the §9 back gesture the page armed — both routed
+        // explicitly, never through NavigationStack's own history.
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         // Immersive chrome, scoped to THIS view so it cannot leak onto home:

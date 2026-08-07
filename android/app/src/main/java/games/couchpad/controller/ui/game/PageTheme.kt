@@ -25,6 +25,19 @@ internal const val DISPATCH_PAGE_HIDE_JS =
   "window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));"
 
 /**
+ * Delivers a system back press to the page (CONTRACT.md §9), evaluated only while
+ * the page has armed system back.
+ *
+ * Evaluates to `true` — the ONLY result that keeps the player in the game — when the
+ * game both implements `back()` and returns a literal `true` from it. A missing
+ * handler, a falsy/absent return (including a Promise, which is why §9 requires a
+ * synchronous decision) or a throw all evaluate to `false`, and the launcher leaves.
+ */
+internal const val DELIVER_BACK_JS =
+  "(() => { try { return window.CouchPad && typeof window.CouchPad.back === 'function' &&" +
+    " window.CouchPad.back() === true; } catch (e) { return false; } })()"
+
+/**
  * The launcher-injected observer, evaluated after each page load. Pushes the
  * metas' state through `CouchPadHost.themeChanged` immediately and on every
  * change — head mutations via MutationObserver, plus scheme flips (a `media`

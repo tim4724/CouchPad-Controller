@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -166,6 +168,9 @@ private fun GameHostContent(
   // real name instead of the generic "CouchPad" fallback. Null until the page
   // reports; the manifest name covers the join cover and any title-less page.
   var pageTitle by remember { mutableStateOf<String?>(null) }
+  // Has the page armed the system back gesture (CONTRACT.md §9)? Default false —
+  // the safe state: edges excluded, LEAVE the only exit. Reset on every navigation.
+  var systemBackEnabled by remember { mutableStateOf(false) }
   val displayTitle = pageTitle ?: title
   val surfaceArgb = MaterialTheme.colorScheme.surface.toArgb()
   // The bridge/WebView client outlive recompositions but must call the CURRENT
@@ -191,6 +196,7 @@ private fun GameHostContent(
     CouchPadHostBridge(
       onGameEnded = { if (exited.compareAndSet(false, true)) currentOnGameEnd(it) },
       onThemeChanged = { currentOnPageTheme(it) },
+      onSystemBackEnabled = { systemBackEnabled = it },
     )
   }
 
@@ -205,14 +211,29 @@ private fun GameHostContent(
   // Hide ONLY the nav bar while in a game — the status bar stays. Hidden-nav +
   // transient-by-swipe is exactly the state that LIFTS the system's 200dp-per-edge
   // cap on gesture exclusion, so the WebView's exclusion rects (set below) can
-  // cover the whole play area. On leave the nav bar comes back and the status-icon
-  // appearance (changed by page theming below) is re-derived from the theme — a
-  // captured value would be stale if the theme flipped mid-game (uiMode no longer
-  // recreates the activity).
+  // cover the whole play area.
+  //
+  // But that state follows the ARMED state (CONTRACT.md §9), because both reasons to
+  // hide the bar lapse the moment the page arms system back:
+  //  - the lifted cap only matters while we exclude the whole surface; an armed page
+  //    excludes nothing, so there is no cap left to lift.
+  //  - while the bar is hidden, transient-by-swipe spends the FIRST edge swipe
+  //    revealing it instead of going back — the page's first back would be eaten,
+  //    and the player has to swipe twice.
+  LaunchedEffect(systemBackEnabled) {
+    val window = context.findActivity()?.window ?: return@LaunchedEffect
+    if (systemBackEnabled) {
+      WindowCompat.getInsetsController(window, view).show(WindowInsetsCompat.Type.navigationBars())
+    } else {
+      hideNavigationBar(window, view)
+    }
+  }
+
+  // On leave the nav bar comes back and the status-icon appearance (changed by page
+  // theming below) is re-derived from the theme — a captured value would be stale if
+  // the theme flipped mid-game (uiMode no longer recreates the activity).
   DisposableEffect(Unit) {
-    val window = context.findActivity()?.window
-    val controller = window?.let { WindowCompat.getInsetsController(it, view) }
-    window?.let { hideNavigationBar(it, view) }
+    val controller = context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
     onDispose {
       controller?.run {
         show(WindowInsetsCompat.Type.navigationBars())
@@ -236,9 +257,32 @@ private fun GameHostContent(
     )
   }
 
-  // Swallow system back — a stray press or edge swipe must not drop a player out
-  // of a live match. LEAVE is the only way out.
-  BackHandler { /* intentionally no-op */ }
+  // Opt the controller surface out of the system back-gesture so edge swipes reach
+  // the game — unless the page has armed system back (CONTRACT.md §9), in which case
+  // the edges go back to the system so the gesture can start at all (and draws the
+  // system's own back affordance). Full-height exclusion only works because the nav
+  // bar is hidden. Applied on layout and whenever the flag flips.
+  fun applyGestureExclusion(target: View) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+    target.systemGestureExclusionRects =
+      if (systemBackEnabled) emptyList() else listOf(Rect(0, 0, target.width, target.height))
+  }
+
+  LaunchedEffect(systemBackEnabled, webView) {
+    webView?.let(::applyGestureExclusion)
+  }
+
+  // Always handled, never passed to the activity: back must never finish the task
+  // from inside a live match. Disarmed (the default) it's swallowed outright — a
+  // stray press or edge swipe must not drop a player out. Armed, the page gets first
+  // refusal via back(); anything but a literal `true` means it didn't consume the
+  // press, and the launcher leaves. The evaluate is async, so the shell simply stays
+  // put until the answer arrives.
+  BackHandler {
+    if (!systemBackEnabled) return@BackHandler
+    val wv = webView
+    if (wv == null) leave() else wv.evaluateJavascript(DELIVER_BACK_JS) { if (it != "true") leave() }
+  }
 
   // Leaving the app (home/app switch/lock) synthesizes `pagehide` so the game
   // closes its relay socket immediately (CONTRACT.md §7) — see DISPATCH_PAGE_HIDE_JS.
@@ -257,7 +301,8 @@ private fun GameHostContent(
   // chrome's full extent (inset + LEAVE bar). Right reaches the name chip's edge;
   // the gap beyond the cutout is the chrome's content gutter, mirrored onto the
   // left so the page lines up with the close icon — each side still adds its own
-  // cutout overhang. Bottom is the bare cutout (no chrome there).
+  // cutout overhang. Bottom is the cutout, or the nav bar once an armed page brings
+  // it back — reported as visible insets, so this is 0 again while it is hidden.
   var chromeHeightPx by remember { mutableStateOf(0) }
   var chromeWidthPx by remember { mutableStateOf(0) }
   var chipRightPx by remember { mutableStateOf(0) }
@@ -265,6 +310,7 @@ private fun GameHostContent(
   val cutoutLeft = cutout.getLeft(density, layoutDirection)
   val cutoutRight = cutout.getRight(density, layoutDirection)
   val cutoutBottom = cutout.getBottom(density)
+  val navBottom = WindowInsets.navigationBars.getBottom(density)
   var safeLeftPx by remember { mutableStateOf(0) }
   var safeRightPx by remember { mutableStateOf(0) }
   var safeBottomPx by remember { mutableStateOf(0) }
@@ -299,12 +345,13 @@ private fun GameHostContent(
     cutoutLeft,
     cutoutRight,
     cutoutBottom,
+    navBottom,
     webView,
   ) {
     safeRightPx = if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx).coerceAtLeast(cutoutRight) else cutoutRight
     val gutter = (safeRightPx - cutoutRight).coerceAtLeast(0)
     safeLeftPx = cutoutLeft + gutter
-    safeBottomPx = cutoutBottom
+    safeBottomPx = maxOf(cutoutBottom, navBottom)
     pushSafeZone()
     webView?.requestApplyInsets()
   }
@@ -372,6 +419,8 @@ private fun GameHostContent(
           // Re-assert the name on each load (belt-and-suspenders with cpName).
           webViewClient = AllowListWebViewClient(
             allowed,
+            // Arming must not outlive the page that meant it (CONTRACT.md §9).
+            onNavigationStart = { systemBackEnabled = false },
             onLoaded = {
               loading = false
               injectName(profile.name)
@@ -401,13 +450,7 @@ private fun GameHostContent(
             }
           }
           keepScreenOn = true
-          // Opt the controller surface out of the system back-gesture so edge swipes
-          // reach the game (full-height only works because the nav bar is hidden).
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            addOnLayoutChangeListener { v, left, top, right, bottom, _, _, _, _ ->
-              v.systemGestureExclusionRects = listOf(Rect(0, 0, right - left, bottom - top))
-            }
-          }
+          addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> applyGestureExclusion(v) }
           // Must be attached before loadUrl or the page won't see it.
           addJavascriptInterface(hostBridge, "CouchPadHost")
           loadUrl(joinUrl)
@@ -561,9 +604,14 @@ private fun LeaveBar(
  */
 private class AllowListWebViewClient(
   private val allowedDomains: List<String>,
+  private val onNavigationStart: () -> Unit,
   private val onLoaded: () -> Unit,
   private val onConnectionError: () -> Unit,
 ) : WebViewClient() {
+  // Main-frame only, and deliberately not fired for same-document navigations —
+  // a page that pushes history mid-session keeps whatever it armed.
+  override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = onNavigationStart()
+
   override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
     val url = request.url
     val scheme = url.scheme?.lowercase()
@@ -613,6 +661,7 @@ private class AllowListWebViewClient(
 private class CouchPadHostBridge(
   private val onGameEnded: (String?) -> Unit,
   private val onThemeChanged: (PageTheme) -> Unit,
+  private val onSystemBackEnabled: (Boolean) -> Unit,
 ) {
   private val fired = AtomicBoolean(false)
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -630,5 +679,14 @@ private class CouchPadHostBridge(
   fun themeChanged(json: String?) {
     val theme = parsePageTheme(json)
     mainHandler.post { onThemeChanged(theme) }
+  }
+
+  // Whether the system back gesture may occur right now (CONTRACT.md §9). Not
+  // fire-once: games arm and disarm repeatedly (a dialog opening and closing).
+  // Declaring the parameter as Boolean gives the contract's strict `=== true` for
+  // free — the JS bridge converts every non-boolean argument to false.
+  @JavascriptInterface
+  fun enableSystemBack(enabled: Boolean) {
+    mainHandler.post { onSystemBackEnabled(enabled) }
   }
 }

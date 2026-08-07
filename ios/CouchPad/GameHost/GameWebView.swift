@@ -96,6 +96,7 @@ struct GameWebView: UIViewRepresentable {
     let safeZone: SafeZone             // points == CSS px
     let onLoaded: () -> Void           // first painted frame (the injected __firstFrame signal)
     let onGameEnd: (String?) -> Void   // fire-once
+    let onLeave: () -> Void            // an armed back gesture the page didn't consume (§9)
     @Binding var failed: Bool          // main-doc load failed — drives the retry overlay
     let reloadToken: Int               // bumped by Retry → re-issue the join request
     let onThemeChanged: (PageTheme) -> Void
@@ -103,6 +104,7 @@ struct GameWebView: UIViewRepresentable {
 
     init(joinUrl: String, allowedDomains: [String], playerName: String, safeZone: SafeZone,
          onLoaded: @escaping () -> Void, onGameEnd: @escaping (String?) -> Void,
+         onLeave: @escaping () -> Void,
          failed: Binding<Bool>, reloadToken: Int,
          onThemeChanged: @escaping (PageTheme) -> Void,
          onTitleChanged: @escaping (String) -> Void) {
@@ -112,6 +114,7 @@ struct GameWebView: UIViewRepresentable {
         self.safeZone = safeZone
         self.onLoaded = onLoaded
         self.onGameEnd = onGameEnd
+        self.onLeave = onLeave
         self._failed = failed
         self.reloadToken = reloadToken
         self.onThemeChanged = onThemeChanged
@@ -156,6 +159,19 @@ struct GameWebView: UIViewRepresentable {
         #endif
         webView.navigationDelegate = coordinator
         webView.syntheticSafeAreaInsets = safeZone.uiEdgeInsets
+        // The system back gesture, off until the page arms it (CONTRACT.md §9). WebKit's
+        // own allowsBackForwardNavigationGestures can't serve here: it drives web history
+        // and never reaches back(), and the launcher — not the page's history — owns the
+        // exit. Disabled, the recognizer is inert, so edge swipes are gameplay input;
+        // that's the Android gesture-exclusion rects' counterpart. cancelsTouchesInView
+        // (on by default) cancels the page's touch once the swipe is recognized.
+        let backEdge = UIScreenEdgePanGestureRecognizer(
+            target: coordinator, action: #selector(Coordinator.handleBackEdgePan(_:))
+        )
+        backEdge.edges = UIApplication.shared.userInterfaceLayoutDirection == .rightToLeft ? .right : .left
+        backEdge.isEnabled = false
+        webView.addGestureRecognizer(backEdge)
+        coordinator.backEdgeGesture = backEdge
         coordinator.lastInjectedName = playerName
         coordinator.lastPushedZone = safeZone
         // Going home must drop the relay socket (Android gets this for free from the
@@ -224,6 +240,10 @@ struct GameWebView: UIViewRepresentable {
         // Weak: the coordinator must not extend the web view's life past dismantle.
         // Set once from makeUIView.
         private weak var hostedWebView: CPWebView?
+        // The armed state IS the recognizer's isEnabled — no separate flag to drift.
+        weak var backEdgeGesture: UIScreenEdgePanGestureRecognizer?
+        private static let minBackTravel: CGFloat = 60     // pt
+        private static let minBackFling: CGFloat = 300     // pt/s
 
         init(parent: GameWebView) {
             self.parent = parent
@@ -246,6 +266,27 @@ struct GameWebView: UIViewRepresentable {
 
         @objc private func appDidEnterBackground() {
             hostedWebView?.evaluateJavaScript(GameHostJS.dispatchPageHide, completionHandler: nil)
+        }
+
+        /// A completed edge swipe while the page has armed system back (CONTRACT.md §9).
+        /// The page gets first refusal via `back()`; anything but a literal `true` means
+        /// it didn't consume the gesture, and the launcher leaves — the same exit the
+        /// Leave bar's X takes. The evaluate is async, so the shell simply stays put
+        /// until the answer arrives. Disarms on the way out so a second swipe landing
+        /// during teardown can't pop twice.
+        @objc func handleBackEdgePan(_ gesture: UIScreenEdgePanGestureRecognizer) {
+            guard gesture.state == .ended, !isTearingDown else { return }
+            let travel = abs(gesture.translation(in: gesture.view).x)
+            let fling = abs(gesture.velocity(in: gesture.view).x)
+            // A flinched swipe is not a back. UIKit exposes no threshold of its own for
+            // this, so these are empirical: far enough that a thumb resting on the edge
+            // can't trigger it, loose enough that a fast confident flick still counts.
+            guard travel > Self.minBackTravel || fling > Self.minBackFling else { return }
+            hostedWebView?.evaluateJavaScript(GameHostJS.deliverBack) { [weak self] result, _ in
+                guard let self, result as? Bool != true else { return }
+                self.backEdgeGesture?.isEnabled = false
+                self.parent.onLeave()
+            }
         }
 
         /// The trust boundary. Only https navigations to an allow-listed domain stay
@@ -293,6 +334,13 @@ struct GameWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
                      withError error: Error) {
             reportLoadFailure(error)
+        }
+
+        /// Arming must not outlive the page that meant it (CONTRACT.md §9). Main frame
+        /// only, and not fired for same-document navigations — a page that pushes
+        /// history mid-session keeps whatever it armed.
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            backEdgeGesture?.isEnabled = false
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -350,6 +398,10 @@ struct GameWebView: UIViewRepresentable {
             case "themeChanged":
                 // Not fire-once: themes change repeatedly. Parsed strictly.
                 parent.onThemeChanged(parsePageTheme(body["value"] as? String))
+            case "enableSystemBack":
+                // Not fire-once: games arm and disarm repeatedly (a dialog opening and
+                // closing). The shim already coerced to a boolean, so only "true" arms.
+                backEdgeGesture?.isEnabled = (body["value"] as? String) == "true"
             default:
                 break
             }

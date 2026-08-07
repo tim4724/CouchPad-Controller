@@ -31,8 +31,9 @@ When `cpName` is present, the game must:
   the launcher is the identity authority.
 - **Not persist the injected name.** It arrives fresh on every launch/rename;
   persisting it would leak into the standalone-browser experience.
-- **Neutralize its own back/leave handling.** The shell swallows system back and shows
-  its own LEAVE bar; modals relying on `history.back()` need a direct close instead.
+- **Neutralize its own back/leave handling.** The shell shows its own LEAVE bar and
+  swallows system back by default; modals relying on `history.back()` need a direct
+  close instead — or opt into the gesture explicitly (§9).
 
 ## 2. Launcher → game, live rename: `window.CouchPad.setName(name)`
 
@@ -248,6 +249,70 @@ The card is branded from the manifest, not from the advertisement: the resolved 
 carries the branding alone — the card itself is neutral chrome. A game with no `icon`
 falls back to a generic glyph.
 
+## 9. Game ⇄ launcher, system back: `enableSystemBack` + `back()`
+
+By default the shell owns the screen edges: the whole controller surface is opted out of
+the system back gesture, so edge swipes are gameplay input and a stray one can't drop a
+player out of a live match. A game that wants back — to close a dialog, or because the
+player is somewhere leaving is harmless — asks for it, moment by moment.
+
+```js
+window.CouchPadHost?.enableSystemBack?.(true);   // dialog opened / entered the lobby
+window.CouchPadHost?.enableSystemBack?.(false);  // dialog closed / match resumed
+```
+
+The launcher *implements* `enableSystemBack`, the game *calls* it. **Default false**,
+including before the first call and after every page load — arming never outlives the page
+that meant it. Only a literal `true` arms; every other value disarms.
+
+| State | Screen edges | A back gesture |
+|-------|--------------|----------------|
+| `false` *(default)* | opted out — edge swipes reach the game | can't start; LEAVE is the only exit |
+| `true` | yielded to the system, with its own back affordance | goes to `back()` below |
+
+**Arming costs the game its screen edges** — that is the trade, not a side effect. A game
+that arms for a dialog and forgets to disarm when it closes plays the rest of the match
+without edge swipes, with nothing on screen to explain why. Disarm is not optional.
+
+The game *implements* `back()`, the launcher *calls* it — once per gesture, only while
+armed:
+
+```js
+window.CouchPad = window.CouchPad || {};
+window.CouchPad.back = () => {
+  if (!dialogOpen) return false;   // not ours → the launcher leaves the game
+  closeDialog();
+  return true;                     // consumed → the player stays
+};
+```
+
+- Returning a literal `true` consumes the gesture. **Anything else** — a falsy return, no
+  return, no `back` at all, or a throw — leaves the game, through the same exit as the
+  LEAVE bar.
+- **Decide synchronously.** A Promise is not awaited and counts as unconsumed; start async
+  work if you need to, but return the boolean now.
+- So a lobby or results screen that just wants back to leave arms and implements nothing.
+
+Both halves are inert in a plain browser: `CouchPadHost` doesn't exist, so the optional
+call is a no-op, and nothing ever calls `back()`. The browser's own back button keeps
+doing whatever it did.
+
+Platform notes, for behavior a game can observe: how much of the screen edge is yielded
+differs. iOS yields only the *leading* edge — the right one under RTL. Android hands the
+whole surface back to the system, so back can start from either edge, as it does everywhere
+else on the platform. Budget for both: don't put a drag-from-the-very-edge control anywhere
+while armed. Android draws its system back arrow during the gesture and
+also routes the hardware/3-button back here; iOS has no equivalent system affordance
+during the swipe, so a game arming for a non-obvious reason should say so in its own UI.
+
+Arming also brings Android's navigation bar back on screen for as long as it lasts — while
+hidden, the system spends the first edge swipe revealing it instead of going back, which
+would cost the player their first gesture. **So `--cp-safe-bottom` grows while armed** (by
+the gesture pill, typically 24px) and shrinks again on disarm: one more reason to treat the
+safe zone as live rather than reading it once at startup. iOS is unaffected — its back
+gesture is the launcher's own recognizer, not a system one, and its home indicator is
+always in the safe area.
+
 ## Checklist for a new game
 
 1. Read `cpName`; when it's there: skip name entry, don't persist the name, suppress own
@@ -260,13 +325,23 @@ falls back to a generic glyph.
 6. *(Optional)* Declare `theme-color` / `cp-accent-color` metas (§4).
 7. Register the controller-URL template on room create so typed codes resolve (§6).
 8. Declare the game in `games-manifest.json` (hosts, controllerBaseUrl, room-code format).
-9. *(Native display apps only)* Advertise the room over `_couchpad._tcp` so the launcher
-   can offer one-tap join (§8).
+9. *(Optional)* Arm the system back gesture with `enableSystemBack(true)` where back is
+   welcome, disarm the moment it isn't, and implement `window.CouchPad.back()` if there's
+   something to close (§9).
+10. *(Native display apps only)* Advertise the room over `_couchpad._tcp` so the launcher
+    can offer one-tap join (§8).
+
+Every touchpoint above has a live reference implementation — a stand-in controller
+that arms and disarms system back, answers `back()` three different ways, swaps its
+theme metas and draws its safe zone. Open <https://test.couchpad.games/CPTEST> from
+the launcher to watch each one behave; the source is `controller-test.html` in the
+couchpad.games site repo, and it is updated in the same change as this document.
 
 Keep all contract code in the game's own bundle — game origins typically ship
-`script-src 'self'`, and the launcher only injects the guarded `setName` call and a
-self-contained meta observer (both platforms inject via their `evaluateJavaScript`
-equivalent, which is exempt from the page's CSP).
+`script-src 'self'`, and what the launcher injects is only ever glue: the guarded
+`setName` call, a self-contained meta observer, and the guarded `back()` call (both
+platforms inject via their `evaluateJavaScript` equivalent, which is exempt from the
+page's CSP).
 
 ## Versioning
 

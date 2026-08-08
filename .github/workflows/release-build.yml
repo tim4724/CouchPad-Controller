@@ -1,7 +1,8 @@
 # Builds the two store-ready, signed release artifacts:
 #   - Android: .aab signed with the Play upload keystore (materialized from secrets;
-#     see keystore.properties.example), uploaded as a workflow artifact — the Play
-#     upload itself is still manual.
+#     see keystore.properties.example), uploaded as a workflow artifact. Tag builds
+#     also publish it to Play's closed testing track via the Play API service
+#     account, with the tag as versionName and the run number as versionCode.
 #   - iOS: signed with the Apple Distribution cert + "CouchPad App Store" profile
 #     (project.yml pins manual signing with exactly these). Tag builds upload
 #     straight to TestFlight via the ASC API key with the tag as marketing version
@@ -60,7 +61,16 @@ jobs:
 
       - name: Build signed release bundle
         working-directory: android
-        run: ./gradlew bundleRelease
+        run: |
+          # Play rejects a reused versionCode, so stamp a unique one; tag builds
+          # take their versionName from the tag (bare semver), others keep
+          # build.gradle.kts's. Both are -P overrides — the static values stay
+          # untouched. (Mirrors the iOS Archive step below.)
+          VERSION_ARGS=("-PcpVersionCode=$GITHUB_RUN_NUMBER")
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION_ARGS+=("-PcpVersionName=$GITHUB_REF_NAME")
+          fi
+          ./gradlew bundleRelease "${VERSION_ARGS[@]}"
 
       - name: Verify the AAB is signed with the upload key
         run: |
@@ -73,11 +83,32 @@ jobs:
             exit 1
           fi
 
+      # Before publishing, so a Play-side rejection still leaves the bundle
+      # downloadable from the run.
       - uses: actions/upload-artifact@v7
         with:
           name: games.couchpad.controller-release-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+
+      # Tags only, like the iOS TestFlight upload beside it — a dispatch stays
+      # "build and hand me the artifact". mapping.txt goes with it or crash
+      # reports from this R8 build are unreadable. "alpha" is the closed testing
+      # track's API name (edits.tracks.list). Completed, not draft: testers
+      # opted in, and Play still reviews the release — but it also means this
+      # step fails until the Console setup tasks (listing, content rating, data
+      # safety) are done. The service account needs "Release to testing tracks"
+      # on this app in Play Console (Users and permissions, not Cloud IAM).
+      - name: Publish to Play (closed testing)
+        if: github.ref_type == 'tag'
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: games.couchpad.controller
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          mappingFile: android/app/build/outputs/mapping/release/mapping.txt
+          track: alpha
+          status: completed
 
   ios:
     name: iOS (IPA)

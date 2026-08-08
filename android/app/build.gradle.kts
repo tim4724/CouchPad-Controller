@@ -40,8 +40,10 @@ android {
         // mDNS room discovery (NearbyRooms.kt) needs ACCESS_LOCAL_NETWORK granted or
         // it is silently blocked — no exception, just no results.
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // CI overrides both via -P (release-build.yml): versionCode from the run
+        // number — Play rejects a reused code — and versionName from the release tag.
+        versionCode = (findProperty("cpVersionCode") as String?)?.toInt() ?: 1
+        versionName = findProperty("cpVersionName") as String? ?: "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

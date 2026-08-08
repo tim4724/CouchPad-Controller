@@ -108,6 +108,7 @@ import games.couchpad.controller.data.NearbyRoom
 import games.couchpad.controller.data.distinctAdverts
 import games.couchpad.controller.data.nearbyAdverts
 import games.couchpad.controller.data.homeRooms
+import games.couchpad.controller.data.lanAvailable
 import games.couchpad.controller.data.resolveNearby
 import games.couchpad.controller.data.clearLocalNetworkAsked
 import games.couchpad.controller.data.localNetworkPermanentlyDenied
@@ -234,10 +235,21 @@ fun MainScreen(
   // than standing up a second card for the room the player is already being offered.
   val home = remember(resolved.toMap(), rejoin) { homeRooms(resolved.values.toList(), rejoin) }
   val nearby = home.nearby
+  // Whether a network mDNS could traverse — Wi-Fi or Ethernet — is up at all. Only picks
+  // the status line's wording — discovery keeps running regardless (see lanAvailable on
+  // the hotspot case).
+  var hasLan by remember { mutableStateOf(true) }
+  LaunchedEffect(Unit) {
+    lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+      lanAvailable(context).collect { hasLan = it }
+    }
+  }
   // mDNS discovery never "completes" — it just keeps listening — so a spinner would spin
-  // forever with the TV off. Settle to a plain "not found" after a grace period.
+  // forever with the TV off. Settle to a plain "not found" after a grace period. Keyed on
+  // hasLan too: Wi-Fi coming back restarts the grace period, so the slot reads
+  // "Searching…" again instead of a stale instant "No rooms found".
   var searchSettled by remember { mutableStateOf(false) }
-  LaunchedEffect(canDiscover) {
+  LaunchedEffect(canDiscover, hasLan) {
     searchSettled = false
     if (canDiscover) {
       delay(8_000)
@@ -439,6 +451,7 @@ fun MainScreen(
           val nearbyState = when {
             discoveryLocked -> NearbyStatus.Denied
             !canDiscover -> NearbyStatus.Ask
+            !hasLan -> NearbyStatus.NoWifi
             searchSettled -> NearbyStatus.None
             else -> NearbyStatus.Searching
           }
@@ -832,6 +845,9 @@ private enum class NearbyStatus {
   Ask,
   Searching,
   None,
+  // Opted in, but no Wi-Fi/Ethernet is up — nothing local to search, so the slot says
+  // how to fix that instead of claiming a search happened.
+  NoWifi,
   // Refused until the system stopped prompting, which is unrecoverable in-app.
   Denied,
 }
@@ -846,8 +862,8 @@ private enum class NearbyStatus {
 // Denied takes that same button: it is the ask, just pointed at the one place that can
 // still answer it, so giving it a different shape would read as a different feature.
 //
-// Once granted, searching and not-found collapse to a muted line — an idle home screen
-// shouldn't carry a box announcing that a TV simply isn't switched on.
+// Once granted, searching, not-found and the off-Wi-Fi hint collapse to a muted line — an
+// idle home screen shouldn't carry a box announcing that a TV simply isn't switched on.
 @Composable
 private fun NearbyStatusCard(state: NearbyStatus, onAsk: () -> Unit, onOpenSettings: () -> Unit) {
   if (state == NearbyStatus.Ask || state == NearbyStatus.Denied) {
@@ -865,20 +881,34 @@ private fun NearbyStatusCard(state: NearbyStatus, onAsk: () -> Unit, onOpenSetti
     }
     return
   }
-  val settled = state == NearbyStatus.None
   Row(
     Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
-    if (settled) {
-      Icon(painterResource(R.drawable.ic_nearby), contentDescription = null, Modifier.size(16.dp))
+    // The button's metrics (22dp glyph, titleMedium) so the slot doesn't change scale
+    // as it moves between offering and reporting — only the muted color says "status".
+    if (state == NearbyStatus.Searching) {
+      CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
     } else {
-      CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+      Icon(
+        painterResource(
+          if (state == NearbyStatus.NoWifi) R.drawable.ic_wifi_off else R.drawable.ic_nearby,
+        ),
+        contentDescription = null,
+        Modifier.size(22.dp),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
     Text(
-      stringResource(if (settled) R.string.nearby_none else R.string.nearby_searching),
-      style = MaterialTheme.typography.bodyMedium,
+      stringResource(
+        when (state) {
+          NearbyStatus.Searching -> R.string.nearby_searching
+          NearbyStatus.NoWifi -> R.string.nearby_no_wifi
+          else -> R.string.nearby_none
+        },
+      ),
+      style = MaterialTheme.typography.titleMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
   }

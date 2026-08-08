@@ -5,6 +5,7 @@
     <string name="about">Info</string>
     <string name="nearby_denied">In App-Einstellungen erlauben</string>
     <string name="nearby_find">Räume in der Nähe anzeigen</string>
+    <string name="nearby_no_wifi">Verbinde dich mit dem WLAN, um Räume in der Nähe zu finden</string>
     <string name="nearby_none">Keine Räume gefunden</string>
     <string name="nearby_searching">Suche nach Räumen…</string>
     <string name="device_apple_tv">Apple TV</string>

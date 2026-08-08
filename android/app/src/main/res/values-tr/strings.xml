@@ -5,6 +5,7 @@
     <string name="about">Hakkında</string>
     <string name="nearby_denied">Uygulama ayarlarında izin ver</string>
     <string name="nearby_find">Yakındaki odaları göster</string>
+    <string name="nearby_no_wifi">Yakındaki odaları bulmak için Wi-Fi\'ye bağlan</string>
     <string name="nearby_none">Oda bulunamadı</string>
     <string name="nearby_searching">Odalar aranıyor…</string>
     <string name="device_apple_tv">Apple TV</string>

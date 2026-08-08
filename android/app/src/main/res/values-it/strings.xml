@@ -5,6 +5,7 @@
     <string name="about">Informazioni</string>
     <string name="nearby_denied">Consenti nelle impostazioni</string>
     <string name="nearby_find">Mostra le stanze nelle vicinanze</string>
+    <string name="nearby_no_wifi">Connettiti al Wi-Fi per trovare stanze nelle vicinanze</string>
     <string name="nearby_none">Nessuna stanza trovata</string>
     <string name="nearby_searching">Ricerca di stanze…</string>
     <string name="device_apple_tv">Apple TV</string>

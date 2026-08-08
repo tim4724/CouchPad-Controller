@@ -15,6 +15,10 @@
          multicast to the app unless a WifiManager.MulticastLock is held. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Normal permission. Watches whether Wi-Fi/Ethernet is up (lanAvailable) so the
+         nearby slot can say "join the Wi-Fi" instead of claiming to search a network
+         that isn't there. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- In-app QR scanner (ScanScreen). Camera is optional: manual code entry and
          App Links join fine without one, so don't hide the app from camera-less
          devices on Play. -->

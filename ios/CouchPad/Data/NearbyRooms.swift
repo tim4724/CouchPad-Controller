@@ -232,6 +232,42 @@ enum NearbyOptIn {
     }
 }
 
+// MARK: - LAN monitor
+
+/// Whether a network mDNS could possibly traverse — Wi-Fi or wired Ethernet — is up. On
+/// cellular only, browsing "runs" and finds nothing, so the home slot's
+/// "Searching…"/"No rooms found" would claim a search that never had anywhere to look;
+/// this is what swaps that claim for the join-the-Wi-Fi hint. It only ever picks the
+/// slot's wording — browsing itself keeps running: a phone hosting its own hotspot has no
+/// Wi-Fi path here, yet rooms on that hotspot still resolve, and a found room simply
+/// replaces the hint.
+@MainActor final class LanMonitor: ObservableObject {
+
+    /// Optimistic until the first path update — a launch must not flash the hint.
+    @Published private(set) var hasLan = true
+
+    private var monitor: NWPathMonitor?
+
+    func start() {
+        guard monitor == nil else { return }
+        // "Any path that isn't cellular" — Wi-Fi or Ethernet satisfies, cellular-only
+        // (or nothing at all) doesn't.
+        let monitor = NWPathMonitor(prohibitedInterfaceTypes: [.cellular])
+        monitor.pathUpdateHandler = { [weak self] path in
+            let up = path.status == .satisfied
+            Task { @MainActor in self?.hasLan = up }
+        }
+        self.monitor = monitor
+        monitor.start(queue: .main)
+    }
+
+    func stop() {
+        monitor?.cancel()
+        monitor = nil
+        hasLan = true
+    }
+}
+
 // MARK: - Browser
 
 /// Browses the LAN for displays advertising a room (contract §8). The launcher only

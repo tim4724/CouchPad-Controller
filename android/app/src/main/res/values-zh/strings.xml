@@ -5,6 +5,7 @@
     <string name="about">关于</string>
     <string name="nearby_denied">在应用设置中允许</string>
     <string name="nearby_find">显示附近的房间</string>
+    <string name="nearby_no_wifi">连接 Wi-Fi 以查找附近的房间</string>
     <string name="nearby_none">未找到房间</string>
     <string name="nearby_searching">正在搜索房间…</string>
     <string name="device_apple_tv">Apple TV</string>

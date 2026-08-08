@@ -5,6 +5,7 @@
     <string name="about">Sobre</string>
     <string name="nearby_denied">Permitir nas configurações</string>
     <string name="nearby_find">Mostrar salas por perto</string>
+    <string name="nearby_no_wifi">Conecte-se ao Wi-Fi para encontrar salas por perto</string>
     <string name="nearby_none">Nenhuma sala encontrada</string>
     <string name="nearby_searching">Procurando salas…</string>
     <string name="device_apple_tv">Apple TV</string>

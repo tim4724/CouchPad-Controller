@@ -585,6 +585,70 @@
         }
       }
     },
+    "Connect to Wi-Fi to find rooms nearby" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinde dich mit dem WLAN, um Räume in der Nähe zu finden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conéctate al Wi-Fi para encontrar salas cercanas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecte-toi au Wi-Fi pour trouver des salles à proximité"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connettiti al Wi-Fi per trovare stanze nelle vicinanze"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wi-Fiに接続すると近くのルームを検索できます"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "근처 방을 찾으려면 Wi-Fi에 연결하세요"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conecte-se ao Wi-Fi para encontrar salas por perto"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключись к Wi-Fi, чтобы найти комнаты поблизости"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yakındaki odaları bulmak için Wi-Fi'ye bağlan"
+          }
+        },
+        "zh" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接 Wi-Fi 以查找附近的房间"
+          }
+        }
+      }
+    },
     "Controller" : {
       "comment" : "Home screen subtitle under the app name.",
       "localizations" : {

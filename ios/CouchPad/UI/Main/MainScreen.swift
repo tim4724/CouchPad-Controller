@@ -37,6 +37,10 @@ struct MainScreen: View {
     // while this screen is the visible top; resolved against `games` on every render,
     // so a manifest refresh re-admits (or drops) an advert without restarting anything.
     @StateObject private var nearby = NearbyBrowser()
+    // Whether a network mDNS could traverse — Wi-Fi or Ethernet — is up at all. Only
+    // picks the status line's wording — browsing keeps running regardless (see
+    // LanMonitor on the hotspot case).
+    @StateObject private var lan = LanMonitor()
     @State private var nearbyOptedIn = NearbyOptIn.isSet
     /// mDNS discovery never "completes" — it just keeps listening — so a spinner would
     /// spin forever with the TV off. Settle to a plain "not found" after a grace period.
@@ -254,6 +258,9 @@ struct MainScreen: View {
                 profile = ProfileStore.load()
             }
             if visible && nearbyOptedIn { nearby.start() } else { nearby.stop() }
+            // Unlike the browser, not gated on the opt-in: watching the path is
+            // passive, and the ask button costs nothing to leave un-hinted.
+            if visible { lan.start() } else { lan.stop() }
         }
         // Re-checked on the same cadence as the rejoin card: both promise "you can enter
         // this", so both have to notice when the room dies or fills. Tied to the browse
@@ -277,7 +284,9 @@ struct MainScreen: View {
                 do { try await Task.sleep(for: roomPollInterval) } catch { return }
             }
         }
-        .task(id: nearbyOptedIn) {
+        // Keyed on the LAN too: Wi-Fi coming back restarts the grace period, so the slot
+        // reads "Searching…" again instead of a stale instant "No rooms found".
+        .task(id: [nearbyOptedIn, lan.hasLan]) {
             nearbySearchSettled = false
             guard nearbyOptedIn else { return }
             try? await Task.sleep(for: .seconds(8))
@@ -389,6 +398,7 @@ struct MainScreen: View {
     private var nearbyState: NearbyStatus {
         if !nearbyOptedIn { return .ask }
         if nearby.permissionDenied { return .denied }
+        if !lan.hasLan { return .noWifi }
         return nearbySearchSettled ? .none : .searching
     }
 
@@ -745,6 +755,9 @@ enum NearbyStatus {
     case ask
     case searching
     case none
+    /// Opted in, but no Wi-Fi/Ethernet is up — nothing local to search, so the slot
+    /// says how to fix that instead of claiming a search happened.
+    case noWifi
     /// Local Network was denied, which is unrecoverable in-app.
     case denied
 }
@@ -759,8 +772,8 @@ enum NearbyStatus {
 /// `denied` takes that same button: it is the ask, just pointed at the one place that can
 /// still answer it, so giving it a different shape would read as a different feature.
 ///
-/// Once granted, searching and not-found collapse to a muted line — an idle home screen
-/// shouldn't carry a box announcing that a TV simply isn't switched on.
+/// Once granted, searching, not-found and the off-Wi-Fi hint collapse to a muted line — an
+/// idle home screen shouldn't carry a box announcing that a TV simply isn't switched on.
 private struct NearbyStatusCard: View {
     let state: NearbyStatus
     let onAsk: () -> Void
@@ -775,9 +788,11 @@ private struct NearbyStatusCard: View {
         case .denied:
             askButton(Text("Allow in Settings"), action: onOpenSettings)
         case .searching:
-            statusLine(Text("Searching for TVs…"), showsProgress: true)
+            statusLine(Text("Searching for rooms…"), showsProgress: true)
+        case .noWifi:
+            statusLine(Text("Connect to Wi-Fi to find rooms nearby"), icon: "wifi.slash")
         case .none:
-            statusLine(Text("No TV found"), showsProgress: false)
+            statusLine(Text("No rooms found"))
         }
     }
 
@@ -803,14 +818,20 @@ private struct NearbyStatusCard: View {
 
     /// A 48pt minimum height keeps the muted states interchangeable without the cards
     /// below moving.
-    private func statusLine(_ text: Text, showsProgress: Bool) -> some View {
+    private func statusLine(
+        _ text: Text,
+        icon: String = "antenna.radiowaves.left.and.right",
+        showsProgress: Bool = false
+    ) -> some View {
+        // The button's metrics (glyph and title size) so the slot doesn't change scale
+        // as it moves between offering and reporting — only the muted color says "status".
         HStack(spacing: 10) {
             if showsProgress {
-                ProgressView().controlSize(.small)
+                ProgressView().controlSize(.regular)
             } else {
-                Image(systemName: "antenna.radiowaves.left.and.right").font(.footnote)
+                Image(systemName: icon).font(.cpTitleMedium)
             }
-            text.font(.cpBodyMedium)
+            text.font(.cpTitleMedium)
             Spacer(minLength: 0)
         }
         .foregroundStyle(.secondary)
@@ -933,6 +954,7 @@ private struct PreviewStrip<Content: View>: View {
         NearbyStatusCard(state: .ask, onAsk: {}, onOpenSettings: {})
         NearbyStatusCard(state: .searching, onAsk: {}, onOpenSettings: {})
         NearbyStatusCard(state: .none, onAsk: {}, onOpenSettings: {})
+        NearbyStatusCard(state: .noWifi, onAsk: {}, onOpenSettings: {})
         NearbyStatusCard(state: .denied, onAsk: {}, onOpenSettings: {})
         NearbyCard(room: CardSamples.nearbyFull) {}
         NearbyCard(room: CardSamples.nearbyDeviceOnly) {}
@@ -949,6 +971,7 @@ private struct PreviewStrip<Content: View>: View {
         NearbyStatusCard(state: .ask, onAsk: {}, onOpenSettings: {})
         NearbyStatusCard(state: .searching, onAsk: {}, onOpenSettings: {})
         NearbyStatusCard(state: .none, onAsk: {}, onOpenSettings: {})
+        NearbyStatusCard(state: .noWifi, onAsk: {}, onOpenSettings: {})
         NearbyStatusCard(state: .denied, onAsk: {}, onOpenSettings: {})
         NearbyCard(room: CardSamples.nearbyFull) {}
         NearbyCard(room: CardSamples.nearbyAndroidTv) {}

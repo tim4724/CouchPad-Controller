@@ -4,6 +4,10 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
@@ -341,6 +345,57 @@ object NearbyAdvertiser {
   private fun failed(listener: NsdManager.RegistrationListener) {
     if (registration === listener) stop()
   }
+}
+
+/**
+ * Whether a network mDNS could possibly traverse — Wi-Fi or Ethernet — is up. On cellular
+ * only, browsing "runs" and finds nothing, so the home slot's "Searching…"/"No rooms
+ * found" would claim a search that never had anywhere to look; this is what swaps that
+ * claim for the join-the-Wi-Fi hint. It only ever picks the slot's wording — discovery
+ * itself keeps running: a phone hosting its own hotspot reports no Wi-Fi transport here,
+ * yet rooms on that hotspot still resolve, and a found room simply replaces the hint.
+ */
+fun lanAvailable(context: Context): Flow<Boolean> = callbackFlow {
+  val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE)
+    as? ConnectivityManager
+  if (cm == null) {
+    trySend(true)
+    awaitClose {}
+    return@callbackFlow
+  }
+  // The callback replays onAvailable for already-up networks, but only asynchronously —
+  // seed from the active network so a cellular-only launch doesn't sit on the optimistic
+  // default until something changes.
+  val active = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+  trySend(
+    active?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
+      active?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true,
+  )
+  // Track the SET of matching networks: Wi-Fi and Ethernet can be up together, and
+  // losing one of two must not read as losing the LAN.
+  val lans = mutableSetOf<Network>()
+  val callback = object : ConnectivityManager.NetworkCallback() {
+    override fun onAvailable(network: Network) {
+      synchronized(lans) { lans.add(network) }
+      trySend(true)
+    }
+
+    override fun onLost(network: Network) {
+      trySend(synchronized(lans) { lans.remove(network); lans.isNotEmpty() })
+    }
+  }
+  val request = NetworkRequest.Builder()
+    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+    .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
+    // The default request also demands declared INTERNET, which an internet-less
+    // hotspot/LAN — a network this feature explicitly serves — may never claim; the
+    // question here is "is a LAN up", not "can it reach the WAN". NOT_VPN stays: a
+    // VPN network re-declares its underlying Wi-Fi transport and would double-count.
+    .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    .build()
+  runCatching { cm.registerNetworkCallback(request, callback) }
+    .onFailure { trySend(true) } // can't watch — stay optimistic, never hide behind the hint
+  awaitClose { runCatching { cm.unregisterNetworkCallback(callback) } }
 }
 
 /**

@@ -5,6 +5,7 @@
     <string name="about">О приложении</string>
     <string name="nearby_denied">Разрешить в настройках</string>
     <string name="nearby_find">Показать комнаты поблизости</string>
+    <string name="nearby_no_wifi">Подключись к Wi-Fi, чтобы найти комнаты поблизости</string>
     <string name="nearby_none">Комнаты не найдены</string>
     <string name="nearby_searching">Поиск комнат…</string>
     <string name="device_apple_tv">Apple TV</string>

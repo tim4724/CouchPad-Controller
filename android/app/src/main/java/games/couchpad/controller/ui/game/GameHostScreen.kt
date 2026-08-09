@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.net.Uri
@@ -30,9 +31,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,15 +50,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,6 +71,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -104,6 +112,7 @@ import games.couchpad.controller.ui.components.PlayerChip
 import games.couchpad.controller.ui.components.ServerUnreachableRetry
 import games.couchpad.controller.ui.components.denyLocalFileAccess
 import games.couchpad.controller.ui.components.findActivity
+import games.couchpad.controller.ui.components.gestureNavEnabled
 import games.couchpad.controller.ui.components.hideNavigationBar
 import games.couchpad.controller.ui.components.themeLightBarIcons
 import games.couchpad.controller.ui.main.ProfileSheet
@@ -240,16 +249,15 @@ private fun GameHostContent(
   // cap on gesture exclusion, so the WebView's exclusion rects (set below) can
   // cover the whole play area.
   //
-  // But that state follows the ARMED state (CONTRACT.md §9), because both reasons to
-  // hide the bar lapse the moment the page arms system back:
-  //  - the lifted cap only matters while we exclude the whole surface; an armed page
-  //    excludes nothing, so there is no cap left to lift.
-  //  - while the bar is hidden, transient-by-swipe spends the FIRST edge swipe
-  //    revealing it instead of going back — the page's first back would be eaten,
-  //    and the player has to swipe twice.
+  // Arming (CONTRACT.md §9) only changes that for a 3-BUTTON player: their back is a
+  // button, and a hidden bar has no buttons — so the bar comes back for as long as
+  // the page stays armed. Under gesture navigation the bar stays hidden: the system
+  // still delivers the edge back swipe while it's hidden (the transient reveal is
+  // the BOTTOM edge's gesture, not the sides'), and showing it would only re-grow
+  // the safe zone the page just paid for.
   LaunchedEffect(systemBackEnabled) {
     val window = context.findActivity()?.window ?: return@LaunchedEffect
-    if (systemBackEnabled) {
+    if (systemBackEnabled && !gestureNavEnabled(context)) {
       WindowCompat.getInsetsController(window, view).show(WindowInsetsCompat.Type.navigationBars())
     } else {
       hideNavigationBar(window, view)
@@ -355,23 +363,31 @@ private fun GameHostContent(
   val barColor by animateColorAsState(barTarget, tween(300), label = "gameBarColor")
   val barContent = pageTheme.bar?.let(::contentColorOn)
 
-  // Safe-zone geometry, measured off the real layout (window px). Top is the
-  // chrome's full extent (inset + LEAVE bar). Both sides get ONE shared value — the
-  // largest of the side cutout, a side-mounted nav bar and the chip's gutter — so the
-  // page lines up with the close icon and the name chip alike. Bottom is the cutout,
-  // or the nav bar once an armed page brings it back — reported as visible insets, so
-  // this is 0 again while it is hidden.
+  // Safe-zone geometry, measured off the real layout (window px). In PORTRAIT the
+  // top is the chrome's full extent (inset + LEAVE bar) and the sides carry the
+  // chip's gutter. In LANDSCAPE there is no bar — the chrome collapses to the two
+  // stacked icons in a side strip, the top shrinks to the bare cutout (the
+  // game gets the full height), and the sides carry the icon column instead. Both
+  // sides always get ONE shared value (§5 levelling). Bottom is the cutout, or the
+  // nav bar when a 3-button player's armed page brings it back — reported as
+  // visible insets, so this is 0 again while it is hidden.
   var chromeHeightPx by remember { mutableStateOf(0) }
   var chromeWidthPx by remember { mutableStateOf(0) }
   var chipRightPx by remember { mutableStateOf(0) }
+  // The landscape icon column's intrusion from its own screen edge, in window px.
+  var railEndPx by remember { mutableStateOf(0) }
+  val isLandscapeUi =
+    LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val cutout = WindowInsets.displayCutout
+  val cutoutTop = cutout.getTop(density)
   val cutoutBottom = cutout.getBottom(density)
   val navBars = WindowInsets.navigationBars
   val navBottom = navBars.getBottom(density)
   // ONE side inset for the chrome's padding and both published sides: the larger
   // cutout — plus the nav bar's sides, because in landscape the 3-BUTTON bar sits on
   // a side, not the bottom, so a §9-armed page bringing it back would otherwise cover
-  // "safe" game UI (and the chip). Visible insets: all zero while the bars are hidden,
+  // "safe" game UI (and the icon column; the chip, in portrait). Visible insets: all
+  // zero while the bars are hidden,
   // and the gesture pill lands in navBottom, so nothing changes outside that one case.
   val sideInsetPx = maxOf(
     cutout.getLeft(density, layoutDirection),
@@ -379,6 +395,7 @@ private fun GameHostContent(
     navBars.getLeft(density, layoutDirection),
     navBars.getRight(density, layoutDirection),
   )
+  var safeTopPx by remember { mutableStateOf(0) }
   var safeLeftPx by remember { mutableStateOf(0) }
   var safeRightPx by remember { mutableStateOf(0) }
   var safeBottomPx by remember { mutableStateOf(0) }
@@ -395,7 +412,7 @@ private fun GameHostContent(
     fun cssPx(px: Int) = ceil(px / d).toInt()
     webView?.evaluateJavascript(
       "(() => { const s = document.documentElement.style;" +
-        " s.setProperty('--cp-safe-top', '${cssPx(chromeHeightPx)}px');" +
+        " s.setProperty('--cp-safe-top', '${cssPx(safeTopPx)}px');" +
         " s.setProperty('--cp-safe-left', '${cssPx(safeLeftPx)}px');" +
         " s.setProperty('--cp-safe-right', '${cssPx(safeRightPx)}px');" +
         " s.setProperty('--cp-safe-bottom', '${cssPx(safeBottomPx)}px'); })()",
@@ -410,14 +427,18 @@ private fun GameHostContent(
     chromeHeightPx,
     chromeWidthPx,
     chipRightPx,
+    railEndPx,
     sideInsetPx,
+    cutoutTop,
     cutoutBottom,
     navBottom,
+    isLandscapeUi,
     webView,
   ) {
-    // ONE horizontal inset for both sides, measured off the chip. The chrome is padded
-    // symmetrically (see above), so this already carries the larger side obstruction
-    // plus the chrome's content gutter — no per-side mirroring left to do.
+    // ONE horizontal inset for both sides, measured off the chrome's own content —
+    // the chip's gutter in portrait, the icon column's extent in landscape. The
+    // chrome is padded/placed inside the levelled strip, so this already carries the
+    // larger side obstruction — no per-side mirroring left to do.
     //
     // Levelling is parity, not preference: UIKit reports the notch inset on BOTH sides
     // in landscape, so iOS hands the same page a symmetric box. Publishing the lopsided
@@ -425,9 +446,14 @@ private fun GameHostContent(
     // the cost of the two apps disagreeing about the same page. In portrait the cutout
     // is on the top edge, so both sides were already equal and this changes nothing.
     val side =
-      if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx).coerceAtLeast(sideInsetPx) else sideInsetPx
+      if (isLandscapeUi) maxOf(railEndPx, sideInsetPx)
+      else if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx).coerceAtLeast(sideInsetPx)
+      else sideInsetPx
     safeLeftPx = side
     safeRightPx = side
+    // Landscape has no bar (the icons live in the side strip), so the game gets the
+    // full height back — top is the bare cutout, which is 0 on a mid-edge punch-hole.
+    safeTopPx = if (isLandscapeUi) cutoutTop else chromeHeightPx
     safeBottomPx = maxOf(cutoutBottom, navBottom)
     pushSafeZone()
     webView?.requestApplyInsets()
@@ -482,17 +508,20 @@ private fun GameHostContent(
           // self-consistent. Chromium only honors cutouts while the WebView spans
           // the whole display, so the --cp-safe-* vars stay the source of truth.
           ViewCompat.setOnApplyWindowInsetsListener(this) { v, _ ->
+            // Gate on the portrait chrome having measured once (the host always
+            // enters in portrait), not on the published top — a landscape top is
+            // legitimately 0.
             if (chromeHeightPx > 0) {
-              val safe = Insets.of(safeLeftPx, chromeHeightPx, safeRightPx, safeBottomPx)
+              val safe = Insets.of(safeLeftPx, safeTopPx, safeRightPx, safeBottomPx)
               val bounds = buildList {
-                add(Rect(0, 0, v.width, chromeHeightPx))
+                if (safeTopPx > 0) add(Rect(0, 0, v.width, safeTopPx))
                 if (safeBottomPx > 0) add(Rect(0, v.height - safeBottomPx, v.width, v.height))
                 if (safeLeftPx > 0) add(Rect(0, 0, safeLeftPx, v.height))
                 if (safeRightPx > 0) add(Rect(v.width - safeRightPx, 0, v.width, v.height))
               }
               WindowInsetsCompat.Builder()
                 .setInsets(WindowInsetsCompat.Type.displayCutout(), safe)
-                .setDisplayCutout(DisplayCutoutCompat(Rect(safeLeftPx, chromeHeightPx, safeRightPx, safeBottomPx), bounds))
+                .setDisplayCutout(DisplayCutoutCompat(Rect(safeLeftPx, safeTopPx, safeRightPx, safeBottomPx), bounds))
                 .build()
                 .toWindowInsets()
                 ?.let { v.onApplyWindowInsets(it) }
@@ -599,47 +628,62 @@ private fun GameHostContent(
         ServerUnreachableRetry(onRetry = retry, background = MaterialTheme.colorScheme.surface)
       }
     }
-    // The floating chrome: status-bar strip + LEAVE bar over a scrim. Top +
-    // horizontal insets only, deliberately: when a keyboard opens the system
-    // re-marks the (hidden) nav bar visible, and a nav-tracking inset would move
-    // the chrome. The game surface never resizes for anything — the keyboard
-    // overlays it, like a video player.
-    Column(
-      Modifier
-        .fillMaxWidth()
-        .onGloballyPositioned {
-          chromeHeightPx = it.size.height
-          chromeWidthPx = it.size.width
-        }
-        .background(
-          Brush.verticalGradient(
-            0f to barColor.copy(alpha = 0.9f),
-            0.65f to barColor.copy(alpha = 0.5f),
-            1f to barColor.copy(alpha = 0f),
-          ),
-        )
-        // Top from the bars; horizontal SYMMETRIC rather than per-side. A landscape
-        // cutout is on one side only, and padding the chrome by the raw per-side inset
-        // put the X and the name chip on a different box than the (levelled) safe zone
-        // we publish to the page — the chip sat nearer the edge than any game UI is
-        // allowed to. Padding both sides by the larger keeps launcher chrome and page
-        // content on the same margin, and makes the gutter measured off the chip below
-        // symmetric by construction.
-        .windowInsetsPadding(
-          WindowInsets.statusBars.union(WindowInsets.displayCutout)
-            .only(WindowInsetsSides.Top),
-        )
-        .padding(horizontal = with(density) { sideInsetPx.toDp() }),
-    ) {
-      LeaveBar(
-        title = displayTitle,
+    // The floating chrome. Landscape: no bar at all — the game keeps the full
+    // height, and the two session controls stack in a side strip the levelled
+    // safe zone reserves anyway (right when the cutout allows, else left).
+    if (isLandscapeUi) {
+      LandscapeChrome(
         playerName = profile.name,
         onLeave = leave,
         onEditName = { showProfile = true },
+        barColor = barColor,
         contentColor = barContent,
-        accented = pageTheme.accent != null,
-        onChipRight = { chipRightPx = it.roundToInt() },
+        sideInsetPx = sideInsetPx,
+        onRailEnd = { railEndPx = it },
       )
+    } else {
+      // Portrait: status-bar strip + LEAVE bar over a scrim. Top + horizontal
+      // insets only, deliberately: when a keyboard opens the system re-marks the
+      // (hidden) nav bar visible, and a nav-tracking inset would move the chrome.
+      // The game surface never resizes for anything — the keyboard overlays it,
+      // like a video player.
+      Column(
+        Modifier
+          .fillMaxWidth()
+          .onGloballyPositioned {
+            chromeHeightPx = it.size.height
+            chromeWidthPx = it.size.width
+          }
+          .background(
+            Brush.verticalGradient(
+              0f to barColor.copy(alpha = 0.9f),
+              0.65f to barColor.copy(alpha = 0.5f),
+              1f to barColor.copy(alpha = 0f),
+            ),
+          )
+          // Top from the bars; horizontal SYMMETRIC rather than per-side. A landscape
+          // cutout is on one side only, and padding the chrome by the raw per-side inset
+          // put the X and the name chip on a different box than the (levelled) safe zone
+          // we publish to the page — the chip sat nearer the edge than any game UI is
+          // allowed to. Padding both sides by the larger keeps launcher chrome and page
+          // content on the same margin, and makes the gutter measured off the chip below
+          // symmetric by construction.
+          .windowInsetsPadding(
+            WindowInsets.statusBars.union(WindowInsets.displayCutout)
+              .only(WindowInsetsSides.Top),
+          )
+          .padding(horizontal = with(density) { sideInsetPx.toDp() }),
+      ) {
+        LeaveBar(
+          title = displayTitle,
+          playerName = profile.name,
+          onLeave = leave,
+          onEditName = { showProfile = true },
+          contentColor = barContent,
+          accented = pageTheme.accent != null,
+          onChipRight = { chipRightPx = it.roundToInt() },
+        )
+      }
     }
   }
 
@@ -704,6 +748,91 @@ private fun LeaveBar(
       // Transparent: the host's fading scrim is the bar's backdrop.
       colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
     )
+  }
+}
+
+// The landscape chrome: Close and the rename affordance stacked at the top-RIGHT
+// corner, floating in the strip the levelled side inset (§5) reserves anyway — no
+// bar, so the game keeps the full height. Physical sides, not start/end: the
+// choice is driven by where the camera is, not by reading direction. Placement
+// uses the DETAILED cutout geometry (boundingRects, not just the inset): a
+// mid-edge punch-hole sits half way down the side and leaves the corner free, so
+// the column stays top-right; a corner camera on the right flips the column to
+// the left when that corner is free, and only when both corners are occupied
+// does it stay right and drop below the rect. [onRailEnd] reports the column's
+// intrusion from its own screen edge (window px) so the host can fold it into
+// the levelled published side inset.
+@Composable
+private fun BoxScope.LandscapeChrome(
+  playerName: String,
+  onLeave: () -> Unit,
+  onEditName: () -> Unit,
+  barColor: Color,
+  contentColor: Color?,
+  sideInsetPx: Int,
+  onRailEnd: (Int) -> Unit,
+) {
+  val view = LocalView.current
+  val density = LocalDensity.current
+  val buttonPx = with(density) { 48.dp.toPx() }
+  val gapPx = with(density) { 4.dp.toPx() }
+  // Center the buttons inside the strip when it's wide enough; hug the edge
+  // otherwise — the published side inset grows to the column's extent either way,
+  // so game UI never sits under a touch target.
+  val edgePadPx = ((sideInsetPx - buttonPx) / 2).coerceAtLeast(gapPx)
+  val colEndPx = edgePadPx + buttonPx
+  val colHeightPx = buttonPx * 2 + gapPx * 2
+  // Pick the side, then how far to drop below any cutout rect the column would
+  // overlap (keyed on the inset so it re-reads after a rotation or a 180° flip
+  // re-dispatches the insets). Right is preferred; a corner camera there flips
+  // the column to the left unless the left corner is occupied too.
+  val (onRight, dodgePx) = remember(view, sideInsetPx) {
+    val rects = ViewCompat.getRootWindowInsets(view)?.displayCutout?.boundingRects.orEmpty()
+    fun dodgeFor(right: Boolean): Float {
+      var top = 0f
+      for (r in rects.sortedBy { it.top }) {
+        val overlapsX = if (right) r.right > view.width - colEndPx else r.left < colEndPx
+        if (overlapsX && r.top < top + colHeightPx && r.bottom > top) top = r.bottom + gapPx * 2
+      }
+      return top
+    }
+    val rightDodge = dodgeFor(right = true)
+    if (rightDodge == 0f || dodgeFor(right = false) > 0f) true to rightDodge
+    else false to 0f
+  }
+  val content = contentColor ?: MaterialTheme.colorScheme.onSurface
+  val edgePad = with(density) { edgePadPx.toDp() }
+  Column(
+    Modifier
+      .align(if (onRight) AbsoluteAlignment.TopRight else AbsoluteAlignment.TopLeft)
+      .absolutePadding(
+        left = if (onRight) 0.dp else edgePad,
+        right = if (onRight) edgePad else 0.dp,
+        top = with(density) { dodgePx.toDp() } + 4.dp,
+      )
+      .onGloballyPositioned {
+        val b = it.boundsInWindow()
+        onRailEnd((if (onRight) view.width - b.left else b.right).roundToInt())
+      },
+    verticalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    val colors = IconButtonDefaults.iconButtonColors(
+      containerColor = barColor.copy(alpha = 0.55f),
+      contentColor = content,
+    )
+    // Provided OUTSIDE the IconButtons, for their ripples: ripple() resolves
+    // LocalContentColor at the button's own node — the launcher theme's ambient,
+    // not the button's colors.contentColor — so without this a dark-mode launcher
+    // draws a white (invisible) ripple on a light game-theme scrim.
+    CompositionLocalProvider(LocalContentColor provides content) {
+      IconButton(onClick = onLeave, colors = colors) {
+        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.leave_game))
+      }
+      // Icon-only rename affordance; announces the name it edits, like the chip.
+      IconButton(onClick = onEditName, colors = colors) {
+        Icon(Icons.Filled.Person, contentDescription = playerName.ifBlank { stringResource(R.string.set_name) })
+      }
+    }
   }
 }
 

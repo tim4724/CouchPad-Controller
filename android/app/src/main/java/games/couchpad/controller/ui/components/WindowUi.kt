@@ -81,9 +81,22 @@ fun hideNavigationBar(window: Window, view: View) {
 }
 
 /**
+ * True when the system is in full gesture navigation (no bar buttons). Reads the
+ * framework's own interaction-mode resource (0 = 3-button, 1 = 2-button,
+ * 2 = gestural). Missing on some OEM skins — that reads as not-gesture, which
+ * errs toward showing the nav bar: a visible back beats a hidden one.
+ */
+fun gestureNavEnabled(context: Context): Boolean {
+  val res = context.resources
+  val id = res.getIdentifier("config_navBarInteractionMode", "integer", "android")
+  return id != 0 && res.getInteger(id) == 2
+}
+
+/**
  * A sheet/dialog is its OWN window: opened over a host with hidden bars, it would
  * bring them back. Mirror the host's state per bar type — in-game the hidden set is
- * the nav bar (unless the page armed system back) plus, in landscape, the status bar,
+ * the nav bar (unless a 3-button player's page armed system back) plus, in
+ * landscape, the status bar,
  * so an all-or-nothing probe would rarely match. Probes the live insets on every call,
  * so it tracks both mid-game. No-op when the host shows its bars normally, so every
  * overlay can call this unconditionally.

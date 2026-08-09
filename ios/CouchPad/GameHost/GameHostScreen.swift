@@ -42,7 +42,15 @@ struct GameHostScreen: View {
     @State private var chromeHeight: CGFloat = 0
     @State private var chromeWidth: CGFloat = 0
     @State private var chipRight: CGFloat = 0
+    // The landscape icon rail's intrusion from the physical right edge (window points).
+    @State private var railEnd: CGFloat = 0
     @State private var cutout = EdgeInsets()
+    // Safe-area-bounded size from cutoutReader — orientation truth for the chrome.
+    @State private var hostSize: CGSize = .zero
+
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    private var isLandscape: Bool { hostSize.width > hostSize.height }
 
     // MARK: - Derived
 
@@ -80,17 +88,21 @@ struct GameHostScreen: View {
         return bar
     }
 
-    /// Safe-zone geometry (points, ints). Top is the chrome's full extent (inset +
-    /// Leave bar). Both sides get ONE shared value — the larger cutout or the chip's
-    /// gutter, whichever wins — so the page lines up with the close icon and the name
-    /// chip alike. Bottom is the bare cutout (no chrome there).
+    /// Safe-zone geometry (points, ints). In PORTRAIT the top is the chrome's full
+    /// extent (inset + Leave bar) and the sides carry the chip's gutter. In
+    /// LANDSCAPE there is no bar — the chrome collapses to the icon rail in the
+    /// leading strip, the top shrinks to the bare cutout (the game gets the full
+    /// height), and the sides carry the rail instead. Both sides always get ONE
+    /// shared value (§5 levelling). Bottom is the bare cutout (no chrome there).
     private var computedSafeZone: SafeZone {
-        let safeTop = chromeHeight
         // Level the two sides to the larger — see the matching note in Android's
-        // GameHostScreen. The chrome above is padded symmetrically too, so its own X and
-        // name chip sit on this same box rather than beside it.
+        // GameHostScreen. The chrome is padded/placed inside this same strip, so its
+        // own controls sit on the published box rather than beside it.
         let sideCutout = max(cutout.leading, cutout.trailing)
-        let side = chromeWidth > 0 ? max(chromeWidth - chipRight, sideCutout) : sideCutout
+        let safeTop = isLandscape ? cutout.top : chromeHeight
+        let side = isLandscape
+            ? max(sideCutout, railEnd)
+            : (chromeWidth > 0 ? max(chromeWidth - chipRight, sideCutout) : sideCutout)
         let safeBottom = cutout.bottom
         // Ceil, not round, matching Android: an inset that lands mid-point must cover
         // the obstruction, never stop short — and it keeps --cp-safe-* from losing to
@@ -208,8 +220,12 @@ struct GameHostScreen: View {
     private var cutoutReader: some View {
         GeometryReader { proxy in
             Color.clear
-                .onAppear { cutout = proxy.safeAreaInsets }
+                .onAppear {
+                    cutout = proxy.safeAreaInsets
+                    hostSize = proxy.size
+                }
                 .onChange(of: proxy.safeAreaInsets) { _, newValue in cutout = newValue }
+                .onChange(of: proxy.size) { _, newValue in hostSize = newValue }
         }
     }
 
@@ -237,11 +253,70 @@ struct GameHostScreen: View {
         }
     }
 
-    /// The floating chrome: status-bar strip + Leave bar over a fading scrim of the
+    /// The floating chrome. Landscape: no bar at all — the game keeps the full
+    /// height, and the two session controls stack in a side strip the levelled
+    /// side inset (§5) reserves anyway.
+    @ViewBuilder
+    private var chrome: some View {
+        if isLandscape { landscapeChrome } else { portraitChrome }
+    }
+
+    /// Landscape chrome: Close and the rename affordance at the top-RIGHT corner —
+    /// physical right, matching Android's camera-driven side pick rather than the
+    /// reading direction. The iPhone's landscape cutout (notch/island) sits
+    /// mid-edge, so that corner is always free — none of Android's dodge-or-flip
+    /// geometry for corner cameras is needed here.
+    private var landscapeChrome: some View {
+        VStack(spacing: 4) {
+            railButton("xmark", label: "Leave game", action: onLeave)
+            railButton(
+                "person.fill",
+                // Icon-only rename affordance; announces the name it edits, like the chip.
+                label: profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? String(localized: "Set name") : profile.name,
+                action: { renameRequest = RenameRequest(profile: profile) }
+            )
+        }
+        // Center the buttons inside the strip when it's wide enough; hug the edge
+        // otherwise — the published side inset grows to the rail's extent either way.
+        .padding(
+            layoutDirection == .leftToRight ? .trailing : .leading,
+            max((max(cutout.leading, cutout.trailing) - 44) / 2, 4)
+        )
+        .padding(.top, cutout.top + 4)
+        .onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .global)
+        } action: { frame in
+            // Intrusion from the physical right edge (.global coords are physical).
+            let fullWidth = hostSize.width + cutout.leading + cutout.trailing
+            railEnd = fullWidth - frame.minX
+        }
+        .frame(
+            maxWidth: .infinity, maxHeight: .infinity,
+            alignment: layoutDirection == .leftToRight ? .topTrailing : .topLeading
+        )
+        // Our explicit padding is the only inset — matching the portrait chrome.
+        .ignoresSafeArea()
+    }
+
+    private func railButton(_ systemName: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(barContent ?? hostPalette.onSurfaceVariant)
+                .frame(width: 44, height: 44)
+                .background(barTarget.opacity(0.55), in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// Portrait chrome: status-bar strip + Leave bar over a fading scrim of the
     /// bar color. Padded INSIDE the gradient by the top inset + horizontal cutouts
     /// only, so the gradient paints under the status bar and never moves for the
     /// keyboard.
-    private var chrome: some View {
+    private var portraitChrome: some View {
         VStack(spacing: 0) {
             LeaveBar(
                 title: displayTitle,

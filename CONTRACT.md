@@ -312,15 +312,18 @@ while armed. Android draws its system back arrow during the gesture and
 also routes the hardware/3-button back here; iOS has no equivalent system affordance
 during the swipe, so a game arming for a non-obvious reason should say so in its own UI.
 
-Arming also brings Android's navigation bar back on screen for as long as it lasts — while
-hidden, the system spends the first edge swipe revealing it instead of going back, which
-would cost the player their first gesture. **So `--cp-safe-bottom` grows while armed** (by
-the gesture pill, typically 24px) and shrinks again on disarm — except for a 3-button-nav
-player in landscape, where the bar sits on a *side* and it is the (levelled, §5) side
-insets that grow instead. One more reason to treat the safe zone as live rather than
-reading it once at startup. iOS is unaffected — its back
-gesture is the launcher's own recognizer, not a system one, and its home indicator is
-always in the safe area.
+Arming does **not** move the safe zone for a gesture-navigation player: the launcher
+keeps the navigation bar hidden, and the transient bars Android shows over a hidden-bar
+app are an overlay, not an inset. The cost sits in the gesture itself — after a few quiet
+seconds the system spends the first edge swipe *revealing* those transient bars instead
+of going back, and it is the follow-up swipe that lands here. Budget for the occasional
+double swipe, not for lost space. A **3-button-nav** player has no back without the bar's
+buttons, so for them arming still brings the bar back for as long as it lasts —
+`--cp-safe-bottom` grows in portrait, and in landscape (where a 3-button bar sits on a
+*side*) it is the (levelled, §5) side insets that grow — shrinking again on disarm. One
+more reason to treat the safe zone as live rather than reading it once at startup. iOS is
+unaffected — its back gesture is the launcher's own recognizer, not a system one, and its
+home indicator is always in the safe area.
 
 ## 10. Game → launcher, screen orientation: `setOrientation(mode)`
 
@@ -354,11 +357,14 @@ outright — an inline early call silently never runs, and the page comes up por
 nothing to say why. Same reason the checklist tells you to keep contract code in your own
 bundle.
 
-**The safe zone changes shape, not just size** (§5). In landscape the launcher's chrome
-still occupies the top, but the display cutout moves to a *side* inset — `--cp-safe-left`
-or `--cp-safe-right` becomes the large one, and which side it is depends on which way the
-player turned the phone. A layout that hard-codes "the notch is on top" breaks here. The
-vars are re-published on every rotation, so read them live rather than at startup.
+**The safe zone changes shape, not just size** (§5). In landscape the launcher's bar
+disappears entirely — the chrome collapses to two floating controls (leave, rename)
+stacked in one side strip — so `--cp-safe-top` typically drops to ~0 and the game gets
+the full height. The (levelled) *side* insets become the large ones, carrying the display
+cutout and the launcher's controls alike; which side the camera — and the controls — sit
+on is still deliberately not published. A layout that hard-codes "the notch is on top"
+breaks here. The vars are re-published on every rotation, so read them live rather than
+at startup.
 
 Inert in a plain browser: `CouchPadHost` doesn't exist, so the optional call is a no-op
 and the page keeps whatever the browser and the user's rotation lock were doing. A game

@@ -28,6 +28,7 @@ android {
     // to the applicationId below.
     namespace = "games.couchpad.controller"
     compileSdk = 37
+    compileSdkMinor = 1
     defaultConfig {
         // Play Store identity, reverse-DNS of couchpad.games. Changed in the 2026-07
         // rebrand while the app was still unpublished — this is a one-way door once

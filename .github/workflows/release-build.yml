@@ -107,7 +107,7 @@ jobs:
           packageName: games.couchpad.controller
           releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
           mappingFile: android/app/build/outputs/mapping/release/mapping.txt
-          track: alpha
+          tracks: alpha
           status: completed
 
   ios:

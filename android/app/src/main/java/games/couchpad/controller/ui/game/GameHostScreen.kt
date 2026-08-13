@@ -1,5 +1,6 @@
 package games.couchpad.controller.ui.game
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -24,6 +25,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -104,6 +107,10 @@ import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
 import games.couchpad.controller.data.NearbyAdvertiser
 import games.couchpad.controller.data.RecentRoomStore
+import games.couchpad.controller.data.clearLocalNetworkAsked
+import games.couchpad.controller.data.localNetworkPermanentlyDenied
+import games.couchpad.controller.data.localNetworkPermissionGranted
+import games.couchpad.controller.data.markLocalNetworkAsked
 import games.couchpad.controller.data.hostInDomain
 import games.couchpad.controller.data.isPrivateHost
 import games.couchpad.controller.theme.contentColorOn
@@ -213,6 +220,35 @@ private fun GameHostContent(
     webView?.reload()
     Unit
   }
+  // First-join local network gate: games open a direct WebRTC path to their display
+  // ("fastlane"), and Android 17 silently blocks LAN traffic without
+  // ACCESS_LOCAL_NETWORK. Asked HERE, with the page load held until the dialog is
+  // answered — a grant that lands after the page has started ICE is only picked up by
+  // the game's own retry loop, so resolving first makes the first connection
+  // deterministic. The join never blocks on the ANSWER: a deny loads the page anyway,
+  // which falls back to its relay exactly as on an AP-isolated network. Granted,
+  // locked (localNetworkPermanentlyDenied), or pre-enforcement SDKs skip straight
+  // through, so the hold happens at most on the first join or two ever.
+  var lanGateOpen by remember {
+    mutableStateOf(
+      localNetworkPermissionGranted(context) ||
+        localNetworkPermanentlyDenied(context, context.findActivity()),
+    )
+  }
+  val localNetworkPermission = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission(),
+  ) { granted ->
+    // A grant forgets the asked-once record — same rule as home's refreshDiscovery
+    // (see clearLocalNetworkAsked).
+    if (granted) clearLocalNetworkAsked(context)
+    lanGateOpen = true
+  }
+  LaunchedEffect(Unit) {
+    if (!lanGateOpen) {
+      markLocalNetworkAsked(context)
+      localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+    }
+  }
   val hostBridge = remember {
     CouchPadHostBridge(
       onGameEnded = { if (exited.compareAndSet(false, true)) currentOnGameEnd(it) },
@@ -238,8 +274,10 @@ private fun GameHostContent(
 
   // Relay this room to the local network while we're in it, so the next player can tap
   // instead of scan — and so the room stays discoverable even if its display never
-  // advertised. Publishes the room code only (§8); no URL, no device name.
-  DisposableEffect(joinUrl) {
+  // advertised. Publishes the room code only (§8); no URL, no device name. Re-keyed on
+  // the gate so a grant made there starts the advert in this same session (start() is
+  // a no-op while the permission is missing).
+  DisposableEffect(joinUrl, lanGateOpen) {
     RecentRoomStore.current()?.let { NearbyAdvertiser.start(context, it.roomCode) }
     onDispose { NearbyAdvertiser.stop() }
   }
@@ -475,6 +513,9 @@ private fun GameHostContent(
     // The game surface spans the FULL physical screen — the chrome floats above it,
     // and the page keeps its interactive UI inside the published safe zone.
     Box(Modifier.fillMaxSize()) {
+      // While the gate holds, the join cover below is the whole screen — the WebView
+      // (and with it loadUrl) only comes into existence once the dialog is answered.
+      if (lanGateOpen) {
       key(webViewKey) {
       AndroidView(
         modifier = Modifier.fillMaxSize(),
@@ -594,6 +635,7 @@ private fun GameHostContent(
         }
         },
       )
+      }
       }
       // "Joining…" cover that fades away once the controller has painted.
       // (Qualified: the ColumnScope overload would otherwise shadow this one.)

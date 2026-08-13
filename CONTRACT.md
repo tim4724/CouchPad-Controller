@@ -247,9 +247,14 @@ two TVs can tell them apart.
 
 Discovery is an accelerator, never the only route — mDNS is blocked on AP-isolated and
 guest networks, and both platforms gate it behind a permission the player must grant
-(iOS Local Network, Android `ACCESS_LOCAL_NETWORK`; the launcher asks only when the
-player asks for it, never at launch). A display that advertises must still show
-its QR and room code.
+(iOS Local Network, Android `ACCESS_LOCAL_NETWORK`). That permission governs ALL of a
+game's LAN traffic, including any direct peer connection a game negotiates on its own
+beside the relay — so the launcher asks at the player's first join, holding the
+controller page load until the dialog is answered: the verdict is then in force before
+the page's first connection attempt instead of racing it. A deny loads the page anyway,
+which must treat the LAN as hostile exactly as on an AP-isolated network. The launcher
+also asks when the player asks for discovery; never at launch. A display that
+advertises must still show its QR and room code.
 
 The card is branded from the manifest, not from the advertisement: the resolved game's
 `icon` (a square brand mark, distinct from the 16:9 `art`) sits on the leading tile, and

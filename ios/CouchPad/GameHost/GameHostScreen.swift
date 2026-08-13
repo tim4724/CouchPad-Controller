@@ -29,6 +29,14 @@ struct GameHostScreen: View {
     // inside a sheet content closure is not dependency-tracked and can be stale.
     @State private var renameRequest: RenameRequest? = nil
     @State private var loading = true
+    // First-join local network gate: games open a direct WebRTC path to their display
+    // ("fastlane"), and iOS blocks LAN traffic until Local Network is granted. The
+    // prompt fires here, with the page load held until a verdict — a grant landing
+    // after the page has started ICE is only picked up by the game's own retry loop.
+    // The join never blocks on the ANSWER: a deny loads the page anyway, which falls
+    // back to its relay exactly as on an AP-isolated network. Held at most once ever —
+    // an earlier discovery opt-in or a remembered verdict skips straight through.
+    @State private var lanGateOpen = NearbyOptIn.isSet || LocalNetworkPrompt.done
     // The main document failed to load (no connection / host unreachable) — drives the
     // in-place retry overlay. Retry bumps the token GameWebView observes to reload.
     @State private var failed = false
@@ -124,24 +132,29 @@ struct GameHostScreen: View {
 
             // The game surface spans the FULL physical screen — the chrome floats
             // above it, and the page keeps its interactive UI in the safe zone.
-            GameWebView(
-                joinUrl: joinUrl,
-                allowedDomains: allowed,
-                playerName: profile.name,
-                safeZone: computedSafeZone,
-                onLoaded: { withAnimation(.easeOut(duration: 0.3)) { loading = false } },
-                onGameEnd: onGameEnd,
-                onLeave: onLeave,
-                // The page's requested orientation (CONTRACT.md §10). Goes straight to
-                // ChromeState — it drives the window scene, not this view's layout, and
-                // the route-driven reset there is what guarantees home is portrait again.
-                onLandscape: { ChromeState.shared.orientation = $0 ? .landscape : .portrait },
-                failed: $failed,
-                reloadToken: reloadToken,
-                onThemeChanged: { pageTheme = $0 },
-                onTitleChanged: { pageTitle = $0 }
-            )
-            .ignoresSafeArea()
+            // While the gate holds, the join cover is the whole screen — the web view
+            // (and with it the load) only comes into existence once the dialog is
+            // answered.
+            if lanGateOpen {
+                GameWebView(
+                    joinUrl: joinUrl,
+                    allowedDomains: allowed,
+                    playerName: profile.name,
+                    safeZone: computedSafeZone,
+                    onLoaded: { withAnimation(.easeOut(duration: 0.3)) { loading = false } },
+                    onGameEnd: onGameEnd,
+                    onLeave: onLeave,
+                    // The page's requested orientation (CONTRACT.md §10). Goes straight to
+                    // ChromeState — it drives the window scene, not this view's layout, and
+                    // the route-driven reset there is what guarantees home is portrait again.
+                    onLandscape: { ChromeState.shared.orientation = $0 ? .landscape : .portrait },
+                    failed: $failed,
+                    reloadToken: reloadToken,
+                    onThemeChanged: { pageTheme = $0 },
+                    onTitleChanged: { pageTitle = $0 }
+                )
+                .ignoresSafeArea()
+            }
 
             // "Joining…" cover that fades away once the controller has painted.
             // (Not while failed — the retry cover replaces it, like Android's
@@ -199,10 +212,20 @@ struct GameHostScreen: View {
             ChromeState.shared.statusBarStyle =
                 relativeLuminance(target) > 0.5 ? .darkContent : .lightContent
         }
+        .task {
+            guard !lanGateOpen else { return }
+            // A grant made here is the same authorization discovery uses, so light
+            // discovery up too — matching Android 17+, where the permission IS the
+            // opt-in memory (nearbyOptedIn).
+            if await requestLocalNetworkAccess() { NearbyOptIn.set() }
+            lanGateOpen = true
+        }
         // Relay this room to the local network while we're in it, so the next player can
         // tap instead of scan — and so the room stays discoverable even if its display
         // never advertised. Publishes the room code only (§8); no URL, no device name.
-        .task(id: joinUrl) {
+        // Re-keyed on the gate so a grant made there starts the advert in this same
+        // session (start() is a no-op without the opt-in).
+        .task(id: "\(lanGateOpen)|\(joinUrl)") {
             guard let room = RecentRoomStore.current() else { return }
             NearbyAdvertiser.shared.start(roomCode: room.roomCode)
             defer { NearbyAdvertiser.shared.stop() }

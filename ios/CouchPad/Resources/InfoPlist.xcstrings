@@ -104,67 +104,67 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad sucht nach CouchPad-Spielen auf deinem Fernseher, damit du ohne Code-Scan beitreten kannst."
+            "value" : "CouchPad verbindet sich direkt mit dem Spiel auf deinem Fernseher für die schnellste Steuerung und findet Räume in der Nähe, damit du ohne Code-Scan beitreten kannst."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad looks for CouchPad games on your TV so you can join without scanning a code."
+            "value" : "CouchPad connects directly to the game on your TV for the fastest controls, and finds nearby rooms so you can join without scanning a code."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad busca partidas de CouchPad en tu TV para que puedas unirte sin escanear un código."
+            "value" : "CouchPad se conecta directamente al juego de tu TV para que los controles respondan al instante y encuentra salas cercanas para que puedas unirte sin escanear un código."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad recherche les parties CouchPad sur ta TV pour que tu puisses rejoindre sans scanner de code."
+            "value" : "CouchPad se connecte directement au jeu sur ta TV pour des commandes ultra-réactives et trouve les salons à proximité pour que tu puisses rejoindre sans scanner de code."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad cerca partite CouchPad sulla tua TV così puoi unirti senza scansionare un codice."
+            "value" : "CouchPad si collega direttamente al gioco sulla tua TV per controlli più reattivi e trova le stanze nelle vicinanze così puoi unirti senza scansionare un codice."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPadは、コードをスキャンせずに参加できるよう、テレビで実行中のCouchPadゲームを探します。"
+            "value" : "CouchPadは、最速の操作反応のためにテレビのゲームへ直接接続し、コードをスキャンせずに参加できるよう近くのルームを探します。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad는 코드를 스캔하지 않고 참여할 수 있도록 TV에서 실행 중인 CouchPad 게임을 찾습니다."
+            "value" : "CouchPad는 가장 빠른 조작 반응을 위해 TV의 게임에 직접 연결하고, 코드를 스캔하지 않고 참여할 수 있도록 주변 방을 찾습니다."
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "O CouchPad procura jogos do CouchPad na sua TV para você entrar sem escanear um código."
+            "value" : "O CouchPad se conecta diretamente ao jogo na sua TV para controles mais rápidos e encontra salas próximas para você entrar sem escanear um código."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad ищет игры CouchPad на телевизоре, чтобы можно было присоединиться без сканирования кода."
+            "value" : "CouchPad подключается напрямую к игре на телевизоре для максимально быстрого управления и находит комнаты поблизости, чтобы можно было присоединиться без сканирования кода."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad, kod taramadan katılabilmen için TV'ndeki CouchPad oyunlarını arar."
+            "value" : "CouchPad, en hızlı kontroller için TV'ndeki oyuna doğrudan bağlanır ve kod taramadan katılabilmen için yakındaki odaları bulur."
           }
         },
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CouchPad 会查找电视上运行的 CouchPad 游戏，让你无需扫码即可加入。"
+            "value" : "CouchPad 会直接连接电视上的游戏以获得最快的操控响应，并查找附近的房间，让你无需扫码即可加入。"
           }
         }
       }

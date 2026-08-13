@@ -8,6 +8,15 @@ import Network
 /// wants one; same wire protocol either way).
 let nearbyServiceType = "_couchpad._tcp"
 
+/// kDNSServiceErr_PolicyDenied: Local Network was refused. iOS has no query API, so
+/// this DNS error surfacing on a browse is the only "you said no" signal there is.
+private let dnsPolicyDeniedCode: Int32 = -65570
+
+private func isPolicyDenied(_ error: NWError) -> Bool {
+    if case .dns(let code) = error { return code == dnsPolicyDeniedCode }
+    return false
+}
+
 /// TXT `c` — the room code, the advertisement's payload (§8).
 private let codeKey = "c"
 
@@ -186,6 +195,76 @@ enum NearbyOptIn {
     static func set() { UserDefaults.standard.set(true, forKey: key) }
 }
 
+/// Remembers that the first-join Local Network gate (GameHostScreen) reached a verdict —
+/// granted or denied — so no later join ever holds the page load again. Distinct from
+/// `NearbyOptIn`: a deny must be remembered too, and iOS never re-prompts — only the
+/// Settings toggle changes the answer after that.
+enum LocalNetworkPrompt {
+    private static let key = "cp_lan.prompted"
+
+    static var done: Bool { UserDefaults.standard.bool(forKey: key) }
+
+    static func markDone() { UserDefaults.standard.set(true, forKey: key) }
+}
+
+/// Fires the system Local Network prompt — iOS has no ask API, so starting a Bonjour
+/// browse IS the ask — and waits for a verdict: `.ready` is a grant, PolicyDenied a
+/// denial (the same signals NearbyBrowser reads). Returns whether access was granted.
+///
+/// Best effort by construction: if the OS surfaces PolicyDenied while the dialog is
+/// still pending rather than after a "Don't Allow", the gate opens early and a
+/// mid-load grant is recovered by the game's own fastlane retry — the relay path
+/// works throughout either way. The timeout covers verdict-less states (no network
+/// interface at all); it deliberately does NOT mark the prompt done, so a join on a
+/// healthy network gets to ask again.
+@MainActor
+func requestLocalNetworkAccess() async -> Bool {
+    let browser = NWBrowser(
+        for: .bonjourWithTXTRecord(type: nearbyServiceType, domain: nil),
+        using: NWParameters.tcp
+    )
+    // nil = no verdict (failed/timeout): don't remember, don't claim a grant.
+    let granted = await withCheckedContinuation { (cont: CheckedContinuation<Bool?, Never>) in
+        let settle = OneShot(cont)
+        browser.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                Task { @MainActor in settle.resolve(true) }
+            case .waiting(let error):
+                // Any non-denied .waiting is transient.
+                if isPolicyDenied(error) { Task { @MainActor in settle.resolve(false) } }
+            case .failed:
+                Task { @MainActor in settle.resolve(nil) }
+            default:
+                break
+            }
+        }
+        browser.start(queue: .main)
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(15))
+            settle.resolve(nil)
+        }
+    }
+    browser.cancel()
+    if granted != nil { LocalNetworkPrompt.markDone() }
+    return granted ?? false
+}
+
+/// First verdict wins; late state changes and the timeout no-op. Every path hops to
+/// the main actor before resolving — the same idiom as NearbyBrowser's handlers — so
+/// main-actor isolation is the whole synchronization story.
+@MainActor
+private final class OneShot {
+    private var cont: CheckedContinuation<Bool?, Never>?
+
+    init(_ cont: CheckedContinuation<Bool?, Never>) { self.cont = cont }
+
+    func resolve(_ value: Bool?) {
+        cont?.resume(returning: value)
+        cont = nil
+    }
+}
+
 // MARK: - Advertiser
 
 /// Re-advertises the room this phone is in, so the next player can tap instead of scan.
@@ -301,9 +380,9 @@ enum NearbyOptIn {
         browser.stateUpdateHandler = { [weak self] state in
             switch state {
             case .waiting(let error):
-                // kDNSServiceErr_PolicyDenied. Any other .waiting is transient (no
-                // network yet) and resolves itself, so leave the browser running.
-                if case .dns(let code) = error, code == -65570 {
+                // Any non-denied .waiting is transient (no network yet) and resolves
+                // itself, so leave the browser running.
+                if isPolicyDenied(error) {
                     Task { @MainActor in self?.permissionDenied = true }
                 }
             case .ready:

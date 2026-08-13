@@ -24,7 +24,7 @@ data class Game(
   val name: String,
   val status: String,            // "live" | "soon"
   val minPlayers: Int? = null,   // player-count range endpoints, e.g. 1..8;
-  val maxPlayers: Int? = null,   // rendered via the game_players_* plurals (GameSheets)
+  val maxPlayers: Int? = null,   // rendered as the numeric players chip (GameSheets)
   val video: String? = null,     // https URL of a muted gameplay loop, cached on demand (TrailerCache)
   val accentColor: Color,
   val art: String?,              // asset-relative path, e.g. "artwork/hexstacker-16x9-v2.webp"
@@ -36,6 +36,9 @@ data class Game(
   // The game's own relay (pre-unification) — where its rooms actually live, so
   // room-alive probes go here rather than the shared directory.
   val relayProbeBase: String? = null,
+  // Native TV apps: platform id -> "live" | "soon". Display-only; ids map to
+  // device tiles in the info sheet (PlatformTiles), unknown ids are ignored.
+  val tvApps: Map<String, String> = emptyMap(),
 ) {
   val isLive: Boolean get() = status == "live"
 
@@ -47,6 +50,18 @@ data class Game(
    * security allow-list, whose ordering must not become display copy.
    */
   val displayHost: String? get() = controllerBaseUrl?.let { runCatching { it.toUri().host }.getOrNull() }
+
+  /**
+   * The player-count range ("1–8", or "4" when min == max): numerals only, so it
+   * needs no translation — the person glyph in the players chip carries the
+   * meaning (GameSheets). Null when the manifest gives no counts.
+   */
+  val playersRange: String?
+    get() {
+      val min = minPlayers ?: return null
+      val max = maxPlayers ?: return null
+      return if (min == max) "$min" else "$min–$max"
+    }
 }
 
 /** Manifest parsing — shared by the bundled seed and the served copy (ManifestStore). */
@@ -69,7 +84,7 @@ object GamesManifest {
         name = g.getString("name"),
         status = g.optString("status", "soon"),
         // Player counts are structural data; the display copy is rendered from them
-        // via the shared game_players_* plurals (GameSheets), not stored per game.
+        // as the numeric players chip (GameSheets), not stored per game.
         minPlayers = g.optIntOrNull("minPlayers"),
         maxPlayers = g.optIntOrNull("maxPlayers"),
         video = g.optHttpsUrl("video"),
@@ -86,6 +101,11 @@ object GamesManifest {
           emptyList()
         },
         relayProbeBase = g.optHttpsUrl("relayProbeBase")?.trimEnd('/'),
+        // Display-only, so lenient where hosts is strict: a non-string status
+        // drops that entry rather than failing the parse.
+        tvApps = g.optJSONObject("tvApps")?.let { o ->
+          o.keys().asSequence().mapNotNull { k -> (o.opt(k) as? String)?.let { k to it } }.toMap()
+        } ?: emptyMap(),
       )
     }
   }.getOrNull()

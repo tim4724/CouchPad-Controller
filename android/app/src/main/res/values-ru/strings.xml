@@ -62,18 +62,7 @@
     <string name="error_server_unreachable">Не удалось связаться с сервером. Попробуй ещё раз.</string>
     <string name="error_server_unreachable_short">Не удалось связаться с сервером.</string>
     <string name="action_retry">Повторить</string>
-    <plurals name="game_players_range">
-        <item quantity="one">%1$d–%2$d игрок</item>
-        <item quantity="few">%1$d–%2$d игрока</item>
-        <item quantity="many">%1$d–%2$d игроков</item>
-        <item quantity="other">%1$d–%2$d игроков</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="one">%1$d игрок</item>
-        <item quantity="few">%1$d игрока</item>
-        <item quantity="many">%1$d игроков</item>
-        <item quantity="other">%1$d игроков</item>
-    </plurals>
-    <string name="play_step_scan">Отсканируй показанный код комнаты, чтобы играть.</string>
+    <string name="play_step_start">Запусти %1$s на телевизоре.</string>
+    <string name="play_step_scan">Отсканируй показанный код комнаты.</string>
     <string name="version_label">Версия %1$s</string>
 </resources>

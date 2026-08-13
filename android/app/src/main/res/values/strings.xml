@@ -73,14 +73,10 @@
     <string name="error_server_unreachable">Couldn\'t reach the server. Try again.</string>
     <string name="error_server_unreachable_short">Couldn\'t reach the server.</string>
     <string name="action_retry">Try again</string>
-    <plurals name="game_players_range">
-        <item quantity="other">%1$d–%2$d players</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="one">%1$d player</item>
-        <item quantity="other">%1$d players</item>
-    </plurals>
-    <string name="play_step_scan">Scan the room code it shows to play.</string>
+    <!-- Info-sheet play steps. The platform chips above them answer "where does it
+         run", so step 1 names no paths. %1$s = game name. -->
+    <string name="play_step_start">Start %1$s on your TV.</string>
+    <string name="play_step_scan">Scan the room code it shows.</string>
     <!-- About: app version footer. %1$s = version name (e.g. "1.0"). -->
     <string name="version_label">Version %1$s</string>
 </resources>

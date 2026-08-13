@@ -55,7 +55,6 @@ import games.couchpad.controller.data.Game
 import games.couchpad.controller.data.PLATFORM_ANDROID_TV
 import games.couchpad.controller.data.PLATFORM_TVOS
 import games.couchpad.controller.data.PLATFORM_WEB
-import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.data.remoteArtUrl
 import games.couchpad.controller.theme.ActionCoral
 import java.util.concurrent.ConcurrentHashMap
@@ -230,16 +229,16 @@ private fun StepRow(n: Int, text: AnnotatedString) {
 }
 
 /**
- * The two-step "open on your TV, then scan" how-to for a live game's info sheet —
+ * The two-step "start on your TV, then scan" how-to for a live game's info sheet —
  * the app is the controller, so a first-timer who taps the card learns they need
  * the game running on a big screen first.
  */
 @Composable
 fun PlaySteps(game: Game) {
-  val host = game.displayHost ?: LAUNCHER_HOST
-  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    // The host span carries the game's own brand accent here.
-    StepRow(1, annotatedHostLine(stringResource(R.string.join_open_host), host, game.accentColor))
+  Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    // Deliberately path-free ("start it", not "open the app / the site") — where
+    // the game runs is the device-tile row's job (PlatformTiles).
+    StepRow(1, AnnotatedString(stringResource(R.string.play_step_start, game.name)))
     StepRow(2, AnnotatedString(stringResource(R.string.play_step_scan)))
   }
 }

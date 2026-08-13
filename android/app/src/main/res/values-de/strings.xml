@@ -62,14 +62,7 @@
     <string name="error_server_unreachable">Server nicht erreichbar. Versuch es erneut.</string>
     <string name="error_server_unreachable_short">Server nicht erreichbar.</string>
     <string name="action_retry">Erneut versuchen</string>
-    <plurals name="game_players_range">
-        <item quantity="one">%1$d–%2$d Spieler</item>
-        <item quantity="other">%1$d–%2$d Spieler</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="one">%1$d Spieler</item>
-        <item quantity="other">%1$d Spieler</item>
-    </plurals>
-    <string name="play_step_scan">Scanne den angezeigten Raumcode, um zu spielen.</string>
+    <string name="play_step_start">Starte %1$s auf deinem Fernseher.</string>
+    <string name="play_step_scan">Scanne den angezeigten Raumcode.</string>
     <string name="version_label">Version %1$s</string>
 </resources>

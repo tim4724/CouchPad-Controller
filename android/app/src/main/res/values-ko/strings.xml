@@ -63,12 +63,7 @@
     <string name="error_server_unreachable">서버에 연결할 수 없어요. 다시 시도해 주세요.</string>
     <string name="error_server_unreachable_short">서버에 연결할 수 없어요.</string>
     <string name="action_retry">다시 시도</string>
-    <plurals name="game_players_range">
-        <item quantity="other">%1$d~%2$d명</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="other">%1$d명</item>
-    </plurals>
-    <string name="play_step_scan">표시된 방 코드를 스캔해 플레이하세요.</string>
+    <string name="play_step_start">TV에서 %1$s을(를) 실행하세요.</string>
+    <string name="play_step_scan">표시된 방 코드를 스캔하세요.</string>
     <string name="version_label">버전 %1$s</string>
 </resources>

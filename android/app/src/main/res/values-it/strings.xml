@@ -62,16 +62,7 @@
     <string name="error_server_unreachable">Impossibile raggiungere il server. Riprova.</string>
     <string name="error_server_unreachable_short">Impossibile raggiungere il server.</string>
     <string name="action_retry">Riprova</string>
-    <plurals name="game_players_range">
-        <item quantity="one">%1$d–%2$d giocatori</item>
-        <item quantity="many">%1$d–%2$d giocatori</item>
-        <item quantity="other">%1$d–%2$d giocatori</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="one">%1$d giocatore</item>
-        <item quantity="many">%1$d giocatori</item>
-        <item quantity="other">%1$d giocatori</item>
-    </plurals>
-    <string name="play_step_scan">Scansiona il codice della stanza mostrato per giocare.</string>
+    <string name="play_step_start">Avvia %1$s sulla tua TV.</string>
+    <string name="play_step_scan">Scansiona il codice della stanza mostrato.</string>
     <string name="version_label">Versione %1$s</string>
 </resources>

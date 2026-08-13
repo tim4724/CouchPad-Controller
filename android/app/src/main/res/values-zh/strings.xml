@@ -62,12 +62,7 @@
     <string name="error_server_unreachable">无法连接服务器，请重试。</string>
     <string name="error_server_unreachable_short">无法连接服务器。</string>
     <string name="action_retry">重试</string>
-    <plurals name="game_players_range">
-        <item quantity="other">%1$d–%2$d 人</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="other">%1$d 人</item>
-    </plurals>
-    <string name="play_step_scan">扫描显示的房间码即可开始游戏。</string>
+    <string name="play_step_start">在电视上启动 %1$s。</string>
+    <string name="play_step_scan">扫描显示的房间码。</string>
     <string name="version_label">版本 %1$s</string>
 </resources>

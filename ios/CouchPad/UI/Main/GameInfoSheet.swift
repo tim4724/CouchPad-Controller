@@ -18,9 +18,15 @@ struct GameInfoSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(game.name)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(palette.onSurface)
+            HStack {
+                Text(game.name)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(palette.onSurface)
+                Spacer()
+                if let range = game.playersRange {
+                    playersChip(range)
+                }
+            }
 
             // A live game shows its muted gameplay loop; a not-yet-live game
             // (no video) shows its cover art instead.
@@ -41,21 +47,23 @@ struct GameInfoSheet: View {
                 }
             }
 
-            if let players = game.playersLabel {
-                Text(players)
-                    .font(.cpTitleMedium)
-                    .foregroundStyle(palette.primary)
+            if !game.tvApps.isEmpty || game.displayHost != nil {
+                PlatformTiles(game: game)
             }
 
             // The app is the controller, so a first-timer who taps the card
             // learns they need the game running on a big screen first — then can
-            // act right here.
+            // act right here. Deliberately path-free ("start it", not "open the
+            // app / the site") — where the game runs is the platform-chip row's
+            // job (PlatformTiles).
             if game.isLive {
-                VStack(alignment: .leading, spacing: 12) {
-                    StepRow(number: 1, text: openStepText)
+                VStack(alignment: .leading, spacing: 16) {
+                    StepRow(number: 1, text: AttributedString(
+                        String(format: String(localized: "Start %@ on your TV."), game.name)))
                     StepRow(number: 2, text: AttributedString(
-                        String(localized: "Scan the room code it shows to play.")))
+                        String(localized: "Scan the room code it shows.")))
                 }
+                .padding(.vertical, 4)
                 JoinButtons(onScan: onScan, onEnterCode: onEnterCode)
             }
         }
@@ -65,19 +73,91 @@ struct GameInfoSheet: View {
         .padding(.bottom, 28)
     }
 
-    // Step 1 with the game's host given the semibold-accent run, wherever the
-    // localized template places it.
-    private var openStepText: AttributedString {
-        let host = game.displayHost ?? CP.launcherHost
-        let template = String(localized: "Open %@ on your TV or laptop.")
-        let parts = template.components(separatedBy: "%@")
-        var result = AttributedString(parts.first ?? "")
-        var hostRun = AttributedString(host)
-        hostRun.font = .cpBodyLarge.weight(.semibold)
-        hostRun.foregroundColor = game.accentColor
-        result += hostRun
-        if parts.count > 1 { result += AttributedString(parts[1]) }
-        return result
+    // "1–8" + person glyph: the glyph stands in for the word "players", so the
+    // count range needs no translation (Game.playersRange).
+    private func playersChip(_ range: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 13, weight: .medium))
+            Text(range)
+                .font(.cpLabelLarge)
+        }
+        .foregroundStyle(palette.onSurface)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(palette.surfaceContainerHighest))
+    }
+}
+
+// MARK: - PlatformTiles
+
+/// Where the game runs, as a row of equal device tiles: one per declared TV app
+/// (dimmed, with the shared "Coming soon" copy, when not yet live) plus a tile
+/// for the browser path. This row is the sheet's only mention of platforms and
+/// host, so the play steps stay path-free.
+///
+/// Deliberately no brand logos: Apple licenses only its word marks to third
+/// parties, and Google's Android TV guidance excludes the robot — the neutral
+/// TV glyph + name is the compliant version of the same message (Android
+/// matches).
+private struct PlatformTiles: View {
+    let game: Game
+
+    @Environment(\.cpPalette) private var palette
+
+    // Platforms with native TV apps (manifest tvApps): id -> the nearby-card
+    // device label, reused. Unknown manifest ids simply have no tile.
+    private static let platforms: [(String, LocalizedStringResource)] = [
+        ("appletv", "Apple TV"),
+        ("androidtv", "Android TV"),
+    ]
+
+    var body: some View {
+        HStack(spacing: 9) {
+            ForEach(Self.platforms, id: \.0) { id, name in
+                if let status = game.tvApps[id] {
+                    tile(icon: "tv", label: String(localized: name), soon: status != "live")
+                }
+            }
+            if let host = game.displayHost {
+                // The zero-width space before each dot is an invisible break hint:
+                // a narrow tile wraps to "hexstacker" / ".com" instead of truncating.
+                tile(icon: "globe", label: host.replacingOccurrences(of: ".", with: "\u{200B}."), soon: false)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // A not-yet-live tile dims its icon and label to 45% — same state the
+    // poster's "Coming soon" chip marks, signalled here by dimming instead of
+    // a color swap.
+    private func tile(icon: String, label: String, soon: Bool) -> some View {
+        let base = palette.onSurface
+        let content = soon ? base.opacity(0.45) : base
+        return VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(content)
+            Text(label)
+                .font(.cpLabelMedium)
+                .foregroundStyle(content)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            if soon {
+                Text(String(localized: "Coming soon"))
+                    .font(.caption2)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        // Top-aligned so icons and names line up across tiles even when one
+        // tile carries the extra "Coming soon" line. Highest, not High — the
+        // sheet surface itself is surfaceContainerHigh, so the tile needs the
+        // next step to be visible on it.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 6)
+        .background(RoundedRectangle(cornerRadius: 16).fill(palette.surfaceContainerHighest))
     }
 }
 

@@ -62,14 +62,7 @@
     <string name="error_server_unreachable">Sunucuya ulaşılamadı. Tekrar dene.</string>
     <string name="error_server_unreachable_short">Sunucuya ulaşılamadı.</string>
     <string name="action_retry">Yeniden dene</string>
-    <plurals name="game_players_range">
-        <item quantity="one">%1$d–%2$d oyuncu</item>
-        <item quantity="other">%1$d–%2$d oyuncu</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="one">%1$d oyuncu</item>
-        <item quantity="other">%1$d oyuncu</item>
-    </plurals>
-    <string name="play_step_scan">Görünen oda kodunu tarayarak oyna.</string>
+    <string name="play_step_start">TV\'nde %1$s oyununu başlat.</string>
+    <string name="play_step_scan">Görünen oda kodunu tara.</string>
     <string name="version_label">Sürüm %1$s</string>
 </resources>

@@ -62,16 +62,7 @@
     <string name="error_server_unreachable">Impossible de joindre le serveur. Réessaie.</string>
     <string name="error_server_unreachable_short">Impossible de joindre le serveur.</string>
     <string name="action_retry">Réessayer</string>
-    <plurals name="game_players_range">
-        <item quantity="one">%1$d–%2$d joueurs</item>
-        <item quantity="many">%1$d–%2$d joueurs</item>
-        <item quantity="other">%1$d–%2$d joueurs</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="one">%1$d joueur</item>
-        <item quantity="many">%1$d joueurs</item>
-        <item quantity="other">%1$d joueurs</item>
-    </plurals>
-    <string name="play_step_scan">Scanne le code de salle affiché pour jouer.</string>
+    <string name="play_step_start">Lance %1$s sur ta TV.</string>
+    <string name="play_step_scan">Scanne le code de salle affiché.</string>
     <string name="version_label">Version %1$s</string>
 </resources>

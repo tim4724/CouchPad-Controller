@@ -62,16 +62,7 @@
     <string name="error_server_unreachable">No se pudo conectar con el servidor. Inténtalo de nuevo.</string>
     <string name="error_server_unreachable_short">No se pudo conectar con el servidor.</string>
     <string name="action_retry">Reintentar</string>
-    <plurals name="game_players_range">
-        <item quantity="one">%1$d–%2$d jugadores</item>
-        <item quantity="many">%1$d–%2$d jugadores</item>
-        <item quantity="other">%1$d–%2$d jugadores</item>
-    </plurals>
-    <plurals name="game_players_count">
-        <item quantity="one">%1$d jugador</item>
-        <item quantity="many">%1$d jugadores</item>
-        <item quantity="other">%1$d jugadores</item>
-    </plurals>
-    <string name="play_step_scan">Escanea el código de sala que aparece para jugar.</string>
+    <string name="play_step_start">Inicia %1$s en tu TV.</string>
+    <string name="play_step_scan">Escanea el código de sala que aparece.</string>
     <string name="version_label">Versión %1$s</string>
 </resources>

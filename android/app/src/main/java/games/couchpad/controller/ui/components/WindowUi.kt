@@ -6,18 +6,22 @@ import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.view.View
 import android.view.Window
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -52,7 +56,9 @@ fun AppSheet(
     containerColor = container,
   ) {
     MirrorHostSystemBars()
-    content()
+    // Scrolls only when the content outgrows the screen (small displays,
+    // large font scale) — ModalBottomSheet clips a plain Column otherwise.
+    Column(Modifier.verticalScroll(rememberScrollState()), content = content)
   }
 }
 

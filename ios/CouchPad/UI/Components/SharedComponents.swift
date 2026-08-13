@@ -409,22 +409,28 @@ struct AppSheetContainer<Content: View>: View {
     }
 
     var body: some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .top)
-            // Take the content's IDEAL height: the detent starts near zero, and
-            // without this the compressed first layout (truncated text, collapsed
-            // aspect-ratio views) self-consistently measures as the final height.
-            .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { height in
-                measuredHeight = height
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .presentationDetents([.height(max(measuredHeight, 1))])
-            .presentationDragIndicator(.hidden)
-            .presentationCornerRadius(28)
-            .presentationBackground(surfaceTint ?? palette.surfaceContainerHigh)
+        // The ScrollView engages only when the detent gets clamped below the
+        // content height (small displays, large text) — .basedOnSize keeps a
+        // fitting sheet from bouncing.
+        ScrollView {
+            content()
+                .frame(maxWidth: .infinity, alignment: .top)
+                // Take the content's IDEAL height: the detent starts near zero, and
+                // without this the compressed first layout (truncated text, collapsed
+                // aspect-ratio views) self-consistently measures as the final height.
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    measuredHeight = height
+                }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .presentationDetents([.height(max(measuredHeight, 1))])
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(28)
+        .presentationBackground(surfaceTint ?? palette.surfaceContainerHigh)
     }
 }
 

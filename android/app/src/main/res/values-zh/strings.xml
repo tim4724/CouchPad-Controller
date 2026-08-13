@@ -3,8 +3,10 @@
          match HexStacker-Party's i18n. -->
     <string name="home_subtitle">控制器</string>
     <string name="about">关于</string>
-    <string name="nearby_denied">在应用设置中允许</string>
-    <string name="nearby_find">显示附近的房间</string>
+    <string name="nearby_denied">打开设置</string>
+    <string name="nearby_hint">如需直接连接屏幕，请允许%1$s。</string>
+    <string name="nearby_perm">附近的设备</string>
+    <string name="nearby_allow">允许</string>
     <string name="nearby_no_wifi">连接 Wi-Fi 以查找附近的房间</string>
     <string name="nearby_none">未找到房间</string>
     <string name="nearby_searching">正在搜索房间…</string>

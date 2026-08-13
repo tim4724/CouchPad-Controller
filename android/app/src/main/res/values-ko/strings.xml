@@ -4,8 +4,10 @@
          반말, so game_end_* carry 요 here to match the surrounding strings). -->
     <string name="home_subtitle">컨트롤러</string>
     <string name="about">정보</string>
-    <string name="nearby_denied">앱 설정에서 허용</string>
-    <string name="nearby_find">근처 방 표시</string>
+    <string name="nearby_denied">설정 열기</string>
+    <string name="nearby_hint">디스플레이와 직접 연결하려면 %1$s를 허용하세요.</string>
+    <string name="nearby_perm">근처 기기</string>
+    <string name="nearby_allow">허용</string>
     <string name="nearby_no_wifi">근처 방을 찾으려면 Wi-Fi에 연결하세요</string>
     <string name="nearby_none">방을 찾을 수 없음</string>
     <string name="nearby_searching">방 검색 중…</string>

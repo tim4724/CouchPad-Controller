@@ -764,13 +764,15 @@ enum NearbyStatus {
 
 /// What the TV slot shows when there are no rooms to show.
 ///
-/// The ask is an action, so it takes a button — the room cards are objects you pick from,
-/// and giving the ask their shape blurs the two. Tonal, not coral: this is one-time setup
+/// `ask` and `denied` are one design: a muted info line in the OS's own
+/// permission-education formula — "To [what you want], allow [the toggle by its system
+/// name]" — goal first, then the concrete thing to flip, over a button that carries only
+/// the verb — ask the system, or open Settings once that's the one place that can still
+/// answer. The info line reuses the muted-status row, so every state of the slot is one
+/// icon-plus-line; the button stays bare-verb tonal like JoinButtons' "Enter code
+/// manually". Tonal, not coral: this is one-time setup
 /// that vanishes for good once granted, and it must not outshout the scan CTA you use every
 /// session. Metrics match JoinButtons so the three buttons on this screen are one family.
-///
-/// `denied` takes that same button: it is the ask, just pointed at the one place that can
-/// still answer it, so giving it a different shape would read as a different feature.
 ///
 /// Once granted, searching, not-found and the off-Wi-Fi hint collapse to a muted line — an
 /// idle home screen shouldn't carry a box announcing that a TV simply isn't switched on.
@@ -784,9 +786,9 @@ private struct NearbyStatusCard: View {
     var body: some View {
         switch state {
         case .ask:
-            askButton(Text("Show rooms nearby"), action: onAsk)
+            askBlock(Text("Allow"), action: onAsk)
         case .denied:
-            askButton(Text("Allow in Settings"), action: onOpenSettings)
+            askBlock(Text("Open Settings"), action: onOpenSettings)
         case .searching:
             statusLine(Text("Searching for rooms…"), showsProgress: true)
         case .noWifi:
@@ -796,17 +798,23 @@ private struct NearbyStatusCard: View {
         }
     }
 
+    private func askBlock(_ verb: Text, action: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Default antenna glyph on purpose: Android's info line quotes the toggle's
+            // system icon, but Apple's Settings gives "Local Network" no icon to quote.
+            statusLine(Text("To connect directly to the display, allow **Local Network**."))
+            askButton(verb, action: action)
+        }
+    }
+
     /// Explicit tonal fill, matching JoinButtons' "Enter code manually" — see the note
     /// there on why `.bordered` can't be used.
     private func askButton(_ text: Text, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(
-                title: { text },
-                icon: { Image(systemName: "antenna.radiowaves.left.and.right") }
-            )
-            .font(.cpTitleMedium)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
+            text
+                .font(.cpTitleMedium)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
         }
         .buttonStyle(.plain)
         .background(

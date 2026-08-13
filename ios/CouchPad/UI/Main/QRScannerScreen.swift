@@ -68,7 +68,9 @@ struct QRScannerScreen: View {
                         .font(.cpBodyMedium)
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
-                    Button("Allow in Settings") {
+                    // Same verb-only wording as the nearby slot's denied button — the
+                    // rationale line above already says what to allow.
+                    Button("Open Settings") {
                         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                         UIApplication.shared.open(url)
                     }

@@ -10,7 +10,7 @@
          ACCESS_LOCAL_NETWORK is a DANGEROUS runtime permission (API 36+) and, because we
          target 37, Local Network Protections block mDNS without it — silently, as a UDP
          EPERM with nothing thrown, so a missing grant looks exactly like an empty
-         network. Requested from the home screen's "Show rooms nearby" button, never at launch.
+         network. Requested from the home screen's nearby-slot "Allow" button, never at launch.
          CHANGE_WIFI_MULTICAST_STATE is normal (no runtime request): several OEMs drop
          multicast to the app unless a WifiManager.MulticastLock is held. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />

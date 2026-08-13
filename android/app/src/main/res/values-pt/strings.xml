@@ -3,8 +3,10 @@
          match HexStacker-Party's i18n; neutral você register (BR-leaning, like Play's default). -->
     <string name="home_subtitle">Controle</string>
     <string name="about">Sobre</string>
-    <string name="nearby_denied">Permitir nas configurações</string>
-    <string name="nearby_find">Mostrar salas por perto</string>
+    <string name="nearby_denied">Abrir configurações</string>
+    <string name="nearby_hint">Para se conectar diretamente à tela, permita %1$s.</string>
+    <string name="nearby_perm">Dispositivos por perto</string>
+    <string name="nearby_allow">Permitir</string>
     <string name="nearby_no_wifi">Conecte-se ao Wi-Fi para encontrar salas por perto</string>
     <string name="nearby_none">Nenhuma sala encontrada</string>
     <string name="nearby_searching">Procurando salas…</string>

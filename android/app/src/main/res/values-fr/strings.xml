@@ -3,8 +3,10 @@
          match HexStacker-Party's i18n; informal register (tu) like the rest of the suite. -->
     <string name="home_subtitle">Manette</string>
     <string name="about">À propos</string>
-    <string name="nearby_denied">Autoriser dans les paramètres</string>
-    <string name="nearby_find">Afficher les salles à proximité</string>
+    <string name="nearby_denied">Ouvrir les paramètres</string>
+    <string name="nearby_hint">Pour te connecter directement à l’écran, autorise %1$s.</string>
+    <string name="nearby_perm">Appareils à proximité</string>
+    <string name="nearby_allow">Autoriser</string>
     <string name="nearby_no_wifi">Connecte-toi au Wi-Fi pour trouver des salles à proximité</string>
     <string name="nearby_none">Aucune salle trouvée</string>
     <string name="nearby_searching">Recherche de salles…</string>

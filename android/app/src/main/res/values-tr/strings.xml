@@ -3,8 +3,10 @@
          match HexStacker-Party's i18n; informal register (sen) like the rest of the suite. -->
     <string name="home_subtitle">Kumanda</string>
     <string name="about">Hakkında</string>
-    <string name="nearby_denied">Uygulama ayarlarında izin ver</string>
-    <string name="nearby_find">Yakındaki odaları göster</string>
+    <string name="nearby_denied">Ayarları aç</string>
+    <string name="nearby_hint">Ekranla doğrudan bağlantı kurmak için %1$s iznini ver.</string>
+    <string name="nearby_perm">Yakındaki cihazlar</string>
+    <string name="nearby_allow">İzin ver</string>
     <string name="nearby_no_wifi">Yakındaki odaları bulmak için Wi-Fi\'ye bağlan</string>
     <string name="nearby_none">Oda bulunamadı</string>
     <string name="nearby_searching">Odalar aranıyor…</string>

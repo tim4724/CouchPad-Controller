@@ -185,7 +185,7 @@ extension NearbyRoom {
 
 /// Whether the player has ever asked for TV discovery. iOS has no queryable Local
 /// Network authorization, so the opt-in is ours to remember: until it's set, home shows
-/// the "Show rooms nearby" button and nothing touches the network; the first tap starts the
+/// the nearby-slot "Allow" button and nothing touches the network; the first tap starts the
 /// browse (and with it the system prompt), and every later launch discovers on its own.
 enum NearbyOptIn {
     private static let key = "cp_nearby.opted_in"

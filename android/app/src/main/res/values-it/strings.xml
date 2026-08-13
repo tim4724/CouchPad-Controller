@@ -3,8 +3,10 @@
          match HexStacker-Party's i18n; informal register (tu) like the rest of the suite. -->
     <string name="home_subtitle">Controller</string>
     <string name="about">Informazioni</string>
-    <string name="nearby_denied">Consenti nelle impostazioni</string>
-    <string name="nearby_find">Mostra le stanze nelle vicinanze</string>
+    <string name="nearby_denied">Apri le impostazioni</string>
+    <string name="nearby_hint">Per collegarti direttamente allo schermo, consenti %1$s.</string>
+    <string name="nearby_perm">Dispositivi nelle vicinanze</string>
+    <string name="nearby_allow">Consenti</string>
     <string name="nearby_no_wifi">Connettiti al Wi-Fi per trovare stanze nelle vicinanze</string>
     <string name="nearby_none">Nessuna stanza trovata</string>
     <string name="nearby_searching">Ricerca di stanze…</string>

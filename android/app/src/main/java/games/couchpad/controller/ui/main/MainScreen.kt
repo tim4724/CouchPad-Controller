@@ -88,7 +88,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -183,7 +185,7 @@ fun MainScreen(
   // `games` on every change, so a manifest refresh re-admits (or drops) an advert
   // without restarting discovery.
   var adverts by remember { mutableStateOf<List<NearbyAdvert>>(emptyList()) }
-  // Opt-in gates discovery: ungranted → the "Show rooms nearby" button, granted →
+  // Opt-in gates discovery: ungranted → the nearby slot's "Allow" button, granted →
   // discovery runs on every later launch and the rooms are simply there. On API 37+
   // the permission is the opt-in memory; below enforcement a stored flag stands in
   // (see nearbyOptedIn). No prompt at first launch; the user asks for it once.
@@ -854,13 +856,17 @@ private enum class NearbyStatus {
 
 // What the TV slot shows when there are no rooms to show.
 //
-// The ask is an action, so it takes a button — the room cards are objects you pick from,
-// and giving the ask their shape blurs the two. Tonal, not coral: this is one-time setup
-// that vanishes for good once granted, and it must not outshout the scan CTA you use every
-// session. Metrics match JoinButtons so the three buttons on this screen are one family.
-//
-// Denied takes that same button: it is the ask, just pointed at the one place that can
-// still answer it, so giving it a different shape would read as a different feature.
+// Ask and denied are one design: a muted info line in the OS's own permission-education
+// formula — "To [what you want], allow [the toggle by its system name]" — goal first,
+// then the concrete thing to flip, over a button that carries only the verb —
+// ask the system, or open Settings once that's the one place that can still answer. Only
+// the verb changes between the two. The info line wears the toggle's own system icon —
+// the mark the system dialog and the Settings row show — in the muted-status layout, so
+// every state of the slot is one icon-plus-line; the button stays bare-verb tonal like
+// JoinButtons' "Enter code manually". Tonal, not coral:
+// this is one-time setup that vanishes for good once granted, and it must not outshout
+// the scan CTA you use every session. Metrics match JoinButtons so the three buttons on
+// this screen are one family.
 //
 // Once granted, searching, not-found and the off-Wi-Fi hint collapse to a muted line — an
 // idle home screen shouldn't carry a box announcing that a TV simply isn't switched on.
@@ -868,39 +874,34 @@ private enum class NearbyStatus {
 private fun NearbyStatusCard(state: NearbyStatus, onAsk: () -> Unit, onOpenSettings: () -> Unit) {
   if (state == NearbyStatus.Ask || state == NearbyStatus.Denied) {
     val denied = state == NearbyStatus.Denied
-    FilledTonalButton(
-      onClick = if (denied) onOpenSettings else onAsk,
-      modifier = Modifier.fillMaxWidth().height(56.dp),
-    ) {
-      Icon(painterResource(R.drawable.ic_nearby), contentDescription = null, Modifier.size(22.dp))
-      Spacer(Modifier.width(10.dp))
-      Text(
-        stringResource(if (denied) R.string.nearby_denied else R.string.nearby_find),
-        style = MaterialTheme.typography.titleMedium,
+    Column(Modifier.fillMaxWidth()) {
+      // The toggle's name is bolded rather than quoted; it lives in its own resource
+      // (nearby_perm) so the bold span survives translation-driven word order.
+      val perm = stringResource(R.string.nearby_perm)
+      val hint = stringResource(R.string.nearby_hint, perm)
+      StatusLine(
+        buildAnnotatedString {
+          append(hint)
+          val at = hint.indexOf(perm)
+          if (at >= 0) addStyle(SpanStyle(fontWeight = FontWeight.Bold), at, at + perm.length)
+        },
+        icon = R.drawable.ic_nearby_devices,
       )
+      Spacer(Modifier.height(8.dp))
+      FilledTonalButton(
+        onClick = if (denied) onOpenSettings else onAsk,
+        modifier = Modifier.fillMaxWidth().height(56.dp),
+      ) {
+        Text(
+          stringResource(if (denied) R.string.nearby_denied else R.string.nearby_allow),
+          style = MaterialTheme.typography.titleMedium,
+        )
+      }
     }
     return
   }
-  Row(
-    Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    // The button's metrics (22dp glyph, titleMedium) so the slot doesn't change scale
-    // as it moves between offering and reporting — only the muted color says "status".
-    if (state == NearbyStatus.Searching) {
-      CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
-    } else {
-      Icon(
-        painterResource(
-          if (state == NearbyStatus.NoWifi) R.drawable.ic_wifi_off else R.drawable.ic_nearby,
-        ),
-        contentDescription = null,
-        Modifier.size(22.dp),
-        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-    Text(
+  StatusLine(
+    AnnotatedString(
       stringResource(
         when (state) {
           NearbyStatus.Searching -> R.string.nearby_searching
@@ -908,6 +909,34 @@ private fun NearbyStatusCard(state: NearbyStatus, onAsk: () -> Unit, onOpenSetti
           else -> R.string.nearby_none
         },
       ),
+    ),
+    icon = if (state == NearbyStatus.NoWifi) R.drawable.ic_wifi_off else R.drawable.ic_nearby,
+    showsProgress = state == NearbyStatus.Searching,
+  )
+}
+
+// The slot's one muted voice — the button's metrics (22dp glyph, titleMedium) so the slot
+// doesn't change scale as it moves between offering and reporting; only the muted color
+// says "status". Mirrors iOS `statusLine`.
+@Composable
+private fun StatusLine(text: AnnotatedString, @DrawableRes icon: Int, showsProgress: Boolean = false) {
+  Row(
+    Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    if (showsProgress) {
+      CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+    } else {
+      Icon(
+        painterResource(icon),
+        contentDescription = null,
+        Modifier.size(22.dp),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+    Text(
+      text,
       style = MaterialTheme.typography.titleMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

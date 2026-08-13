@@ -50,11 +50,13 @@ ANDROID_ONLY = {
     "scan_hint",
     "camera_access_needed",
     "allow_camera_access",
-    # Same button as iOS's "Allow in Settings", translated separately because the two
-    # point at differently-named destinations: Android deep-links to the app's own
-    # settings page, and Apple's Settings app is "Réglages"/"Ajustes" where Android's
-    # is not. Each locale names them however it reads shortest on a one-line button.
+    # Same denied-state UI as iOS's "Open Settings" + hint, translated separately
+    # because each side quotes its own OS: the hint names the platform's toggle
+    # ("Nearby devices" vs "Local Network") and the button its Settings app
+    # ("Réglages"/"Ajustes" on iOS where Android's is not).
     "nearby_denied",
+    "nearby_hint",  # names the platform's toggle — iOS says "Local Network"
+    "nearby_perm",  # the toggle's name itself, split out so code can bold it
 }
 
 # iOS keys with no Android counterpart, with the reason why.
@@ -69,9 +71,10 @@ IOS_ONLY = {
     "QR scanning is not supported on this device",
     "Scanner unavailable: %@",
     "Version %@ (%@)",   # version footer: Android shows the version name only
-    # Android has the same button (nearby_denied) but names its own destination — see
-    # the note there.
-    "Allow in Settings",
+    # Android has the same denied-state UI (nearby_denied/nearby_hint) but quotes its
+    # own OS — see the note there.
+    "Open Settings",
+    "To connect directly to the display, allow **Local Network**.",
 }
 
 problems = []

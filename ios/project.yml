@@ -46,6 +46,17 @@ targets:
         CODE_SIGN_IDENTITY: "Apple Distribution"
         PROVISIONING_PROFILE_SPECIFIER: "CouchPad App Store"
         DEVELOPMENT_TEAM: 5ZH48MPAM3
+      # Download size, Release only — Debug keeps the build-time-oriented defaults,
+      # since it only ever builds for the simulator screenshot runs.
+      configs:
+        Release:
+          # -Osize over -O: a launcher whose hot path is a WKWebView has no compute
+          # to lose, and it trims the binary.
+          SWIFT_OPTIMIZATION_LEVEL: "-Osize"
+          # AppIcon.icon is the only asset compiled per appearance (any/dark/tintable)
+          # and per idiom, so it dominates Assets.car and is also the one place `space`
+          # could visibly degrade output — eyeball the icon on device when changing it.
+          ASSETCATALOG_COMPILER_OPTIMIZATION: space
     # Universal Links. Each host serves /.well-known/apple-app-site-association;
     # hexstacker.com scopes to the 6-char room code, couchpad.games adds the
     # legal pages (/privacy, /imprint, EN + default). The AASA room pattern is a

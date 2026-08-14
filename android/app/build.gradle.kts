@@ -84,6 +84,12 @@ android {
     packaging {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // Per-artifact copies of the Apache-2.0 text and NOTICE, one from every
+        // dependency that ships them. Attribution and the license text itself already
+        // ship in R.raw.aboutlibraries, which the About screen renders, so nothing
+        // reads these.
+        excludes += "/META-INF/**/LICENSE.txt"
+        excludes += "/META-INF/NOTICE.md"
       }
     }
 

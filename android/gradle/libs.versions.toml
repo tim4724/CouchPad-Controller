@@ -17,7 +17,6 @@ nav3Core = "1.1.5"
 profileinstaller = "1.4.1"
 uiautomator = "2.4.0"
 webkit = "1.16.0"
-zxingCpp = "3.1.1"
 
 [libraries]
 # Open-source license list — the Gradle plugin generates R.raw.aboutlibraries at
@@ -41,14 +40,14 @@ androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "a
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+# Needed by zxing-cpp's BarcodeReader.read(ImageProxy). camera-camera2 pulls it in anyway, but
+# compiling against another library's transitive dependency breaks silently.
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "nav3Core" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "nav3Core" }
 # Document-start script injection for the legal WebView (feature-gated at runtime).
 androidx-webkit = { module = "androidx.webkit:webkit", version.ref = "webkit" }
-# On-device QR decoding with no Google Play Services dependency and no telemetry
-# (native zxing-cpp; ships one small .so per ABI).
-zxingcpp-android = { module = "io.github.zxing-cpp:android", version.ref = "zxingCpp" }
 # Installs the checked-in baseline profile into ART at install time (Play) / first
 # run, so cold starts run AOT-compiled code before cloud profiles arrive.
 androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }

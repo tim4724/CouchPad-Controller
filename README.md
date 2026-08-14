@@ -27,6 +27,7 @@ too. Both apps implement it identically.
 Standard Gradle project — open `android/` in Android Studio, or:
 
 ```sh
+git submodule update --init third_party/zxing-cpp             # once per checkout (zxing-cpp is built from source)
 cd android
 echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties   # once per checkout
 ./gradlew assembleDebug

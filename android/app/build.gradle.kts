@@ -23,12 +23,25 @@ val keystoreProps = Properties().apply {
 val releaseStoreFile = keystoreProps.getProperty("storeFile")?.let { rootProject.file(it) }
 val hasReleaseKeystore = releaseStoreFile != null
 
+// zxing-cpp is built from source (third_party/zxing-cpp submodule) rather than taken from its
+// published AAR: that AAR ships all six decoder families and re-exports its static libc++,
+// which blocks --gc-sections. Building it here lets us keep only QR — the sole format
+// ScanScreen asks for — and take the fixes for the other two, which together move the arm64
+// .so from 1,747 KB to 540 KB. Nothing is vendored; the Kotlin wrapper and JNI glue are
+// compiled straight out of the submodule, so a bump is just moving the submodule pointer.
+// It is pinned to a fork carrying https://github.com/zxing-cpp/zxing-cpp/pull/1151; re-point
+// it at upstream once that lands, and don't rewrite the fork's history while it is pinned.
+val zxingCppWrapperSrc = rootProject.file("../third_party/zxing-cpp/wrappers/android/zxingcpp/src/main")
+
 android {
     // Kotlin package / R+BuildConfig namespace — compile-time only, kept identical
     // to the applicationId below.
     namespace = "games.couchpad.controller"
     compileSdk = 37
     compileSdkMinor = 1
+    // Pinned because zxing-cpp is compiled here: the NDK decides the shipped .so's contents,
+    // so leaving it to AGP's default would make the native build vary between machines and CI.
+    ndkVersion = "28.2.13676358"
     defaultConfig {
         // Play Store identity, reverse-DNS of couchpad.games. Changed in the 2026-07
         // rebrand while the app was still unpublished — this is a one-way door once
@@ -45,6 +58,25 @@ android {
         // number — Play rejects a reused code — and versionName from the release tag.
         versionCode = (findProperty("cpVersionCode") as String?)?.toInt() ?: 1
         versionName = findProperty("cpVersionName") as String? ?: "1.0"
+        externalNativeBuild {
+            cmake {
+                arguments(
+                    "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+                    "-DANDROID_ARM_NEON=ON",
+                    // QR is the only format ScanScreen decodes; the other five decoder
+                    // families are dead code here and are by far the largest saving.
+                    "-DZXING_ENABLE_1D=OFF",
+                    "-DZXING_ENABLE_AZTEC=OFF",
+                    "-DZXING_ENABLE_DATAMATRIX=OFF",
+                    "-DZXING_ENABLE_MAXICODE=OFF",
+                    "-DZXING_ENABLE_PDF417=OFF",
+                    // APS2 relocation packing needs API 23; minSdk is 24 above.
+                    "-DCMAKE_C_FLAGS=-flto=thin",
+                    "-DCMAKE_CXX_FLAGS=-flto=thin",
+                    "-DCMAKE_SHARED_LINKER_FLAGS=-flto=thin -Wl,--pack-dyn-relocs=android",
+                )
+            }
+        }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -70,6 +102,15 @@ android {
             signingConfig = signingConfigs.getByName(if (hasReleaseKeystore) "release" else "debug")
         }
     }
+    // Compile the wrapper's Kotlin (zxingcpp.BarcodeReader) and its JNI glue out of the
+    // submodule — see the zxingCppWrapperSrc comment above.
+    sourceSets["main"].kotlin.srcDir("$zxingCppWrapperSrc/java")
+    externalNativeBuild {
+        cmake {
+            path = file("$zxingCppWrapperSrc/cpp/CMakeLists.txt")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -116,6 +157,10 @@ baselineProfile {
 aboutLibraries {
     collect {
         filterVariants.addAll("release")
+        // zxing-cpp is compiled from source, so it is not on the dependency graph the plugin
+        // scans — without this it would ship Apache-2.0 code with no attribution. The entry
+        // in config/libraries/ puts it back on the About screen. Path is relative to this module.
+        configPath = file("../config")
     }
     library {
         duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.MERGE
@@ -145,7 +190,7 @@ dependencies {
   // this app wanted from it.
   implementation(libs.androidx.camera.camera2)
   implementation(libs.androidx.camera.lifecycle)
-  implementation(libs.zxingcpp.android)
+  implementation(libs.androidx.camera.core)
 
   // Open-source license list (About screen)
   implementation(libs.aboutlibraries.compose.m3)

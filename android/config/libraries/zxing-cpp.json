@@ -1,0 +1,15 @@
+{
+  "uniqueId": "io.github.zxing-cpp:zxing-cpp",
+  "name": "zxing-cpp",
+  "description": "Barcode scanning library. Compiled from source (third_party/zxing-cpp) rather than consumed as a Maven artifact, so the plugin cannot discover it from the dependency graph.",
+  "website": "https://github.com/zxing-cpp/zxing-cpp",
+  "developers": [
+    { "name": "zxing-cpp community" }
+  ],
+  "scm": {
+    "url": "https://github.com/zxing-cpp/zxing-cpp"
+  },
+  "licenses": [
+    "Apache-2.0"
+  ]
+}

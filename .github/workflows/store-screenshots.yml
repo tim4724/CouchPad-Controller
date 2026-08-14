@@ -37,7 +37,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # third_party/zxing-cpp is compiled from source by :app — see release-build.yml.
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - name: Enable KVM for the emulator
         run: |

@@ -140,9 +140,11 @@ dependencies {
   // QR scanning — in-app CameraX preview decoded by zxing-cpp. Fully on-device
   // and telemetry-free (unlike ML Kit), works without Google Play Services, and
   // opens instantly with no first-use module download; see ScanScreen.kt.
+  // Deliberately no camera-view: PreviewView pulls AppCompat, Fragment, ViewPager
+  // and camera-video into the APK, and CameraPreviewView.kt covers the one thing
+  // this app wanted from it.
   implementation(libs.androidx.camera.camera2)
   implementation(libs.androidx.camera.lifecycle)
-  implementation(libs.androidx.camera.view)
   implementation(libs.zxingcpp.android)
 
   // Open-source license list (About screen)

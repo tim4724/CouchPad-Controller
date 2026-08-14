@@ -9,7 +9,10 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.params.MeteringRectangle
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
+import android.util.Rational
 import android.util.Size
+import android.view.Surface
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -18,11 +21,16 @@ import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.ViewPort
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
-import androidx.camera.view.CameraController
-import androidx.camera.view.LifecycleCameraController
-import androidx.camera.view.PreviewView
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.lifecycle.awaitInstance
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -72,6 +80,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -80,6 +89,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
@@ -97,6 +107,7 @@ import games.couchpad.controller.ui.components.stableScreenInsets
 import games.couchpad.controller.ui.components.themeLightBarIcons
 import games.couchpad.controller.ui.legal.LegalLinks
 import java.util.concurrent.Executors
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import zxingcpp.BarcodeReader
 
@@ -313,7 +324,7 @@ fun ScanScreen(
   }
 }
 
-// The camera side, isolated so controller/analyzer lifecycle stays in one place.
+// The camera side, isolated so use-case/analyzer lifecycle stays in one place.
 @Composable
 private fun CameraPreview(
   onQr: (List<String>) -> Unit,
@@ -322,24 +333,27 @@ private fun CameraPreview(
 ) {
   val context = LocalContext.current
   val lifecycleOwner = LocalLifecycleOwner.current
-  val controller = remember {
-    LifecycleCameraController(context).apply {
-      // Analysis defaults to ~640x480 — too coarse for a QR scanned from across
-      // the couch (a ~25 cm code at 3 m is only ~3 px/module even at 720p). 1080p
-      // gives ~4.5 px/module of headroom; going beyond it isn't guaranteed to
-      // combine with a preview stream on LIMITED-hardware devices.
-      imageAnalysisResolutionSelector = ResolutionSelector.Builder()
-        .setResolutionStrategy(
-          ResolutionStrategy(Size(1920, 1080), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
-        )
-        .build()
-    }
-  }
+  val previewView = remember { CameraPreviewView(context) }
+  var camera by remember { mutableStateOf<Camera?>(null) }
+  // The viewport that keeps the analyzer's crop rect matching what the preview shows
+  // is built from the preview's aspect ratio, so binding waits for the first layout —
+  // and rebinds when a rotation changes it.
+  var viewSize by remember { mutableStateOf(IntSize.Zero) }
 
-  DisposableEffect(Unit) {
-    // read() is synchronous CPU work — keep it off the main thread. The
-    // controller's KEEP_ONLY_LATEST backpressure drops frames while a decode is
-    // in flight, so a slow frame lowers the scan rate instead of queueing work.
+  AndroidView(
+    factory = { previewView },
+    modifier = Modifier.fillMaxSize().onSizeChanged { viewSize = it },
+  )
+
+  LaunchedEffect(viewSize) {
+    if (viewSize.width == 0 || viewSize.height == 0) return@LaunchedEffect
+    // The only suspension point, taken before anything is allocated: from here to
+    // awaitCancellation() nothing suspends, so cancellation can't strand a half-built
+    // pipeline short of the finally that releases it.
+    val provider = ProcessCameraProvider.awaitInstance(context)
+    // read() is synchronous CPU work — keep it off the main thread. KEEP_ONLY_LATEST
+    // backpressure drops frames while a decode is in flight, so a slow frame lowers
+    // the scan rate instead of queueing work.
     val decodeExecutor = Executors.newSingleThreadExecutor()
     val mainExecutor = ContextCompat.getMainExecutor(context)
     val reader = BarcodeReader(
@@ -356,7 +370,24 @@ private fun CameraPreview(
         textMode = BarcodeReader.TextMode.PLAIN,
       ),
     )
-    controller.setImageAnalysisAnalyzer(decodeExecutor) { image ->
+    // Single-arg setSurfaceProvider: CameraX drives the provider on the main thread,
+    // which is what CameraPreviewView's state machine assumes.
+    val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView) }
+    val analysis = ImageAnalysis.Builder()
+      // Analysis defaults to ~640x480 — too coarse for a QR scanned from across
+      // the couch (a ~25 cm code at 3 m is only ~3 px/module even at 720p). 1080p
+      // gives ~4.5 px/module of headroom; going beyond it isn't guaranteed to
+      // combine with a preview stream on LIMITED-hardware devices.
+      .setResolutionSelector(
+        ResolutionSelector.Builder()
+          .setResolutionStrategy(
+            ResolutionStrategy(Size(1920, 1080), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
+          )
+          .build(),
+      )
+      .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+      .build()
+    analysis.setAnalyzer(decodeExecutor) { image ->
       // read() decodes straight out of the frame's Y plane via JNI (no copy, no
       // bitmap); use{} closes the proxy right after so CameraX can reuse the
       // buffer. Idle frames allocate nothing beyond the reader's result list,
@@ -367,31 +398,39 @@ private fun CameraPreview(
         if (texts.isNotEmpty()) mainExecutor.execute { onQr(texts) }
       }
     }
-    controller.bindToLifecycle(lifecycleOwner)
-    // cameraInfo is null until the async bind completes — probe when it has.
-    controller.initializationFuture.addListener(
-      {
-        onTorchProbed(controller.cameraInfo?.hasFlashUnit() == true)
-        applyCenterMeteringRegions(controller)
-      },
-      mainExecutor,
-    )
-    onDispose {
-      controller.unbind()
+    // The viewport crops the analyzer to the frame the player can actually see, so a
+    // code sitting just off the edge of the preview doesn't silently join a game.
+    val group = UseCaseGroup.Builder()
+      .setViewPort(
+        ViewPort.Builder(
+          Rational(viewSize.width, viewSize.height),
+          previewView.display?.rotation ?: Surface.ROTATION_0,
+        ).setScaleType(ViewPort.FILL_CENTER).build(),
+      )
+      .addUseCase(preview)
+      .addUseCase(analysis)
+      .build()
+
+    try {
+      val bound = provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, group)
+      camera = bound
+      previewView.setCameraInfo(bound.cameraInfo)
+      onTorchProbed(bound.cameraInfo.hasFlashUnit())
+      applyCenterMeteringRegions(bound)
+      awaitCancellation()
+    } catch (e: IllegalArgumentException) {
+      // No back camera, or a combination this device can't stream. The screen stays
+      // black and manual entry — already on it — is the way out.
+      Log.e("ScanScreen", "Camera bind failed", e)
+    } finally {
+      camera = null
+      provider.unbind(preview, analysis)
+      analysis.clearAnalyzer()
       decodeExecutor.shutdown()
     }
   }
-  LaunchedEffect(torchOn) { controller.enableTorch(torchOn) }
 
-  AndroidView(
-    factory = { ctx ->
-      PreviewView(ctx).apply {
-        scaleType = PreviewView.ScaleType.FILL_CENTER
-        this.controller = controller
-      }
-    },
-    modifier = Modifier.fillMaxSize(),
-  )
+  LaunchedEffect(camera, torchOn) { camera?.cameraControl?.enableTorch(torchOn) }
 }
 
 // Continuous AF meters the whole frame by default, so bright or high-contrast
@@ -405,10 +444,8 @@ private fun CameraPreview(
 // androidx.annotation.OptIn (not kotlin.OptIn) so lint's UnsafeOptInUsageError also
 // recognizes the opt-in for this androidx experimental interop marker.
 @OptIn(markerClass = [ExperimentalCamera2Interop::class])
-private fun applyCenterMeteringRegions(controller: CameraController) {
-  val info = controller.cameraInfo ?: return
-  val control = controller.cameraControl ?: return
-  val camera2Info = Camera2CameraInfo.from(info)
+private fun applyCenterMeteringRegions(camera: Camera) {
+  val camera2Info = Camera2CameraInfo.from(camera.cameraInfo)
   val active = camera2Info.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return
   val side = minOf(active.width(), active.height()) / 2
   val region = MeteringRectangle(
@@ -425,7 +462,7 @@ private fun applyCenterMeteringRegions(controller: CameraController) {
   if ((camera2Info.getCameraCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0) > 0) {
     options.setCaptureRequestOption(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region))
   }
-  Camera2CameraControl.from(control).setCaptureRequestOptions(options.build())
+  Camera2CameraControl.from(camera.cameraControl).setCaptureRequestOptions(options.build())
 }
 
 // Dim everything except a centered rounded window, with a white outline. The

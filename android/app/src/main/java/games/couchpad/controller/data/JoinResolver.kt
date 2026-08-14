@@ -45,6 +45,27 @@ fun isPrivateHost(host: String?): Boolean {
     (a == 169 && b == 254)
 }
 
+/**
+ * The room code an input names when it carries no controller origin of its own: a bare
+ * typed code, or a canonical couchpad.games/<code> link (bare domain or www — a subdomain
+ * is a preview deployment and IS its own origin). Null when the input has an origin, in
+ * which case that URL is the controller and loads verbatim. "" for a launcher link with
+ * no path segment.
+ *
+ * Such an input names a room but not a game — exactly what the relay directory answers —
+ * so this is the one test [resolveJoin] needs, and the same test that tells a §6 `url`
+ * that declares a controller apart from one that declares nothing.
+ */
+fun originlessCode(raw: String?): String? {
+  val s = raw?.trim().orEmpty()
+  if (s.isEmpty()) return null
+  val uri = runCatching { s.toUri() }.getOrNull()
+  val host = uri?.host
+  if (uri?.scheme == null || host == null) return s
+  if (!host.equals(LAUNCHER_HOST, true) && !host.equals("www.$LAUNCHER_HOST", true)) return null
+  return uri.pathSegments.firstOrNull().orEmpty()
+}
+
 sealed interface JoinOutcome {
   data class Success(
     val game: Game,
@@ -81,16 +102,13 @@ object JoinResolver {
       return soleLiveGameJoin(games, roomCode = s, source = null)
     }
 
-    val segs = uri.pathSegments
-
     // Canonical couchpad.games/<CODE> links (bare domain or www) carry no controller
-    // origin of their own, so the sole live game hosts them. The App Links filter
-    // claims exactly-6-char paths, so the marketing index never reaches the app; a
-    // non-room 6-char path is rejected by validCode.
+    // origin of their own, so the sole live game hosts them — the offline answer, and
+    // the fallback when [resolveJoin]'s directory probe can't name the owner. The App
+    // Links filter claims exactly-6-char paths, so the marketing index never reaches
+    // the app; a non-room 6-char path is rejected by validCode.
     // (Subdomains are preview deployments and load their own origin — below.)
-    if (host.equals(LAUNCHER_HOST, true) || host.equals("www.$LAUNCHER_HOST", true)) {
-      return soleLiveGameJoin(games, segs.firstOrNull().orEmpty(), source = uri)
-    }
+    originlessCode(s)?.let { return soleLiveGameJoin(games, it, source = uri) }
 
     // A game's own domain, or a launcher subdomain (preview/branch deployment). The
     // subdomain prefix names the game when it can ("tinytrack-…"), purely for

@@ -72,16 +72,29 @@ enum RoomDirectory {
     }
 }
 
-// MARK: - Typed-code resolution
+// MARK: - Join resolution
 
-/// Hand-typed code flow: probes ALL relays in parallel (the sole live game's own relayProbeBase first,
-/// then the shared relay deduped), awaits every probe, then applies the decision table.
-func resolveTypedCode(_ code: String, games: [Game]) async -> JoinOutcome {
-    let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+/// The one entry point for every join input: typed code, scanned QR, Universal Link,
+/// rejoin and nearby URLs. An input that carries its own origin IS the controller and
+/// resolves offline; an origin-less one (`originlessCode`) names a room but not a game,
+/// and only the relay directory knows which game owns that code. Routing them all through
+/// here is what stops a canonical couchpad.games/<code> link from being guessed onto the
+/// sole live game when the room belongs to another.
+///
+/// Probes ALL relays in parallel (the sole live game's own relayProbeBase first, then the
+/// shared relay deduped), awaits every probe, then applies the decision table.
+func resolveJoin(_ raw: String, games: [Game]) async -> JoinOutcome {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
         return .failure(message: String(localized: "Enter a room code."))
     }
-    return resolveLookups(trimmed, results: await probeRelays(trimmed, games: games), games: games)
+    // Has an origin of its own (or is a launcher link with no code at all): nothing to
+    // look up — the offline resolver already knows what to load, or why it can't.
+    guard let code = originlessCode(trimmed), !code.isEmpty else {
+        return JoinResolver.resolve(trimmed, games: games)
+    }
+    return resolveLookups(code, results: await probeRelays(code, games: games),
+                          games: games, from: trimmed)
 }
 
 /// The relays a code is checked against: the game's own relay first (so it wins ties),
@@ -110,10 +123,17 @@ func probeRelays(_ code: String, games: [Game]) async -> [RoomLookup] {
     return results
 }
 
-/// The decision table over already-fetched lookups — separate from `resolveTypedCode` so
+/// The decision table over already-fetched lookups — separate from `resolveJoin` so
 /// a caller that probed for its own reasons (`resolveNearby`'s fullness check) resolves
 /// from those results instead of probing the same relays a second time.
-func resolveLookups(_ trimmed: String, results: [RoomLookup], games: [Game]) -> JoinOutcome {
+///
+/// `from` is the input `code` was read out of, defaulting to the code itself. It matters
+/// only on the sole-live-game rungs, which re-resolve it whole so a canonical link keeps
+/// its query and fragment (`?cpp=`, `#instance`). The origin rung builds a fresh URL from
+/// the code and deliberately carries nothing over.
+func resolveLookups(_ code: String, results: [RoomLookup], games: [Game],
+                    from: String? = nil) -> JoinOutcome {
+    let source = from ?? code
     let liveGames = games.filter { $0.isLive }
     let sole: Game? = liveGames.count == 1 ? liveGames[0] : nil
 
@@ -126,8 +146,11 @@ func resolveLookups(_ trimmed: String, results: [RoomLookup], games: [Game]) -> 
     // player has a slot in, can safely act on `isFull`.
 
     // Rule 1: first Found with a non-nil url (relay-list order) → resolve that URL (untrusted; re-validated).
+    // A url that is itself origin-less (a couchpad.games/<code> template) declares nothing
+    // the directory hadn't already told us — skip it, so the room's own origin gets its
+    // turn instead of the code being handed to the sole live game.
     for result in results {
-        if case .found(let url, _, _, _) = result, let url {
+        if case .found(let url, _, _, _) = result, let url, originlessCode(url) == nil {
             return JoinResolver.resolve(url, games: games)
         }
     }
@@ -137,7 +160,7 @@ func resolveLookups(_ trimmed: String, results: [RoomLookup], games: [Game]) -> 
     // that origin. Untrusted; the resolver host-checks it against the allow-list.
     for result in results {
         if case .found(_, let origin, _, _) = result, let origin {
-            return JoinResolver.resolve(origin.trimmingTrailingSlashes() + "/" + trimmed, games: games)
+            return JoinResolver.resolve(origin.trimmingTrailingSlashes() + "/" + code, games: games)
         }
     }
 
@@ -145,7 +168,7 @@ func resolveLookups(_ trimmed: String, results: [RoomLookup], games: [Game]) -> 
 
     // Rule 2: any Found (all nil urls and origins) + sole live game → bare-code resolve.
     if anyFound, sole != nil {
-        return JoinResolver.resolve(trimmed, games: games)
+        return JoinResolver.resolve(source, games: games)
     }
     // Rule 3: any Found, no sole live game.
     if anyFound {
@@ -155,7 +178,7 @@ func resolveLookups(_ trimmed: String, results: [RoomLookup], games: [Game]) -> 
     // Rule 4: no Found; sole live game + at least one Error → optimistic bare-code resolve.
     let anyError = results.contains(.error)
     if sole != nil, anyError {
-        return JoinResolver.resolve(trimmed, games: games)
+        return JoinResolver.resolve(source, games: games)
     }
 
     // Rule 5: at least one NotFound.

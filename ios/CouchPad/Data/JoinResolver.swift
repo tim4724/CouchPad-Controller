@@ -7,6 +7,28 @@ enum JoinOutcome: Equatable {
     case failure(message: String)
 }
 
+/// The room code an input names when it carries no controller origin of its own: a bare
+/// typed code, or a canonical couchpad.games/<code> link (bare domain or www — a subdomain
+/// is a preview deployment and IS its own origin). Nil when the input has an origin, in
+/// which case that URL is the controller and loads verbatim. "" for a launcher link with
+/// no path segment.
+///
+/// Such an input names a room but not a game — exactly what the relay directory answers —
+/// so this is the one test `resolveJoin` needs, and the same test that tells a §6 `url`
+/// that declares a controller apart from one that declares nothing.
+func originlessCode(_ raw: String?) -> String? {
+    let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty { return nil }
+    guard let components = URLComponents(string: trimmed),
+          components.scheme != nil,
+          let host = components.host, !host.isEmpty else {
+        return trimmed
+    }
+    let lowerHost = host.lowercased()
+    guard lowerHost == CP.launcherHost || lowerHost == "www." + CP.launcherHost else { return nil }
+    return components.path.split(separator: "/").map(String.init).first ?? ""
+}
+
 // MARK: - Resolver
 
 enum JoinResolver {
@@ -28,10 +50,10 @@ enum JoinResolver {
 
         let lowerHost = host.lowercased()
 
-        // Canonical launcher links (bare domain or www): code-first, sole live game
-        // hosts them.
-        if lowerHost == CP.launcherHost || lowerHost == "www." + CP.launcherHost {
-            let code = components.path.split(separator: "/").map(String.init).first ?? ""
+        // Canonical launcher links (bare domain or www) carry no controller origin of
+        // their own: code-first, sole live game hosts them — the offline answer, and the
+        // fallback when `resolveJoin`'s directory probe can't name the owner.
+        if let code = originlessCode(trimmed) {
             return soleLiveGameJoin(games: games, roomCode: code, source: components)
         }
 

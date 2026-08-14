@@ -11,6 +11,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -103,7 +104,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import games.couchpad.controller.data.Game
 import games.couchpad.controller.data.ManifestStore
 import games.couchpad.controller.data.JoinOutcome
-import games.couchpad.controller.data.JoinResolver
 import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.data.NearbyAdvert
 import games.couchpad.controller.data.NearbyRoom
@@ -126,7 +126,7 @@ import games.couchpad.controller.data.SAMPLE_ROOM_CODE
 import games.couchpad.controller.data.ROOM_POLL_MS
 import games.couchpad.controller.data.RoomDirectory
 import games.couchpad.controller.data.RoomLookup
-import games.couchpad.controller.data.resolveTypedCode
+import games.couchpad.controller.data.resolveJoin
 import games.couchpad.controller.data.withProfile
 import androidx.compose.ui.tooling.preview.Preview
 import games.couchpad.controller.theme.CouchPadTheme
@@ -138,6 +138,7 @@ import games.couchpad.controller.ui.components.GameIcon
 import games.couchpad.controller.ui.components.deviceName
 import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.JoinButtons
+import games.couchpad.controller.ui.components.JoiningCover
 import games.couchpad.controller.ui.components.annotatedHostLine
 import games.couchpad.controller.ui.components.MirrorHostSystemBars
 import games.couchpad.controller.ui.components.PlayerChip
@@ -179,6 +180,9 @@ fun MainScreen(
   var showCodeEntry by remember { mutableStateOf(false) }
   var codeLoading by remember { mutableStateOf(false) }
   var codeError by remember { mutableStateOf<String?>(null) }
+  // A join being resolved outside the code dialog (which reports progress on its own
+  // submit button): the directory probe a scan or App Link now takes can cost a round trip.
+  var joining by remember { mutableStateOf(false) }
   var rejoin by remember { mutableStateOf<RecentRoom?>(null) }
   var infoGame by remember { mutableStateOf<Game?>(null) }
   // Rooms advertised on the LAN by native display apps (contract §8). Resolved against
@@ -294,10 +298,18 @@ fun MainScreen(
     }
   }
 
+  // Scan, App Link, rejoin and nearby taps all land here. [resolveJoin] only touches the
+  // network for an origin-less input (a bare code or a couchpad.games/<code> link) — a URL
+  // that names its own controller resolves offline, so a rejoin tap stays instant.
   fun resolveAndJoin(raw: String) {
-    when (val r = JoinResolver.resolve(raw, games)) {
-      is JoinOutcome.Success -> requireName(AfterName.Join(r))
-      is JoinOutcome.Failure -> fail(r.messageRes)
+    scope.launch {
+      joining = true
+      val r = resolveJoin(raw, games)
+      joining = false
+      when (r) {
+        is JoinOutcome.Success -> requireName(AfterName.Join(r))
+        is JoinOutcome.Failure -> fail(r.messageRes)
+      }
     }
   }
 
@@ -545,7 +557,9 @@ fun MainScreen(
     if (showScanner) {
       ScanScreen(
         games = games,
-        onJoin = { launchJoin(it, profile) },
+        // The scanner only vouches for the payload's shape; which room it names is the
+        // directory's call, so hand back the raw value and resolve it like any other input.
+        onCode = { showScanner = false; resolveAndJoin(it) },
         // A scanned legal-page QR: close the camera and open the doc viewer, with
         // the same confirm haptic as a successful join scan.
         onOpenLegalDoc = { url ->
@@ -558,6 +572,12 @@ fun MainScreen(
         onEnterCode = { showScanner = false; codeError = null; showCodeEntry = true },
         onClose = { showScanner = false },
       )
+    }
+    // The same cover the game host shows while the controller paints, so a join is ONE
+    // loading screen from tap to page: this one names no game because resolving is what
+    // discovers which one, and the host's picks up the name.
+    AnimatedVisibility(visible = joining, enter = fadeIn(), exit = fadeOut(tween(300))) {
+      JoiningCover(stringResource(R.string.joining))
     }
   }
 
@@ -596,7 +616,7 @@ fun MainScreen(
         codeError = null
         codeLoading = true
         scope.launch {
-          val outcome = resolveTypedCode(code.trim(), games)
+          val outcome = resolveJoin(code.trim(), games)
           codeLoading = false
           when (outcome) {
             is JoinOutcome.Success -> {

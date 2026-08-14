@@ -71,6 +71,36 @@ struct RetryCover: View {
     }
 }
 
+// MARK: - JoiningCover
+
+/// "Joining…" cover over a page that hasn't painted yet: home shows it while the relay
+/// resolves a code, the game host while the controller loads, so one join reads as a
+/// single loading screen. The fill differs (a themed game surface vs the screen
+/// background), so the caller passes it and its content color — as does the message:
+/// home hasn't discovered the game yet, the host names it.
+struct JoiningCover: View {
+    let message: String
+    let background: Color
+    let foreground: Color
+    /// The game's accent, once the page has sent its §4 theme metas. Nil on home, which
+    /// has no game yet.
+    var tint: Color? = nil
+
+    var body: some View {
+        background
+            .ignoresSafeArea()
+            .overlay {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .tint(tint)
+                    Text(message)
+                        .font(.cpBodyMedium)
+                        .foregroundStyle(foreground)
+                }
+            }
+    }
+}
+
 // MARK: - ArtCache
 
 /// Process-wide memoized async decode of artwork, keyed by manifest art path:

@@ -154,7 +154,7 @@ fun homeRooms(rooms: List<NearbyRoom>, rejoin: RecentRoom? = null): HomeRooms {
 /**
  * Resolves one advertised code against the relay — the same probe a typed code takes,
  * so scan, type and nearby-tap all land on one path. The relay's `url` is what loads
- * (re-validated against the manifest allow-list by [resolveTypedCode]) and is also where
+ * (re-validated against the manifest allow-list by [resolveJoin]) and is also where
  * `cpp` comes from, so the launcher never trusts anything the LAN said beyond the code.
  *
  * Null when the room is gone, unreachable, off the allow-list, or FULL — a card that

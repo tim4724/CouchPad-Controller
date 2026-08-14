@@ -84,12 +84,19 @@ object RoomDirectory {
 }
 
 /**
- * Resolve a hand-typed room code to a join target. A relay tells us which game owns
- * the code (via its stored controller URL, or failing that the room's origin); we then
- * re-validate that host against the manifest allow-list — both are host-declared and
- * untrusted. The origin fallback matters for games whose display registers a room but
- * no url template (e.g. a preview deployment on a launcher subdomain): without
- * it the code would wrongly resolve to the sole *live* game instead of its real owner.
+ * The one entry point for every join input: typed code, scanned QR, App Link, rejoin
+ * and nearby URLs. An input that carries its own origin IS the controller and resolves
+ * offline; an origin-less one ([originlessCode]) names a room but not a game, and only
+ * the relay directory knows which game owns that code. Routing them all through here is
+ * what stops a canonical couchpad.games/<code> link from being guessed onto the sole
+ * live game when the room belongs to another.
+ *
+ * A relay tells us which game owns the code (via its stored controller URL, or failing
+ * that the room's origin); we then re-validate that host against the manifest allow-list
+ * — both are host-declared and untrusted. The origin fallback matters for games whose
+ * display registers a room but no url template (e.g. a preview deployment on a launcher
+ * subdomain): without it the code would wrongly resolve to the sole *live* game instead
+ * of its real owner.
  *
  * The shared relay ([RELAY_BASE]) doesn't yet own every game's rooms, so we also
  * query the sole live game's own relay ([Game.relayProbeBase]) IN PARALLEL and take
@@ -98,11 +105,14 @@ object RoomDirectory {
  * own relay is preferred when both answer. With more than one live game there is no
  * sole relay to fall back to, so only the shared relay is consulted.
  */
-suspend fun resolveTypedCode(code: String, games: List<Game>): JoinOutcome = coroutineScope {
-  val trimmed = code.trim()
-  if (trimmed.isEmpty()) return@coroutineScope JoinOutcome.Failure(R.string.error_enter_room_code)
-  val results = probeRelays(trimmed, games)
-  resolveLookups(trimmed, results, games)
+suspend fun resolveJoin(raw: String, games: List<Game>): JoinOutcome {
+  val trimmed = raw.trim()
+  if (trimmed.isEmpty()) return JoinOutcome.Failure(R.string.error_enter_room_code)
+  // Has an origin of its own (or is a launcher link with no code at all): nothing to
+  // look up — the offline resolver already knows what to load, or why it can't.
+  val code = originlessCode(trimmed)
+  if (code.isNullOrEmpty()) return JoinResolver.resolve(trimmed, games)
+  return resolveLookups(code, probeRelays(code, games), games, from = trimmed)
 }
 
 /** The relays a code is checked against: the game's own relay first (so it wins ties),
@@ -117,11 +127,21 @@ suspend fun probeRelays(code: String, games: List<Game>): List<RoomLookup> = cor
 }
 
 /**
- * The decision table over already-fetched lookups — separate from [resolveTypedCode] so
+ * The decision table over already-fetched lookups — separate from [resolveJoin] so
  * a caller that probed for its own reasons ([resolveNearby]'s fullness check) resolves
  * from those results instead of probing the same relays a second time.
+ *
+ * [from] is the input [code] was read out of, defaulting to the code itself. It matters
+ * only on the sole-live-game rungs, which re-resolve it whole so a canonical link keeps
+ * its query and fragment (`?cpp=`, `#instance`). The origin rung builds a fresh URL from
+ * the code and deliberately carries nothing over.
  */
-fun resolveLookups(trimmed: String, results: List<RoomLookup>, games: List<Game>): JoinOutcome {
+fun resolveLookups(
+  code: String,
+  results: List<RoomLookup>,
+  games: List<Game>,
+  from: String = code,
+): JoinOutcome {
   val sole = games.singleOrNull { it.isLive }
   val founds = results.filterIsInstance<RoomLookup.Found>()
   // Deliberately NOT refused when full, though the lookup reports it: a full room still
@@ -131,7 +151,10 @@ fun resolveLookups(trimmed: String, results: List<RoomLookup>, games: List<Game>
   // and let the relay decide — a stranger bounces back on `game_full`, which the shell
   // already turns into a banner. Only the nearby list, which never offers a room the
   // player has a slot in, can safely act on `isFull`.
-  val foundUrl = founds.firstOrNull { it.url != null }?.url
+  // A `url` that is itself origin-less (a couchpad.games/<code> template) declares nothing
+  // the directory hadn't already told us — skip it, so the room's own origin gets its turn
+  // instead of the code being handed to the sole live game.
+  val foundUrl = founds.firstOrNull { it.url != null && originlessCode(it.url) == null }?.url
   val foundOrigin = founds.firstOrNull { it.origin != null }?.origin
   return when {
     // A relay knows the room and handed back the controller URL — load exactly that.
@@ -139,13 +162,13 @@ fun resolveLookups(trimmed: String, results: List<RoomLookup>, games: List<Game>
     // No URL template, but the room declared its origin (e.g. a preview deployment on a
     // launcher subdomain owned by a not-yet-"live" game). Load the code at that
     // origin. The origin is host-declared and untrusted; the resolver host-checks it.
-    foundOrigin != null -> JoinResolver.resolve("${foundOrigin.trimEnd('/')}/$trimmed", games)
+    foundOrigin != null -> JoinResolver.resolve("${foundOrigin.trimEnd('/')}/$code", games)
     // Room exists but the relay stored neither URL nor origin: the sole live game hosts it.
-    founds.isNotEmpty() && sole != null -> JoinResolver.resolve(trimmed, games)
+    founds.isNotEmpty() && sole != null -> JoinResolver.resolve(from, games)
     founds.isNotEmpty() -> JoinOutcome.Failure(R.string.error_code_unmatched)
     // No relay had the room. If any errored we couldn't truly verify — with a sole
     // live game, resolve optimistically and let its own page decide.
-    sole != null && results.any { it is RoomLookup.Error } -> JoinResolver.resolve(trimmed, games)
+    sole != null && results.any { it is RoomLookup.Error } -> JoinResolver.resolve(from, games)
     results.any { it is RoomLookup.NotFound } -> JoinOutcome.Failure(R.string.error_room_not_found_or_expired)
     else -> JoinOutcome.Failure(R.string.error_server_unreachable)
   }

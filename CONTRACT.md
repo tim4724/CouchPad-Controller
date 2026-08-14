@@ -144,6 +144,10 @@ Client → relay:  create { clientId, maxClients, url? }
   `{instance}` placeholders — e.g. `https://play.example.com/{room}#{instance}`. It must
   match what a scanned QR produces: room code as the first path segment, instance in the
   fragment (kept out of request logs).
+- It must name the **controller's own origin**. A template on the launcher domain
+  (`couchpad.games/{room}`) declares nothing — that link is the launcher asking this same
+  directory who owns the code — so the launcher ignores it and falls back to the room's
+  `origin`. Register the host that actually serves your controller, or register nothing.
 - The relay **rejects the whole create** on an invalid template, so plain-http origins
   (local dev, E2E) must pass no `url`.
 - Optional: a display that registers none but is served from a CouchPad-owned origin is
@@ -165,7 +169,11 @@ Client → relay:  create { clientId, maxClients, url? }
   at all. `cpp` is `cp`-prefixed to stay clear of a game's own query params, and is inert
   in a browser.
 
-The launcher resolves a typed code through `GET {relayBase}/room/{code}`:
+The launcher resolves every **origin-less** input through `GET {relayBase}/room/{code}` —
+a typed code, a §8 nearby tap, and a canonical `couchpad.games/<code>` link however it
+arrives (scanned, tapped as a link). Only a URL that already names a controller origin
+skips the directory and loads as-is. So a display's registered template decides where the
+player lands no matter which way they joined:
 
 ```
 200 → { url?, origin?, clients, maxClients }   404 → not found

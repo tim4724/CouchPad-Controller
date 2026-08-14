@@ -106,9 +106,11 @@ import zxingcpp.BarcodeReader
  * process. In-app (vs a scanner activity) so it opens instantly and keeps the
  * manual-entry fallback one tap away on the same screen.
  *
- * A decoded QR resolves through [JoinResolver] right here: a bad code shows an
+ * A decoded QR is shape-checked through [JoinResolver] right here: a bad code shows an
  * inline banner and scanning continues — the player never gets bounced out to
- * retry. Only a successful resolve leaves the screen (via [onJoin]), except a
+ * retry. A payload that resolves leaves the screen as its RAW value (via [onCode]),
+ * for the caller to resolve for real — which room a canonical couchpad.games link
+ * names is the relay directory's call, not the camera's. The exception is a
  * legal-page QR (the privacy/imprint URL printed on packaging or shown by a
  * game), which opens the in-app doc viewer instead — same routing the App Link
  * path applies, since neither is a room.
@@ -116,7 +118,7 @@ import zxingcpp.BarcodeReader
 @Composable
 fun ScanScreen(
   games: List<Game>,
-  onJoin: (JoinOutcome.Success) -> Unit,
+  onCode: (raw: String) -> Unit,
   onOpenLegalDoc: (url: String) -> Unit,
   onEnterCode: () -> Unit,
   onClose: () -> Unit,
@@ -159,7 +161,7 @@ fun ScanScreen(
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { granted = hasCameraPermission(context) }
 
   // One join per screen visit: the analyzer keeps delivering frames after a hit,
-  // and a second onJoin would double-navigate.
+  // and a second onCode would double-navigate.
   var joined by remember { mutableStateOf(false) }
   // The banner for a QR that decoded but isn't a room. Rejections are remembered
   // so a bad code sitting in frame buzzes once, not every frame.
@@ -189,7 +191,7 @@ fun ScanScreen(
       when (val r = JoinResolver.resolve(raw, games)) {
         is JoinOutcome.Success -> {
           joined = true
-          onJoin(r)
+          onCode(raw)
           return
         }
         is JoinOutcome.Failure ->

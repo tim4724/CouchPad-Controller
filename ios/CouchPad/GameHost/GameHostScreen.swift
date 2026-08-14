@@ -253,17 +253,13 @@ struct GameHostScreen: View {
     }
 
     private var loadingCover: some View {
-        hostPalette.surface
-            .ignoresSafeArea()
-            .overlay {
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .tint(hostPalette.primary)  // adopts the accent if the theme beat page-finish
-                    Text("Joining \(displayTitle)…")
-                        .font(.cpBodyMedium)
-                        .foregroundStyle(hostPalette.onSurfaceVariant)
-                }
-            }
+        JoiningCover(
+            message: String(localized: "Joining \(displayTitle)…"),
+            background: hostPalette.surface,
+            foreground: hostPalette.onSurfaceVariant,
+            // Adopts the accent if the theme beat page-finish.
+            tint: hostPalette.primary
+        )
     }
 
     // No Leave button here — the Leave bar's X already exits.

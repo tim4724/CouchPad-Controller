@@ -57,7 +57,9 @@ struct MainScreen: View {
     @State private var afterName: AfterName? = nil
     @State private var showCodeEntry = false
     @State private var codeText = ""
-    @State private var codeLoading = false
+    // A join being resolved: the directory probe a scan, link or typed code takes can
+    // cost a round trip, and the cover below is the only sign the tap landed.
+    @State private var joining = false
     @State private var codeError: String? = nil
     @State private var scanRequest: ScanRequest? = nil
     @State private var rejoin: RecentRoom? = nil
@@ -177,20 +179,20 @@ struct MainScreen: View {
             // reads as a floating gap.
             .padding(.bottom, 4)
 
-            if codeLoading {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Joining…")
-                        .font(.cpLabelLarge)
-                }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
-                .background(.regularMaterial, in: Capsule())
-                .padding(.bottom, joinCardHeight + 28)
-                .transition(.opacity)
+            // The same cover the game host shows while the controller paints, so a join
+            // is ONE loading screen from tap to page: this one names no game because
+            // resolving is what discovers which one, and the host's picks up the name.
+            if joining {
+                JoiningCover(message: String(localized: "Joining…"),
+                             background: palette.surface,
+                             foreground: palette.onSurfaceVariant)
+                    .transition(.opacity)
             }
         }
         .navigationTitle("CouchPad")
+        // The join cover is full-screen; the toolbar pills would otherwise float over it
+        // (Android's top bar scrolls inside the content, so it's covered for free).
+        .toolbar(joining ? .hidden : .visible, for: .navigationBar)
         // "Controller" subtitle under the app name, matching Android's HomeTopBar.
         // Native subtitle slot is iOS 26+; on earlier releases the bar shows the
         // title alone (no subtitle affordance existed pre-26).
@@ -340,14 +342,7 @@ struct MainScreen: View {
                         onOpenLegalDoc(legal)
                         return
                     }
-                    let outcome = JoinResolver.resolve(raw, games: request.games)
-                    switch outcome {
-                    case .success:
-                        launchJoin(outcome, request.profile)
-                    case .failure(let message):
-                        errorTick += 1
-                        messages.showToast(message)
-                    }
+                    resolveAndJoin(raw)
                 case .enterCode:
                     pendingSheetAction = .enterCode
                 case .failure(let message):
@@ -472,26 +467,34 @@ struct MainScreen: View {
         }
     }
 
+    /// Scan, Universal Link, rejoin and nearby taps all land here. `resolveJoin` only
+    /// touches the network for an origin-less input (a bare code or a couchpad.games/<code>
+    /// link) — a URL that names its own controller resolves offline, so a rejoin tap stays
+    /// instant.
     @MainActor
     private func resolveAndJoin(_ raw: String) {
-        let outcome = JoinResolver.resolve(raw, games: games)
-        switch outcome {
-        case .success:
-            requireName(.join(outcome))
-        case .failure(let message):
-            errorTick += 1
-            messages.showToast(message)
+        joining = true
+        Task { @MainActor in
+            let outcome = await resolveJoin(raw, games: games)
+            joining = false
+            switch outcome {
+            case .success:
+                requireName(.join(outcome))
+            case .failure(let message):
+                errorTick += 1
+                messages.showToast(message)
+            }
         }
     }
 
     @MainActor
     private func submitCode(_ text: String) {
         codeError = nil
-        codeLoading = true
+        joining = true
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         Task { @MainActor in
-            let outcome = await resolveTypedCode(trimmed, games: games)
-            codeLoading = false
+            let outcome = await resolveJoin(trimmed, games: games)
+            joining = false
             switch outcome {
             case .success:
                 codeText = ""

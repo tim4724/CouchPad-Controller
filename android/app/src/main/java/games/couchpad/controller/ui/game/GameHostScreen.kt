@@ -54,7 +54,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,6 +114,7 @@ import games.couchpad.controller.data.hostInDomain
 import games.couchpad.controller.data.isPrivateHost
 import games.couchpad.controller.theme.contentColorOn
 import games.couchpad.controller.theme.CouchPadTheme
+import games.couchpad.controller.ui.components.JoiningCover
 import games.couchpad.controller.ui.components.PlayerChip
 import games.couchpad.controller.ui.components.ServerUnreachableRetry
 import games.couchpad.controller.ui.components.denyLocalFileAccess
@@ -645,22 +645,7 @@ private fun GameHostContent(
         exit = fadeOut(tween(300)),
         modifier = Modifier.fillMaxSize(),
       ) {
-        Box(
-          Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-          contentAlignment = Alignment.Center,
-        ) {
-          Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-          ) {
-            CircularProgressIndicator()
-            Text(
-              stringResource(R.string.joining_game, displayTitle),
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          }
-        }
+        JoiningCover(stringResource(R.string.joining_game, displayTitle))
       }
       // Load failed: an opaque cover over the dead page offering retry-in-place (so a
       // transient blip doesn't cost a re-scan). Above the join cover, below the floating

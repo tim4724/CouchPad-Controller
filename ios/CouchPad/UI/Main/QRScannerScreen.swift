@@ -7,7 +7,7 @@ import UIKit
 enum QRScanResult: Equatable {
     case code(String)
     case cancelled
-    case enterCode                 // manual entry chosen from the denied screen
+    case enterCode                 // manual entry chosen, scanning or denied
     case failure(message: String)
 }
 
@@ -22,13 +22,19 @@ struct QRScannerScreen: View {
         self.onFinish = onFinish
     }
 
+    @Environment(\.cpPalette) private var palette
+
     @State private var finished = false
     @State private var authorized = false
     @State private var denied = false
     @State private var cameraAvailable = AVCaptureDevice.default(for: .video) != nil
     // Why the last QR was refused, shown under the reticle while scanning continues.
+    // Rejections are remembered so a bad code sitting in frame buzzes once, not
+    // every frame.
     @State private var scanError: String? = nil
-    @State private var lastRejected: String? = nil
+    @State private var rejected: Set<String> = []
+    @State private var torchOn = false
+    @State private var hasTorch = false
 
     var body: some View {
         ZStack {
@@ -42,23 +48,18 @@ struct QRScannerScreen: View {
                     .foregroundStyle(.white)
             } else if authorized {
                 CameraPreview(
+                    torchOn: torchOn,
                     onCode: handleCode,
                     onFailure: { message in
                         finish(.failure(message: message))
-                    }
+                    },
+                    onTorchProbed: { hasTorch = $0 }
                 )
                 .ignoresSafeArea()
 
-                VStack(spacing: 24) {
-                    RoundedRectangle(cornerRadius: 24)
-                        .stroke(Color.white.opacity(0.9), lineWidth: 3)
-                        .frame(width: 240, height: 240)
-                    Text(scanError ?? String(localized: "Scan the room QR code"))
-                        .font(.cpBodyMedium)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(Color.white.opacity(0.9), lineWidth: 3)
+                    .frame(width: 240, height: 240)
             } else if denied {
                 // Not a dead end: point at Settings (the only place that can still
                 // grant it) and keep the typed-code path in reach — mirrors Android's
@@ -81,25 +82,84 @@ struct QRScannerScreen: View {
                 .padding(.horizontal, 32)
             }
 
-            VStack {
+            // Top and bottom scrims keep the white controls (and the status-bar
+            // icons) legible over a bright camera image — same recipe as Android.
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.black.opacity(0.5), .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 140)
+                Spacer(minLength: 0)
+                LinearGradient(colors: [.clear, .black.opacity(0.6)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 200)
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+
+            VStack(spacing: 0) {
                 HStack {
-                    Button {
+                    puckButton("xmark", label: String(localized: "Close scanner")) {
                         finish(.cancelled)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
                     Spacer()
+                    if hasTorch {
+                        puckButton(
+                            torchOn ? "bolt.fill" : "bolt.slash.fill",
+                            label: torchOn ? String(localized: "Turn flashlight off")
+                                           : String(localized: "Turn flashlight on")
+                        ) {
+                            torchOn.toggle()
+                        }
+                    }
                 }
-                Spacer()
+                Spacer(minLength: 0)
+                if authorized {
+                    VStack(spacing: 12) {
+                        Text("Scan the room QR code")
+                            .font(.cpBodyLarge)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                        if let scanError {
+                            Text(scanError)
+                                .font(.cpBodyMedium)
+                                .multilineTextAlignment(.center)
+                                // The palette's error tone flips light/dark, so pick
+                                // the label against it rather than assuming white.
+                                .foregroundStyle(contentColorOn(palette.error))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(palette.error))
+                        }
+                        // The scan can always fail (a scratched code, a glossy TV);
+                        // without this the only way out is backing all the way home.
+                        Button { finish(.enterCode) } label: {
+                            Text("Enter code manually")
+                                .font(.cpTitleMedium)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                        }
+                        .buttonStyle(.plain)
+                        .background(
+                            palette.secondaryContainer,
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                        .foregroundStyle(palette.onSecondaryContainer)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                    .animation(.easeInOut(duration: 0.2), value: scanError)
+                }
             }
             .padding(8)
         }
         .statusBarHidden(false)
+        // A refusal explains itself for a moment, then gets out of the way — the
+        // hint underneath is what the player needs while they keep scanning.
+        .task(id: scanError) {
+            guard scanError != nil else { return }
+            try? await Task.sleep(for: .seconds(3))
+            scanError = nil
+        }
         .task {
             guard cameraAvailable else { return }
             switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -125,6 +185,22 @@ struct QRScannerScreen: View {
         }
     }
 
+    /// The floating controls sit on live video — give them a constant dark puck so
+    /// they read on any background.
+    private func puckButton(_ systemName: String, label: String,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(Color.black.opacity(0.35), in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
     /// A frame may hold several QRs (the room code next to a poster QR on the wall),
     /// and only the launcher knows which ones mean anything — so validate HERE and
     /// keep the session running past codes that don't resolve, instead of letting the
@@ -142,9 +218,9 @@ struct QRScannerScreen: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             finish(.code(value))
         case .failure(let message):
-            // Once per distinct payload — the same code decodes on every frame.
-            guard value != lastRejected else { return }
-            lastRejected = value
+            // Once per distinct payload — the same code decodes on every frame, and
+            // two bad codes in one frame must not take turns buzzing.
+            guard rejected.insert(value).inserted else { return }
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             scanError = message
         }
@@ -160,8 +236,10 @@ struct QRScannerScreen: View {
 // MARK: - CameraPreview (private)
 
 private struct CameraPreview: UIViewRepresentable {
+    let torchOn: Bool
     let onCode: (String) -> Void
     let onFailure: (String) -> Void
+    let onTorchProbed: (Bool) -> Void
 
     final class PreviewView: UIView {
         override static var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
@@ -171,14 +249,21 @@ private struct CameraPreview: UIViewRepresentable {
     final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
         var onCode: (String) -> Void
         var onFailure: (String) -> Void
+        var onTorchProbed: (Bool) -> Void
 
         let session = AVCaptureSession()
         private let sessionQueue = DispatchQueue(label: "games.couchpad.controller.qr-session")
         private var configured = false
+        // Session-queue state: the capture device, and the torch state last applied
+        // to it (so a SwiftUI update that changed something else doesn't re-lock it).
+        private var device: AVCaptureDevice?
+        private var torchOn = false
 
-        init(onCode: @escaping (String) -> Void, onFailure: @escaping (String) -> Void) {
+        init(onCode: @escaping (String) -> Void, onFailure: @escaping (String) -> Void,
+             onTorchProbed: @escaping (Bool) -> Void) {
             self.onCode = onCode
             self.onFailure = onFailure
+            self.onTorchProbed = onTorchProbed
         }
 
         private struct SetupError: LocalizedError {
@@ -196,7 +281,10 @@ private struct CameraPreview: UIViewRepresentable {
                         throw SetupError(message: String(localized: "No camera available"))
                     }
                     let input = try AVCaptureDeviceInput(device: device)
+                    self.device = device
                     Self.applyCenterMetering(device)
+                    let torchAvailable = device.hasTorch
+                    DispatchQueue.main.async { self.onTorchProbed(torchAvailable) }
                     self.session.beginConfiguration()
                     guard self.session.canAddInput(input) else {
                         self.session.commitConfiguration()
@@ -248,6 +336,20 @@ private struct CameraPreview: UIViewRepresentable {
             }
         }
 
+        /// The scanner's own flashlight — the room code is often on a card or a
+        /// sleeve, not just a lit TV. Stopping the session releases the torch, so
+        /// there's nothing to undo on teardown.
+        func setTorch(_ on: Bool) {
+            sessionQueue.async { [weak self] in
+                guard let self, self.torchOn != on,
+                      let device = self.device, device.hasTorch,
+                      (try? device.lockForConfiguration()) != nil else { return }
+                defer { device.unlockForConfiguration() }
+                self.torchOn = on
+                device.torchMode = on ? .on : .off
+            }
+        }
+
         func stop() {
             sessionQueue.async { [weak self] in
                 guard let self else { return }
@@ -272,7 +374,7 @@ private struct CameraPreview: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onCode: onCode, onFailure: onFailure)
+        Coordinator(onCode: onCode, onFailure: onFailure, onTorchProbed: onTorchProbed)
     }
 
     func makeUIView(context: Context) -> PreviewView {
@@ -287,6 +389,8 @@ private struct CameraPreview: UIViewRepresentable {
     func updateUIView(_ uiView: PreviewView, context: Context) {
         context.coordinator.onCode = onCode
         context.coordinator.onFailure = onFailure
+        context.coordinator.onTorchProbed = onTorchProbed
+        context.coordinator.setTorch(torchOn)
     }
 
     static func dismantleUIView(_ uiView: PreviewView, coordinator: Coordinator) {

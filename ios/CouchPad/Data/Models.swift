@@ -41,11 +41,14 @@ enum CP {
     /// The two legal pages cross-link to each other, so the in-app viewer can move
     /// from one to the other. Matches a loaded URL back to a document title (localized)
     /// so the nav bar shows the right one as the page changes; `nil` if unrecognized.
+    /// The test is the LAST path segment, not a suffix of the path — Android matches
+    /// "…/imprint", so a page named "notprivacy" must be unrecognized on both.
     static func legalTitle(for url: URL?) -> String? {
-        let path = (url?.path ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        if path.hasSuffix("imprint") { return String(localized: "Impressum") }
-        if path.hasSuffix("privacy") { return String(localized: "Privacy Policy") }
-        return nil
+        switch (url?.path ?? "").split(separator: "/").last {
+        case "imprint": return String(localized: "Impressum")
+        case "privacy": return String(localized: "Privacy Policy")
+        default: return nil
+        }
     }
 
     /// A scanned QR payload is arbitrary content — unlike a Universal Link, the OS

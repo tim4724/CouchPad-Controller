@@ -148,6 +148,7 @@ struct GameHostScreen: View {
                     // ChromeState — it drives the window scene, not this view's layout, and
                     // the route-driven reset there is what guarantees home is portrait again.
                     onLandscape: { ChromeState.shared.orientation = $0 ? .landscape : .portrait },
+                    onRendererGone: reload,
                     failed: $failed,
                     reloadToken: reloadToken,
                     onThemeChanged: { pageTheme = $0 },
@@ -264,12 +265,15 @@ struct GameHostScreen: View {
 
     // No Leave button here — the Leave bar's X already exits.
     private var retryCover: some View {
-        RetryCover(background: hostPalette.surface, foreground: hostPalette.onSurface) {
-            // Retry in place: clear the error, bring the join cover back, reload.
-            failed = false
-            loading = true
-            reloadToken += 1
-        }
+        RetryCover(background: hostPalette.surface, foreground: hostPalette.onSurface, onRetry: reload)
+    }
+
+    /// Load the controller again in place (no re-scan): clear the error, bring the
+    /// join cover back, re-issue. Both the Retry tap and a dead renderer land here.
+    private func reload() {
+        failed = false
+        loading = true
+        reloadToken += 1
     }
 
     /// The floating chrome. Landscape: no bar at all — the game keeps the full
@@ -306,9 +310,11 @@ struct GameHostScreen: View {
         .onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: .global)
         } action: { frame in
-            // Intrusion from the physical right edge (.global coords are physical).
+            // Intrusion from the rail's OWN screen edge (.global coords are physical,
+            // and the rail sits trailing — which is the left edge under RTL). Android's
+            // LandscapeChrome reports the same value off whichever side it picked.
             let fullWidth = hostSize.width + cutout.leading + cutout.trailing
-            railEnd = fullWidth - frame.minX
+            railEnd = layoutDirection == .leftToRight ? fullWidth - frame.minX : frame.maxX
         }
         .frame(
             maxWidth: .infinity, maxHeight: .infinity,

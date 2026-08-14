@@ -98,6 +98,7 @@ struct GameWebView: UIViewRepresentable {
     let onGameEnd: (String?) -> Void   // fire-once
     let onLeave: () -> Void            // an armed back gesture the page didn't consume (§9)
     let onLandscape: (Bool) -> Void    // the orientation the page is asking for (§10)
+    let onRendererGone: () -> Void     // web-content process died — re-issue the load
     @Binding var failed: Bool          // main-doc load failed — drives the retry overlay
     let reloadToken: Int               // bumped by Retry → re-issue the join request
     let onThemeChanged: (PageTheme) -> Void
@@ -352,12 +353,13 @@ struct GameWebView: UIViewRepresentable {
         }
 
         /// The web-content process died (OOM kill while backgrounded, or a crash).
-        /// Route it to the same in-place retry as a network failure — WKWebView
-        /// recovers by loading again, which is exactly what Retry does. Without this
-        /// the player would face a blank page whose join cover already faded.
+        /// Recover on our own rather than parking on the retry cover: the fix is a
+        /// reload, the player asked for nothing, and Android already re-creates its
+        /// WebView and re-issues the join here. Without this the player would face a
+        /// blank page whose join cover already faded.
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             guard !isTearingDown, !didEnd else { return }
-            parent.failed = true
+            parent.onRendererGone()
         }
 
         /// No popups: a target=_blank / window.open navigation loads in THIS web view

@@ -44,9 +44,6 @@ ANDROID_ONLY = {
     "back",              # iOS uses the system back affordance
     "open_source_licenses",  # Android-only screen (iOS has no bundled licenses list)
     # CameraX scanner UI: iOS's AVFoundation scanner has its own copy (IOS_ONLY)
-    "close_scanner",
-    "flashlight_on",
-    "flashlight_off",
     "scan_hint",
     "camera_access_needed",
     "allow_camera_access",

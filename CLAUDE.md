@@ -41,7 +41,8 @@ always needs the mirrored change on the other. Both implement `CONTRACT.md` iden
   copy is only the first-run seed — both apps refresh from the served manifest
   (`ManifestStore`), and remote art/trailers are cached by URL and never revalidated, so a
   changed image must ship under a new file name — not a `?v=` bump (details: README §Where
-  things live).
+  things live). Encode covers with `tools/encode_artwork.sh` (1280×720 q85, writes both
+  bundles) — that is the ceiling both apps' `ArtCache` decodes to.
 - **Localization** (11 HexStacker locales): Android `res/values[-XX]/strings.xml`, iOS
   `CouchPad/Resources/*.xcstrings`. After any string change run:
   ```sh

@@ -82,7 +82,15 @@ fails the check. Run it after any string change.
   `hexstacker-16x9-v2.webp`) in the served manifest and in both bundles; changed
   bytes under an unchanged name go unnoticed by design. Not a `?v=` bump: the
   query string lands inside the file name both bundle lookups use, so every app
-  would re-download art it already ships.
+  would re-download art it already ships. Encode covers with
+
+  ```sh
+  tools/encode_artwork.sh <master>...    # 1280x720 q85 -> both bundles
+  ```
+
+  which is the ceiling both apps decode to, so a larger source is download weight
+  no screen ever shows. Not a build step, and it takes masters — every run is
+  another generation of lossy re-encode.
 - `android/app/src/main/java/games/couchpad/controller/` — `data/` (manifest
   model, join resolution, relay probe, LAN room discovery, prefs), `ui/main/`
   (home), `ui/game/` (WebView game host), `theme/`.

@@ -164,9 +164,10 @@ enum ArtCache {
         return body()
     }
 
-    /// Decoded-bitmap ceiling. Cards render at most ~410pt wide (~1230px at 3x),
-    /// so 720p covers every device while costing a quarter of the memory of the
-    /// shipped 1080p sources.
+    /// Decoded-bitmap ceiling. Cards render at most ~410pt wide (~1230px at 3x), so
+    /// 720p covers every device. The bundled covers are encoded to exactly this
+    /// (tools/encode_artwork.sh); the ceiling is what stops a larger one — served art,
+    /// or a future master — from decoding at full size.
     private static let maxPixelSize = CGSize(width: 1280, height: 720)
 
     private static func decode(artPath: String) async -> UIImage? {

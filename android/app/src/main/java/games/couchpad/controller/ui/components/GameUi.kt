@@ -1,6 +1,7 @@
 package games.couchpad.controller.ui.components
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -57,6 +58,7 @@ import games.couchpad.controller.data.PLATFORM_TVOS
 import games.couchpad.controller.data.PLATFORM_WEB
 import games.couchpad.controller.data.remoteArtUrl
 import games.couchpad.controller.theme.ActionCoral
+import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -98,24 +100,88 @@ fun PlayerChip(name: String, onClick: () -> Unit, accented: Boolean = false) {
   )
 }
 
-// Decoded once per art path, off the main thread — opening a sheet never decodes
-// mid-animation.
-private val artCache = ConcurrentHashMap<String, ImageBitmap>()
+/**
+ * Decoded-bitmap ceiling, matching iOS's ArtCache: a poster card renders at most
+ * ~410dp wide (~1230px at 3x), so 720p covers every device. The bundled covers are
+ * encoded to exactly this (tools/encode_artwork.sh); the ceiling is what stops a
+ * larger one — served art, or a future master — from decoding at full size.
+ */
+private const val MAX_ART_WIDTH = 1280
+private const val MAX_ART_HEIGHT = 720
 
 /**
- * Decodes a manifest art path: the bundled asset when one ships under
- * artwork/<file> (matched by file name — the bundled and served manifests root
- * the same art differently), else the ArtworkCache copy downloaded from the
- * manifest URL. Both lookups key on the URL/name, never on content, so a changed
- * image must ship under a new file name or ?v= — see ArtworkCache.
+ * Process-wide memoized decode of artwork, keyed by manifest art path. Decoding runs
+ * off the main thread, so opening a sheet never decodes mid-animation, and a path
+ * that FAILS is remembered too — otherwise a game whose art this build didn't ship
+ * (and whose download failed) re-probes assets and disk on every recomposition.
+ * Mirrors iOS's ArtCache (UI/Components/SharedComponents.swift).
  */
-private fun decodeArt(context: Context, art: String): ImageBitmap? {
-  runCatching {
-    context.assets.open("artwork/" + art.substringAfterLast('/')).use(BitmapFactory::decodeStream)
-  }.getOrNull()?.let { return it.asImageBitmap() }
-  val url = remoteArtUrl(art) ?: return null
-  val file = ArtworkCache.fetch(context, url) ?: return null
-  return BitmapFactory.decodeFile(file.path)?.asImageBitmap()
+internal object ArtCache {
+  private val images = ConcurrentHashMap<String, ImageBitmap>()
+  private val failures = ConcurrentHashMap.newKeySet<String>()
+
+  /** Non-null only after a successful decode has been memoized. */
+  fun cached(art: String): ImageBitmap? = images[art]
+
+  suspend fun load(context: Context, art: String): ImageBitmap? {
+    images[art]?.let { return it }
+    if (art in failures) return null
+    val decoded = withContext(Dispatchers.IO) { decode(context, art) }
+    if (decoded == null) failures.add(art) else images[art] = decoded
+    return decoded
+  }
+
+  /**
+   * The bundled asset when one ships under artwork/<file> (matched by file name —
+   * the bundled and served manifests root the same art differently), else the
+   * ArtworkCache copy downloaded from the manifest URL. Both lookups key on the
+   * URL/name, never on content, so a changed image must ship under a new file name
+   * or ?v= — see ArtworkCache.
+   */
+  private fun decode(context: Context, art: String): ImageBitmap? {
+    val assetPath = "artwork/" + art.substringAfterLast('/')
+    decodeScaled { runCatching { context.assets.open(assetPath) }.getOrNull() }
+      ?.let { return it.asImageBitmap() }
+    val url = remoteArtUrl(art) ?: return null
+    val file = ArtworkCache.fetch(context, url) ?: return null
+    return decodeScaled { runCatching { file.inputStream() }.getOrNull() }?.asImageBitmap()
+  }
+}
+
+/**
+ * Decodes [open]'s bytes scaled down inside the decoder, so an oversized source
+ * never materializes at full size: a power-of-two prepass (all `inSampleSize`
+ * offers) gets within 2x of the ceiling, then inDensity/inTargetDensity lands the
+ * exact aspect-preserving fit. Needs TWO streams — the bounds pass consumes one.
+ */
+private fun decodeScaled(open: () -> InputStream?): Bitmap? {
+  val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+  // The bounds pass returns null BY DESIGN — the dimensions land on `bounds`, so
+  // the stream, not the decode result, is what says whether there was anything read.
+  (open() ?: return null).use { BitmapFactory.decodeStream(it, null, bounds) }
+  val width = bounds.outWidth
+  val height = bounds.outHeight
+  if (width <= 0 || height <= 0) return null
+  val opts = BitmapFactory.Options().apply { inSampleSize = 1 }
+  while (width / (opts.inSampleSize * 2) >= MAX_ART_WIDTH &&
+    height / (opts.inSampleSize * 2) >= MAX_ART_HEIGHT
+  ) {
+    opts.inSampleSize *= 2
+  }
+  val sampledWidth = width / opts.inSampleSize
+  val sampledHeight = height / opts.inSampleSize
+  if (sampledWidth > MAX_ART_WIDTH || sampledHeight > MAX_ART_HEIGHT) {
+    opts.inScaled = true
+    // Whichever axis binds first supplies the one ratio, so the aspect holds.
+    if (sampledWidth * MAX_ART_HEIGHT >= sampledHeight * MAX_ART_WIDTH) {
+      opts.inDensity = sampledWidth
+      opts.inTargetDensity = MAX_ART_WIDTH
+    } else {
+      opts.inDensity = sampledHeight
+      opts.inTargetDensity = MAX_ART_HEIGHT
+    }
+  }
+  return open()?.use { BitmapFactory.decodeStream(it, null, opts) }
 }
 
 /**
@@ -125,13 +191,8 @@ private fun decodeArt(context: Context, art: String): ImageBitmap? {
 @Composable
 fun GameArt(game: Game, modifier: Modifier = Modifier) {
   val context = LocalContext.current
-  val img by produceState(initialValue = game.art?.let(artCache::get), game.art) {
-    val art = game.art ?: return@produceState
-    if (value == null) {
-      value = withContext(Dispatchers.IO) {
-        decodeArt(context, art)?.also { artCache[art] = it }
-      }
-    }
+  val img by produceState(initialValue = game.art?.let(ArtCache::cached), game.art) {
+    value = game.art?.let { ArtCache.load(context, it) }
   }
   Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
     val bitmap = img
@@ -170,11 +231,8 @@ fun deviceName(platform: String?): String? = when (platform) {
 @Composable
 fun GameIcon(game: Game, tint: Color, modifier: Modifier = Modifier) {
   val context = LocalContext.current
-  val img by produceState(initialValue = game.icon?.let(artCache::get), game.icon) {
-    val icon = game.icon ?: return@produceState
-    if (value == null) {
-      value = withContext(Dispatchers.IO) { decodeArt(context, icon)?.also { artCache[icon] = it } }
-    }
+  val img by produceState(initialValue = game.icon?.let(ArtCache::cached), game.icon) {
+    value = game.icon?.let { ArtCache.load(context, it) }
   }
   val bitmap = img
   if (bitmap != null) {

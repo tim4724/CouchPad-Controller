@@ -65,9 +65,10 @@ final class StoreScreenshotTests: XCTestCase {
 
         // ---- Game info sheet: manifest copy + join actions for the live game ----
         app.staticTexts["HexStacker"].firstMatch.tap()
-        let players = app.staticTexts["1–8 players"]
+        // The numeric players chip (Game.playersRange over the manifest counts).
+        let players = app.staticTexts["1–8"]
         XCTAssertTrue(players.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Scan the room code it shows to play."].exists)
+        XCTAssertTrue(app.staticTexts["Scan the room code it shows."].exists)
         // Give the muted gameplay trailer time to download (first locale only — it's
         // cached after) and render real frames; cover art shows if it isn't ready.
         Thread.sleep(forTimeInterval: 4)

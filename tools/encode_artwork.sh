@@ -28,7 +28,13 @@ android="$root/android/app/src/main/assets/artwork"
 ios="$root/ios/CouchPad/Resources/artwork"
 
 if [ $# -eq 0 ]; then
-  sed -n '2,8p' "$0" >&2
+  cat >&2 <<'USAGE'
+usage: tools/encode_artwork.sh MASTER...
+
+Encodes each MASTER to 1280x720 q85 webp into both app bundles, keeping its
+basename. Pass masters, not the shipped copies — every run is another
+generation of lossy re-encode. Covers only; icons are already under the ceiling.
+USAGE
   exit 2
 fi
 command -v cwebp >/dev/null || { echo "cwebp not found (brew install webp)" >&2; exit 1; }

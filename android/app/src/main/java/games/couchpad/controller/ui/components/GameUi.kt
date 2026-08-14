@@ -114,9 +114,12 @@ private const val MAX_ART_HEIGHT = 720
  * off the main thread, so opening a sheet never decodes mid-animation, and a path
  * that FAILS is remembered too — otherwise a game whose art this build didn't ship
  * (and whose download failed) re-probes assets and disk on every recomposition.
- * Mirrors iOS's ArtCache (UI/Components/SharedComponents.swift).
+ * Follows iOS's ArtCache (UI/Components/SharedComponents.swift), minus its
+ * in-flight coalescing: two composables wanting the same path at the same moment
+ * would each decode it. Only reachable in the window before the first decode
+ * memoizes, and the cost is one wasted decode, so it doesn't earn a task map.
  */
-internal object ArtCache {
+private object ArtCache {
   private val images = ConcurrentHashMap<String, ImageBitmap>()
   private val failures = ConcurrentHashMap.newKeySet<String>()
 

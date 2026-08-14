@@ -302,6 +302,9 @@ struct GameHostScreen: View {
         }
         // Center the buttons inside the strip when it's wide enough; hug the edge
         // otherwise — the published side inset grows to the rail's extent either way.
+        // The layoutDirection ternary here and on the alignment below KEEPS the rail
+        // physically right: SwiftUI mirrors `.trailing`/`.topTrailing` under RTL, so
+        // asking for the physical side means asking for the opposite semantic one.
         .padding(
             layoutDirection == .leftToRight ? .trailing : .leading,
             max((max(cutout.leading, cutout.trailing) - 44) / 2, 4)
@@ -310,11 +313,13 @@ struct GameHostScreen: View {
         .onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: .global)
         } action: { frame in
-            // Intrusion from the rail's OWN screen edge (.global coords are physical,
-            // and the rail sits trailing — which is the left edge under RTL). Android's
-            // LandscapeChrome reports the same value off whichever side it picked.
+            // Intrusion from the physical right edge, in both layout directions and
+            // with no ternary of its own: `.global` is window space, which SwiftUI
+            // does NOT mirror, and the alignment above already lands the rail on the
+            // physical right either way (see the ternaries — they exist to defeat
+            // SwiftUI's mirroring of `.trailing`, not to follow it).
             let fullWidth = hostSize.width + cutout.leading + cutout.trailing
-            railEnd = layoutDirection == .leftToRight ? fullWidth - frame.minX : frame.maxX
+            railEnd = fullWidth - frame.minX
         }
         .frame(
             maxWidth: .infinity, maxHeight: .infinity,

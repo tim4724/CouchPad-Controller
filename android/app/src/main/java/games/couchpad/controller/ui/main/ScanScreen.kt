@@ -144,11 +144,12 @@ fun ScanScreen(
   BackHandler(onBack = onClose)
 
   // The scanner is always a dark surface — force light bar icons while it's up and
-  // restore the theme's own contrast on exit (same recipe as GameHostScreen). Keyed
-  // on uiMode: a theme flip re-runs MainActivity.applyEdgeToEdge, which stomps this,
-  // so re-assert after it.
-  val uiMode = LocalConfiguration.current.uiMode
-  DisposableEffect(uiMode) {
+  // restore the theme's own contrast on exit (same recipe as GameHostScreen). Keyed on
+  // the whole Configuration: EVERY configuration change re-runs
+  // MainActivity.applyEdgeToEdge, which stomps this, so re-assert after any of them —
+  // uiMode alone left every other config change's stomp in place for good.
+  val config = LocalConfiguration.current
+  DisposableEffect(config) {
     val controller = context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
     controller?.isAppearanceLightStatusBars = false
     controller?.isAppearanceLightNavigationBars = false

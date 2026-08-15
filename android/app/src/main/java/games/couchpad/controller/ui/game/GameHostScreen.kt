@@ -329,20 +329,16 @@ private fun GameHostContent(
   }
 
   // On leave BOTH bars come back (systemBars, not navigationBars — a landscape game
-  // also hid the status bar), the launcher's portrait is restored (§10 — home is
-  // portrait, and an orientation the game asked for must not outlive it), and the
-  // status-icon appearance (changed by page theming below) is re-derived from the
-  // theme — a captured value would be stale if the theme flipped mid-game (uiMode no
-  // longer recreates the activity).
+  // also hid the status bar) and the launcher's portrait is restored (§10 — home is
+  // portrait, and an orientation the game asked for must not outlive it). The
+  // status-icon appearance is NOT restored here: it has a single owner, the
+  // page-theming effect below, which reverts it on its own teardown.
   DisposableEffect(Unit) {
     val activity = context.findActivity()
     val controller = activity?.window?.let { WindowCompat.getInsetsController(it, view) }
     onDispose {
       activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-      controller?.run {
-        show(WindowInsetsCompat.Type.systemBars())
-        isAppearanceLightStatusBars = themeLightBarIcons(context)
-      }
+      controller?.show(WindowInsetsCompat.Type.systemBars())
     }
   }
 
@@ -497,16 +493,31 @@ private fun GameHostContent(
     webView?.requestApplyInsets()
   }
 
-  // Keep status-bar icons contrasting against the (possibly game-colored) bar strip.
-  // Also keyed on uiMode AND orientation: every configuration change re-runs
-  // MainActivity.applyEdgeToEdge, which stomps this, and a §10 rotation is a
-  // configuration change too — so re-assert after any of them.
+  // Keep status-bar icons contrasting against the (possibly game-colored) bar strip,
+  // and hand the appearance back to the theme on the way out. ONE owner for both, and
+  // deliberately a DisposableEffect: a LaunchedEffect body is POSTED through
+  // AndroidUiDispatcher, so a re-assert scheduled on the way out can land a frame
+  // AFTER the teardown has restored the theme value — leaving the launcher's dark UI
+  // under a light bar's dark icons until the next configuration change. onDispose runs
+  // inline while changes are applied, so apply and restore stay ordered by construction.
+  //
+  // Keyed on the whole Configuration, not uiMode + orientation: EVERY configuration
+  // change re-runs MainActivity.applyEdgeToEdge, which stomps this, and a device
+  // rotation within landscape (a §10 game is locked to SENSOR_LANDSCAPE) changes
+  // neither of those two fields — so that stomp used to be permanent. Compose updates
+  // LocalConfiguration from the same callback, and measurably after the activity's own,
+  // so this always re-asserts on top.
   val lightStatusIcons = barTarget.luminance() > 0.5f
   val config = LocalConfiguration.current
-  LaunchedEffect(lightStatusIcons, config.uiMode, config.orientation) {
-    context.findActivity()?.window?.let {
-      WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = lightStatusIcons
+  DisposableEffect(lightStatusIcons, config) {
+    val window = context.findActivity()?.window
+    fun setLightIcons(light: Boolean) {
+      window?.let { WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = light }
     }
+    setLightIcons(lightStatusIcons)
+    // Re-derived, never a captured value — uiMode no longer recreates the activity, so
+    // a theme flipped mid-game must be honored here.
+    onDispose { setLightIcons(themeLightBarIcons(context)) }
   }
 
   Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {

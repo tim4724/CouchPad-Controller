@@ -107,9 +107,9 @@ suspend fun probeRelays(code: String, games: List<Game>): List<RoomLookup> =
 
 /**
  * The relays a room whose GAME is already known is checked against — the liveness poll
- * behind the rejoin card. Its own relay first, then the shared directory: which of the
- * two minted a given room is exactly what [probeRelays] can't assume at join time
- * either, and a room must not be declared dead by a relay that never held it.
+ * behind the rejoin card. Its own relay first, then the shared directory: the room may
+ * have been minted on either, and a room must not be declared dead by a relay that
+ * never held it.
  */
 suspend fun probeRoom(code: String, game: Game): List<RoomLookup> =
   probeAll(code, listOfNotNull(game.relayProbeBase))

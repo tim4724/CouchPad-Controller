@@ -97,9 +97,9 @@ func probeRelays(_ code: String, games: [Game]) async -> [RoomLookup] {
 }
 
 /// The relays a room whose GAME is already known is checked against — the liveness poll
-/// behind the rejoin card. Its own relay first, then the shared directory: which of the
-/// two minted a given room is exactly what `probeRelays` can't assume at join time
-/// either, and a room must not be declared dead by a relay that never held it.
+/// behind the rejoin card. Its own relay first, then the shared directory: the room may
+/// have been minted on either, and a room must not be declared dead by a relay that
+/// never held it.
 func probeRoom(_ code: String, game: Game) async -> [RoomLookup] {
     await probeAll(code, preferred: [game.relayProbeBase].compactMap { $0 })
 }
@@ -139,16 +139,14 @@ func resolveLookups(_ results: [RoomLookup], games: [Game]) -> JoinOutcome {
     // load exactly that (untrusted; re-validated). A url that is itself origin-less
     // (a couchpad.games/<code> template) declares nothing the directory hadn't already
     // told us, so it doesn't count as one.
-    for result in results {
-        if case .found(let url, _, _) = result, let url, originlessCode(url) == nil {
-            return JoinResolver.resolve(url, games: games)
-        }
+    if let url = results.lazy.compactMap(\.url).first(where: { originlessCode($0) == nil }) {
+        return JoinResolver.resolve(url, games: games)
     }
 
     // The room is there but nothing says where it lives. §6: registering a usable
     // template is what makes a code joinable, so this is a display bug, and the honest
     // answer is to say the code can't be placed rather than guess a game for it.
-    if results.contains(where: { if case .found = $0 { return true } else { return false } }) {
+    if results.contains(where: \.isFound) {
         return .failure(message: String(localized: "This code can’t be matched to a game right now."))
     }
     if results.contains(.notFound) {
@@ -157,7 +155,20 @@ func resolveLookups(_ results: [RoomLookup], games: [Game]) -> JoinOutcome {
     return .failure(message: String(localized: "Couldn’t reach the server. Try again."))
 }
 
+// Swift can't destructure an enum case as tersely as Kotlin's filterIsInstance, so the
+// three things callers actually ask of a lookup are named here once.
 extension RoomLookup {
+    var isFound: Bool {
+        if case .found = self { return true }
+        return false
+    }
+
+    /// The §6 template, if this is a Found that carried one.
+    var url: String? {
+        if case .found(let url, _, _) = self { return url }
+        return nil
+    }
+
     /// The display occupies a slot too, so this is exact, not off by one.
     var isFull: Bool {
         guard case .found(_, let clients, let maxClients) = self else { return false }

@@ -530,7 +530,7 @@ struct MainScreen: View {
             // minted this room (see probeRoom).
             let results = await probeRoom(recent.roomCode, game: recent.game)
             if Task.isCancelled { return }
-            let founds = results.filter { if case .found = $0 { return true } else { return false } }
+            let founds = results.filter(\.isFound)
             guard !founds.isEmpty else {
                 // Unconfirmed is unconfirmed: a relay that says the room is gone and one
                 // we couldn't reach at all both mean no card, and no more polling. Only
@@ -550,10 +550,7 @@ struct MainScreen: View {
             // The probe also carries the §6 template, so the room names its box here
             // even when nothing on the LAN is advertising it — re-read the slot to pick
             // that up.
-            let template = founds.lazy.compactMap { result -> String? in
-                if case .found(let url, _, _) = result { return url } else { return nil }
-            }.first
-            RecentRoomStore.putPlatform(fromTemplate: template)
+            RecentRoomStore.putPlatform(fromTemplate: founds.lazy.compactMap(\.url).first)
             let room = RecentRoomStore.current() ?? recent
             withAnimation(.spring(duration: 0.45)) { rejoin = room }
             do {

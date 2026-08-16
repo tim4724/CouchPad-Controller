@@ -60,8 +60,9 @@
                  the app directly — the bare domain and every subdomain. pathPattern
                  "/......" claims exactly-6-char room-code paths, so the homepage/QR
                  display page and any non-6-char page fall through to the browser.
-                 pathPattern can't express base58, so a 6-char non-room path would still
-                 open the app — JoinResolver rejects it at runtime. autoVerify needs
+                 pathPattern can't express base58, so a 6-char non-room path opens the
+                 app too — and loads verbatim, like any URL on a trusted host, leaving
+                 it to the game's own page to say what it is. autoVerify needs
                  .well-known/assetlinks.json on each verified host. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -75,7 +76,8 @@
                  (couchpad.games/<CODE>). pathPattern "/......" claims exactly six
                  characters, so the marketing index and any non-6-char page fall through
                  to the browser. pathPattern can't express base58, so avoid naming a page
-                 with a 6-char path — JoinResolver rejects non-room codes at runtime. -->
+                 with a 6-char path — the app takes it, and a non-room code simply fails
+                 to resolve against the relay directory. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -280,7 +280,7 @@ private struct CameraPreview: UIViewRepresentable {
         private var torchOn = false
         // Main-thread state: the running output, published from the session queue only
         // once it is live, and the view whose bounds define the scan region.
-        private var metadataOutput: AVCaptureMetadataOutput?
+        private var qrOutput: AVCaptureMetadataOutput?
         private weak var previewView: PreviewView?
 
         init(onCode: @escaping (String) -> Void, onFailure: @escaping (String) -> Void,
@@ -332,7 +332,7 @@ private struct CameraPreview: UIViewRepresentable {
                     // Only now can the preview layer have a connection to convert
                     // through, so the scan region is derived here (and on every layout).
                     DispatchQueue.main.async {
-                        self.metadataOutput = output
+                        self.qrOutput = output
                         self.applyScanRegionWhenReady()
                     }
                 } catch {
@@ -378,7 +378,7 @@ private struct CameraPreview: UIViewRepresentable {
         /// scans nothing at all. Reports whether a region was actually installed.
         @discardableResult
         func applyScanRegion() -> Bool {
-            guard let output = metadataOutput, let view = previewView,
+            guard let output = qrOutput, let view = previewView,
                   view.previewLayer.connection != nil,
                   view.bounds.width > 0, view.bounds.height > 0 else { return false }
             let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
@@ -404,6 +404,7 @@ private struct CameraPreview: UIViewRepresentable {
 
         func attach(_ view: PreviewView) {
             previewView = view
+            view.onLayout = { [weak self] in self?.applyScanRegion() }
         }
 
         /// The scanner's own flashlight — the room code is often on a card or a
@@ -452,7 +453,6 @@ private struct CameraPreview: UIViewRepresentable {
         view.backgroundColor = .black
         view.previewLayer.session = context.coordinator.session
         view.previewLayer.videoGravity = .resizeAspectFill
-        view.onLayout = { [weak coordinator = context.coordinator] in coordinator?.applyScanRegion() }
         context.coordinator.attach(view)
         context.coordinator.start()
         return view

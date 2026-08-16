@@ -150,7 +150,7 @@ func homeRooms(_ rooms: [NearbyRoom], rejoin: RecentRoom? = nil) -> HomeRooms {
 
 /// Resolves one advertised code against the relay — the same probe a typed code takes,
 /// so scan, type and nearby-tap all land on one path. The relay's `url` is what loads
-/// (re-validated against the manifest allow-list by `resolveJoin`) and is also where
+/// (re-validated against the manifest allow-list by `resolveLookups`) and is also where
 /// `cpp` comes from, so the launcher never trusts anything the LAN said beyond the code.
 ///
 /// Nil when the room is gone, unreachable, off the allow-list, or FULL — a card that
@@ -162,8 +162,8 @@ func resolveNearby(_ advert: NearbyAdvert, games: [Game]) async -> NearbyRoom? {
     // on every 10s poll tick per advertised room, so a second identical round would
     // double the relay traffic for nothing.
     let lookups = await probeRelays(advert.code, games: games)
-    let founds = lookups.filter { if case .found = $0 { return true } else { return false } }
-    guard !founds.isEmpty, !founds.contains(where: { $0.isFull }) else { return nil }
+    let founds = lookups.filter(\.isFound)
+    guard !founds.isEmpty, !founds.contains(where: \.isFull) else { return nil }
 
     guard case .success(let game, let roomCode, let joinUrl) =
             resolveLookups(lookups, games: games) else { return nil }

@@ -35,8 +35,9 @@ data class Game(
   // loads a URL the scan or the relay directory named, never one built from this.
   val controllerBaseUrl: String?,
   val hosts: List<String>,       // domains that resolve to this game (subdomains included)
-  // The game's own relay (pre-unification) — where its rooms actually live, so
-  // room-alive probes go here rather than the shared directory.
+  // The game's own relay (pre-unification) — some of its rooms still live here rather
+  // than on the shared directory, and a code gives no hint which, so both are probed
+  // (see [probeRelays]/[probeRoom]).
   val relayProbeBase: String? = null,
   // Native TV apps: platform id -> "live" | "soon". Display-only; ids map to
   // device tiles in the info sheet (PlatformTiles), unknown ids are ignored.

@@ -11,7 +11,8 @@ enum GameAudioSession {
     /// weaker category must never downgrade it from under a live controller.
     private static var gameConfigured = false
 
-    /// On first game host.
+    /// Claims the session for game audio, on the first game host. Latches
+    /// [gameConfigured] so nothing weaker can take it back for the rest of the launch.
     static func configureOnce() {
         guard !gameConfigured else { return }
         gameConfigured = true

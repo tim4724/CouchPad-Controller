@@ -43,11 +43,12 @@ enum JoinResolver {
         // No controller origin: a parse failure, a bare code, or a canonical
         // couchpad.games/<code> link — that link is the launcher asking the directory
         // who owns the code, not an answer. (Launcher SUBdomains are preview
-        // deployments and load their own origin — below.)
-        guard let components = URLComponents(string: trimmed),
-              components.scheme != nil,
-              let host = components.host, !host.isEmpty,
-              originlessCode(trimmed) == nil else {
+        // deployments and load their own origin — below.) A nil originlessCode already
+        // implies a parseable https-shaped URL on some other host; the rest of the
+        // guard only binds what that leaves.
+        guard originlessCode(trimmed) == nil,
+              let components = URLComponents(string: trimmed),
+              let host = components.host else {
             return .failure(message: String(localized: "That code isn’t a CouchPad room."))
         }
 

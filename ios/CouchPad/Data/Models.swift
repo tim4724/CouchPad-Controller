@@ -85,6 +85,9 @@ struct Game: Identifiable, Hashable {
     /// loads a URL the scan or the relay directory named, never one built from this.
     let controllerBaseUrl: String?
     let hosts: [String]
+    /// The game's own relay (pre-unification) — some of its rooms still live here rather
+    /// than on the shared directory, and a code gives no hint which, so both are probed
+    /// (see `probeRelays`/`probeRoom`).
     let relayProbeBase: String?
     /// Native TV apps: platform id -> "live" | "soon". Display-only; ids map to
     /// device tiles in the info sheet (PlatformTiles), unknown ids are ignored.

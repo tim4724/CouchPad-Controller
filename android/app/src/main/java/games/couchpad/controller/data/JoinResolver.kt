@@ -100,7 +100,9 @@ object JoinResolver {
     // No controller origin: a bare code, or a canonical couchpad.games/<code> link —
     // that link is the launcher asking the directory who owns the code, not an answer.
     // (Launcher SUBdomains are preview deployments and load their own origin — below.)
-    if (uri?.scheme == null || host == null || originlessCode(s) != null) {
+    // A null originlessCode already implies a parsed scheme and host; those two clauses
+    // are what smart-casts them non-null below.
+    if (originlessCode(s) != null || uri?.scheme == null || host == null) {
       return JoinOutcome.Failure(R.string.error_not_couchpad_room)
     }
 

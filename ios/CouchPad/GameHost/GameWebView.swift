@@ -7,21 +7,30 @@ import AVFAudio
 /// round-trips to the audio server (tens of ms) and nothing needs it until something
 /// can actually play.
 enum GameAudioSession {
+    /// Every category write goes through this one serial queue, and both latches below
+    /// are ITS state — read and written nowhere else. Two writers on two queues would
+    /// order by whichever dispatch happened to finish first, so a trailer that passed
+    /// its check just as a game host claimed the session could land `.ambient` last and
+    /// leave a live controller muted by the ringer switch. Enqueue order decides here,
+    /// and [gameConfigured] makes the game host's claim final however the race went.
+    ///
+    /// Off-main for the same reason it's deferred at all: the nav push into a game
+    /// never drops a frame on the audio-server round trip.
+    private static let queue = DispatchQueue(label: "games.couchpad.controller.audio-session",
+                                             qos: .userInitiated)
     /// Set once a game host has claimed the session for playback — the trailer's
     /// weaker category must never downgrade it from under a live controller.
     private static var gameConfigured = false
     /// Set once the trailer category is in force; only [gameConfigured] outranks it.
     private static var trailerConfigured = false
 
-    /// Claims the session for game audio, on the first game host. Latches
-    /// [gameConfigured] so nothing weaker can take it back for the rest of the launch.
+    /// Claims the session for game audio, on the first game host. The page needs seconds
+    /// of network + boot before it can make any sound, so the category is always in force
+    /// long before first playback.
     static func configureOnce() {
-        guard !gameConfigured else { return }
-        gameConfigured = true
-        // Off-main so the nav push into the game never drops frames on it; the page
-        // needs seconds of network + boot before it can make any sound, so the
-        // category is always set long before first playback.
-        DispatchQueue.global(qos: .userInitiated).async {
+        queue.async {
+            guard !gameConfigured else { return }
+            gameConfigured = true
             // .playback so WebView game sound is audible even with the silent switch
             // on; .mixWithOthers so it layers over the user's music/podcasts instead
             // of stopping them.
@@ -35,15 +44,18 @@ enum GameAudioSession {
     /// can't hear. `.ambient` mixes by definition and follows the ringer switch. This
     /// is Android's `setAudioFocusRequest(AUDIOFOCUS_NONE)` on the trailer VideoView.
     ///
-    /// Awaited (off-main), so the category is in force before a player exists — which
-    /// is why it latches too: every sheet open would otherwise pay the audio-server
-    /// round trip this enum exists to defer, to set the category it already holds.
+    /// Awaited, so the category is in force before a player exists — which is why it
+    /// latches too: every sheet open would otherwise pay the audio-server round trip
+    /// this enum exists to defer, to set the category it already holds.
     static func configureForMutedTrailer() async {
-        guard !gameConfigured, !trailerConfigured else { return }
-        trailerConfigured = true
-        await Task.detached(priority: .userInitiated) {
-            try? AVAudioSession.sharedInstance().setCategory(.ambient)
-        }.value
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            queue.async {
+                defer { continuation.resume() }
+                guard !gameConfigured, !trailerConfigured else { return }
+                trailerConfigured = true
+                try? AVAudioSession.sharedInstance().setCategory(.ambient)
+            }
+        }
     }
 }
 

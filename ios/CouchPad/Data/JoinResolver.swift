@@ -40,22 +40,18 @@ enum JoinResolver {
             return .failure(message: String(localized: "Empty code."))
         }
 
-        // Parse failure, or no scheme / no host → bare code path (sole live game).
+        // No controller origin: a parse failure, a bare code, or a canonical
+        // couchpad.games/<code> link — that link is the launcher asking the directory
+        // who owns the code, not an answer. (Launcher SUBdomains are preview
+        // deployments and load their own origin — below.)
         guard let components = URLComponents(string: trimmed),
               components.scheme != nil,
-              let host = components.host, !host.isEmpty else {
-            // Bare code — no origin to load, and nothing riding along.
-            return soleLiveGameJoin(games: games, roomCode: trimmed, source: nil)
+              let host = components.host, !host.isEmpty,
+              originlessCode(trimmed) == nil else {
+            return .failure(message: String(localized: "That code isn’t a CouchPad room."))
         }
 
         let lowerHost = host.lowercased()
-
-        // Canonical launcher links (bare domain or www) carry no controller origin of
-        // their own: code-first, sole live game hosts them — the offline answer, and the
-        // fallback when `resolveJoin`'s directory probe can't name the owner.
-        if let code = originlessCode(trimmed) {
-            return soleLiveGameJoin(games: games, roomCode: code, source: components)
-        }
 
         // A game's own domain (or a launcher preview subdomain): the scanned URL
         // IS the controller — load it verbatim, don't presume its layout.
@@ -101,42 +97,15 @@ enum JoinResolver {
     /// loads; the rejoin card just can't show or liveness-poll the room.
     private static func extractRoomCode(_ components: URLComponents) -> String {
         let segments = components.path.split(separator: "/").map(String.init)
-        if let code = segments.first(where: isValidCode) { return code }
+        if let code = segments.first(where: validRoomCode) { return code }
         for item in components.queryItems ?? [] {
-            if let value = item.value, isValidCode(value) { return value }
+            if let value = item.value, validRoomCode(value) { return value }
         }
         return ""
     }
+}
 
-    private static func isValidCode(_ code: String) -> Bool {
-        code.count == CP.roomCodeLength && code.allSatisfy { CP.base58.contains($0) }
-    }
-
-    /// Hosts an origin-less input on the sole live game. `source` is the URL it came from,
-    /// or nil for a bare code, which has no URL to keep.
-    ///
-    /// Only the ORIGIN is wrong on a canonical link — couchpad.games serves no controller —
-    /// so swap that and pass the query and fragment through untouched. Re-attaching params
-    /// by name is what silently dropped `cpp` (§6: the join URL is the only place a display
-    /// ever declares its platform), and it would drop the next one too.
-    private static func soleLiveGameJoin(games: [Game], roomCode: String,
-                                         source: URLComponents?) -> JoinOutcome {
-        guard let game = games.first(where: { $0.isLive }) else {
-            return .failure(message: String(localized: "No live game configured."))
-        }
-        guard let base = game.controllerBaseUrl else {
-            return .failure(message: String(localized: "That game has no controller URL."))
-        }
-        // Validate: exact length and every char in the suite charset (case-sensitive).
-        guard isValidCode(roomCode) else {
-            return .failure(message: String(localized: "That code isn’t a CouchPad room."))
-        }
-
-        var joinUrl = base.trimmingTrailingSlashes() + "/" + roomCode
-        if let query = source?.percentEncodedQuery, !query.isEmpty { joinUrl += "?" + query }
-        if let fragment = source?.percentEncodedFragment, !fragment.isEmpty {
-            joinUrl += "#" + fragment
-        }
-        return .success(game: game, roomCode: roomCode, joinUrl: joinUrl)
-    }
+/// The suite's room-code shape: exact length, Base58, case-SENSITIVE.
+func validRoomCode(_ code: String) -> Bool {
+    code.count == CP.roomCodeLength && code.allSatisfy { CP.base58.contains($0) }
 }

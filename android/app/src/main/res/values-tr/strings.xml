@@ -56,8 +56,6 @@
 
     <string name="error_empty_code">Kod boş.</string>
     <string name="error_not_couchpad_room">Bu kod bir CouchPad odasına ait değil.</string>
-    <string name="error_no_live_game">Yapılandırılmış etkin oyun yok.</string>
-    <string name="error_no_controller_url">Bu oyunun kumanda URL\'si yok.</string>
     <string name="error_enter_room_code">Bir oda kodu gir.</string>
     <string name="error_code_unmatched">Bu kod şu anda bir oyunla eşleştirilemiyor.</string>
     <string name="error_room_not_found_or_expired">Oda bulunamadı veya süresi doldu.</string>

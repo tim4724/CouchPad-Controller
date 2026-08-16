@@ -56,8 +56,6 @@
 
     <string name="error_empty_code">Código vazio.</string>
     <string name="error_not_couchpad_room">Esse código não é de uma sala do CouchPad.</string>
-    <string name="error_no_live_game">Nenhum jogo ativo configurado.</string>
-    <string name="error_no_controller_url">Esse jogo não tem URL de controle.</string>
     <string name="error_enter_room_code">Digite um código de sala.</string>
     <string name="error_code_unmatched">Este código não pode ser associado a um jogo no momento.</string>
     <string name="error_room_not_found_or_expired">Sala não encontrada ou expirada.</string>

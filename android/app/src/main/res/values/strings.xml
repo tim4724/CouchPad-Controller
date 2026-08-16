@@ -67,8 +67,6 @@
     <!-- Join / code resolution errors -->
     <string name="error_empty_code">Empty code.</string>
     <string name="error_not_couchpad_room">That code isn\'t a CouchPad room.</string>
-    <string name="error_no_live_game">No live game configured.</string>
-    <string name="error_no_controller_url">That game has no controller URL.</string>
     <string name="error_enter_room_code">Enter a room code.</string>
     <string name="error_code_unmatched">This code can\'t be matched to a game right now.</string>
     <string name="error_room_not_found_or_expired">Room not found or expired.</string>

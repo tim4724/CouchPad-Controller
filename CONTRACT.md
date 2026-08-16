@@ -146,12 +146,11 @@ Client → relay:  create { clientId, maxClients, url? }
   fragment (kept out of request logs).
 - It must name the **controller's own origin**. A template on the launcher domain
   (`couchpad.games/{room}`) declares nothing — that link is the launcher asking this same
-  directory who owns the code — so the launcher ignores it and falls back to the room's
-  `origin`. Register the host that actually serves your controller, or register nothing.
+  directory who owns the code — so the launcher ignores it. Register the host that
+  actually serves your controller.
 - The relay **rejects the whole create** on an invalid template, so plain-http origins
-  (local dev, E2E) must pass no `url`.
-- Optional: a display that registers none but is served from a CouchPad-owned origin is
-  still findable via that `origin`.
+  (local dev, E2E) must pass no `url` — and their rooms are then joinable only by
+  scanning the controller URL itself.
 - The template may carry a `cpp` query arg naming the display: `tvos`, `androidtv`, or
   `web` (a browser-based display, which by definition can't advertise over mDNS but can
   register a template). A join URL is the only place a display declares itself, and the
@@ -180,15 +179,15 @@ player lands no matter which way they joined:
 ```
 
 - `url` — the stored template with `{room}`/`{instance}` **already substituted** (the
-  launcher never sees raw placeholders).
-- `origin` — fallback when no template was registered; the launcher resolves the bare
-  code against it (`<origin>/<code>`).
-- **Both are host-declared and UNTRUSTED.** The launcher re-validates the host against the
-  `games-manifest.json` allow-list before loading, so a relay entry can't redirect a code
-  to an arbitrary origin.
+  launcher never sees raw placeholders). It is **host-declared and UNTRUSTED**: the
+  launcher re-validates the host against the `games-manifest.json` allow-list before
+  loading, so a relay entry can't redirect a code to an arbitrary origin.
+- The response also carries the room's `origin`; the launcher ignores it.
 
-Registering a `url` is what makes typed-code join deterministic; without it a code only
-resolves when the game is the sole live one or is disambiguated by `origin`.
+The registered `url` is the ONLY thing that resolves an origin-less input, so registering
+one is what makes a room joinable by typed code, canonical link or §8 nearby tap at all.
+The launcher never guesses an owner for a code the directory can't place — it says so and
+refuses the join.
 
 ## 7. Launcher → game, app lifecycle: synthetic `pagehide` on background
 
@@ -405,7 +404,8 @@ the app is full-screen again.
 4. Keep interactive UI inside the safe zone (§5).
 5. Close the relay socket on `pagehide`; reconnect on `visibilitychange` → `visible` (§7).
 6. *(Optional)* Declare `theme-color` / `cp-accent-color` metas (§4).
-7. Register the controller-URL template on room create so typed codes resolve (§6).
+7. Register the controller-URL template on room create — it is the only thing that
+   resolves a typed code, a canonical link or a §8 nearby tap (§6).
 8. Declare the game in `games-manifest.json` (hosts, controllerBaseUrl, room-code format).
 9. *(Optional)* Arm the system back gesture with `enableSystemBack(true)` where back is
    welcome, disarm the moment it isn't, and implement `window.CouchPad.back()` if there's

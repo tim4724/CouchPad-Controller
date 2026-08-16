@@ -102,6 +102,8 @@ import games.couchpad.controller.R
 import games.couchpad.controller.data.Game
 import games.couchpad.controller.data.JoinOutcome
 import games.couchpad.controller.data.JoinResolver
+import games.couchpad.controller.data.originlessCode
+import games.couchpad.controller.data.validRoomCode
 import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.stableScreenInsets
 import games.couchpad.controller.ui.components.themeLightBarIcons
@@ -200,15 +202,21 @@ fun ScanScreen(
         onOpenLegalDoc(it)
         return
       }
-      when (val r = JoinResolver.resolve(raw, games)) {
-        is JoinOutcome.Success -> {
-          joined = true
-          onCode(raw)
-          return
-        }
-        is JoinOutcome.Failure ->
-          if (newFailure == null && rejected.add(raw)) newFailure = resources.getString(r.messageRes)
+      // An origin-less payload (a bare code, a canonical couchpad.games/<code> link)
+      // names a room but no controller, so only the relay directory can place it:
+      // vet it on shape here and let the join path do the lookup.
+      val originless = originlessCode(raw)
+      val failureRes = if (originless != null) {
+        if (validRoomCode(originless)) null else R.string.error_not_couchpad_room
+      } else {
+        (JoinResolver.resolve(raw, games) as? JoinOutcome.Failure)?.messageRes
       }
+      if (failureRes == null) {
+        joined = true
+        onCode(raw)
+        return
+      }
+      if (newFailure == null && rejected.add(raw)) newFailure = resources.getString(failureRes)
     }
     scanError = newFailure ?: return
     haptics.performHapticFeedback(HapticFeedbackType.Reject)

@@ -169,7 +169,7 @@ suspend fun resolveNearby(advert: NearbyAdvert, games: List<Game>): NearbyRoom? 
   val results = probeRelays(advert.code, games)
   val founds = results.filterIsInstance<RoomLookup.Found>()
   if (founds.isEmpty() || founds.any { it.isFull }) return null
-  val hit = resolveLookups(advert.code, results, games) as? JoinOutcome.Success ?: return null
+  val hit = resolveLookups(results, games) as? JoinOutcome.Success ?: return null
   return NearbyRoom(
     // A relayed record's instance name is the relaying phone's own, not the TV's.
     label = if (advert.relayed) "" else advert.label,
@@ -186,9 +186,6 @@ private fun NearbyRoom.isSameRoomAs(recent: RecentRoom?): Boolean {
   if (roomCode.isNotBlank() && roomCode == recent.roomCode && game.id == recent.game.id) return true
   return joinUrl == recent.joinUrl
 }
-
-private fun validRoomCode(code: String): Boolean =
-  code.length == ROOM_CODE_LENGTH && code.all { it in BASE58 }
 
 /**
  * Contract §8 discovery needs `ACCESS_LOCAL_NETWORK` where Local Network Protections are

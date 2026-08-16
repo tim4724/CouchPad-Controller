@@ -124,8 +124,8 @@ import games.couchpad.controller.data.RecentRoom
 import games.couchpad.controller.data.RecentRoomStore
 import games.couchpad.controller.data.SAMPLE_ROOM_CODE
 import games.couchpad.controller.data.ROOM_POLL_MS
-import games.couchpad.controller.data.RoomDirectory
 import games.couchpad.controller.data.RoomLookup
+import games.couchpad.controller.data.probeRoom
 import games.couchpad.controller.data.resolveJoin
 import games.couchpad.controller.data.withProfile
 import androidx.compose.ui.tooling.preview.Preview
@@ -348,9 +348,9 @@ fun MainScreen(
     }
   }
 
-  // Offer one-tap rejoin while the last-joined room is still alive: keep probing
-  // the game's relay so the card clears itself when the room dies. Lifecycle-gated —
-  // no polling while backgrounded.
+  // Offer one-tap rejoin while the last-joined room is still alive: keep probing the
+  // relays that could hold it so the card clears itself when the room dies.
+  // Lifecycle-gated — no polling while backgrounded.
   LaunchedEffect(Unit) {
     lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
       // Re-read the saved room EVERY iteration — never capture it once. A game that
@@ -359,48 +359,38 @@ fun MainScreen(
       // a stale captured value + a relay record that hasn't 404'd yet.
       while (true) {
         val recent = RecentRoomStore.current()
-        if (recent == null) {
-          // No saved room (never joined, aged out, or cleared on a room_not_found end).
+        // Nothing to verify: no saved room (never joined, aged out, cleared on a
+        // room_not_found end), or a scanned URL that surfaced no code to probe with.
+        if (recent == null || recent.roomCode.isBlank()) {
           rejoin = null
           return@repeatOnLifecycle
         }
-        if (recent.roomCode.isBlank()) {
-          // No room code (the scanned URL didn't surface one) → we can't liveness-poll,
-          // so surface the card unverified. A dead room is handled by gameEnded.
-          rejoin = recent
+        // Every relay that could hold it, like the join path: only one of them minted
+        // this room (see probeRoom).
+        val results = probeRoom(recent.roomCode, recent.game)
+        val founds = results.filterIsInstance<RoomLookup.Found>()
+        if (founds.isEmpty()) {
+          // Unconfirmed is unconfirmed: a relay that says the room is gone and one we
+          // couldn't reach at all both mean no card, and no more polling. Only an
+          // ANSWER ends the room for good, though — an unreachable relay leaves it
+          // remembered, so the next return to home re-checks it.
+          rejoin = null
+          if (results.none { it is RoomLookup.Error }) RecentRoomStore.clear()
           return@repeatOnLifecycle
         }
-        when (val lookup = RoomDirectory.lookup(recent.roomCode, recent.game.roomRelayBase)) {
-          // Offered even when the room reads FULL. One of those slots is very likely this
-          // player's own, held for them by the relay, which takes a stored clientId back
-          // into it — the game only treats full as fatal for a FRESH joiner. Hiding the
-          // card here locks someone out of the room they were just in; a rejoin that
-          // genuinely bounces costs one page load and lands on the `game_full` banner.
-          //
-          // The probe also carries the §6 template, so the room names its box here even
-          // when nothing on the LAN is advertising it — re-read the slot to pick that up.
-          is RoomLookup.Found -> {
-            RecentRoomStore.putPlatform(lookup.url)
-            rejoin = RecentRoomStore.current() ?: recent
-          }
-          RoomLookup.NotFound -> {
-            RecentRoomStore.clear()
-            rejoin = null
-            return@repeatOnLifecycle
-          }
-          RoomLookup.Error -> {} // transient — keep whatever we showed last
-        }
+        // Offered even when the room reads FULL. One of those slots is very likely this
+        // player's own, held for them by the relay, which takes a stored clientId back
+        // into it — the game only treats full as fatal for a FRESH joiner. Hiding the
+        // card here locks someone out of the room they were just in; a rejoin that
+        // genuinely bounces costs one page load and lands on the `game_full` banner.
+        //
+        // The probe also carries the §6 template, so the room names its box here even
+        // when nothing on the LAN is advertising it — re-read the slot to pick that up.
+        RecentRoomStore.putPlatform(founds.firstOrNull { it.url != null }?.url)
+        rejoin = RecentRoomStore.current() ?: recent
         delay(ROOM_POLL_MS)
       }
     }
-  }
-
-  // A just-ended game (banner appeared) may have cleared the saved room — a
-  // room_not_found end drops it. Reflect the store the instant the banner lands so
-  // the rejoin card clears immediately, rather than lingering up to a poll tick (or
-  // being re-shown by a stale relay 'Found' while the record catches up).
-  LaunchedEffect(gameEndBanner) {
-    if (gameEndBanner != null) rejoin = RecentRoomStore.current()
   }
 
   // Games scroll the full screen; the join card floats over the list at the bottom.

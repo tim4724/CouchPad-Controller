@@ -299,11 +299,13 @@ struct MainScreen: View {
         .task { await manifest.refresh() }
         .onChange(of: messages.gameEndBanner) { _, banner in
             // A just-ended game (banner appeared) may have cleared the saved room — a
-            // room_not_found end drops it. Reflect the store the instant the banner
-            // lands so the rejoin card clears immediately, rather than lingering up to a
-            // poll tick (or being re-shown by a stale relay 'Found' while it catches up).
-            if banner != nil {
-                withAnimation(.spring(duration: 0.45)) { rejoin = RecentRoomStore.current() }
+            // room_not_found end drops it. Drop the card the instant the banner lands
+            // rather than letting it linger up to a poll tick. Only ever clears: a card
+            // is put up by a confirming probe and nothing else. (Android needs no
+            // counterpart — its Main entry is disposed under the game host, so it comes
+            // back with an empty slot anyway.)
+            if banner != nil, RecentRoomStore.current() == nil {
+                withAnimation(.spring(duration: 0.45)) { rejoin = nil }
             }
         }
         .alert("Enter room code", isPresented: $showCodeEntry) {
@@ -518,43 +520,42 @@ struct MainScreen: View {
         // the next tick must honor that and drop the card, not re-show the dead room off
         // a stale captured value + a relay record that hasn't 404'd yet.
         while !Task.isCancelled {
-            // No saved room (never joined, aged out, or cleared on a room_not_found end).
-            guard let recent = RecentRoomStore.current() else {
+            // Nothing to verify: no saved room (never joined, aged out, cleared on a
+            // room_not_found end), or a scanned URL that surfaced no code to probe with.
+            guard let recent = RecentRoomStore.current(), !recent.roomCode.isEmpty else {
                 withAnimation(.spring(duration: 0.45)) { rejoin = nil }
                 return
             }
-            // No room code (the scanned URL didn't surface one) → we can't liveness-poll,
-            // so surface the card unverified. A dead room is handled by gameEnded.
-            if recent.roomCode.isEmpty {
-                withAnimation(.spring(duration: 0.45)) { rejoin = recent }
-                return
-            }
-            let result = await RoomDirectory.lookup(code: recent.roomCode, relayBase: recent.game.roomRelayBase)
+            // Every relay that could hold it, like the join path: only one of them
+            // minted this room (see probeRoom).
+            let results = await probeRoom(recent.roomCode, game: recent.game)
             if Task.isCancelled { return }
-            switch result {
-            case .found(let url, _, _, _):
-                // Offered even when the room reads FULL. One of those slots is very
-                // likely this player's own, held for them by the relay, which takes a
-                // stored clientId back into it — the game only treats full as fatal for
-                // a FRESH joiner. Hiding the card here locks someone out of the room
-                // they were just in; a rejoin that genuinely bounces costs one page load
-                // and lands on the `game_full` banner.
-                //
-                // The probe also carries the §6 template, so the room names its box here
-                // even when nothing on the LAN is advertising it — re-read the slot to
-                // pick that up.
-                RecentRoomStore.putPlatform(fromTemplate: url)
-                let room = RecentRoomStore.current() ?? recent
-                withAnimation(.spring(duration: 0.45)) { rejoin = room }
-            case .notFound:
-                RecentRoomStore.clear()
-                withAnimation(.spring(duration: 0.45)) {
-                    rejoin = nil
-                }
+            let founds = results.filter { if case .found = $0 { return true } else { return false } }
+            guard !founds.isEmpty else {
+                // Unconfirmed is unconfirmed: a relay that says the room is gone and one
+                // we couldn't reach at all both mean no card, and no more polling. Only
+                // an ANSWER ends the room for good, though — an unreachable relay leaves
+                // it remembered, so the next return to home re-checks it.
+                withAnimation(.spring(duration: 0.45)) { rejoin = nil }
+                if !results.contains(.error) { RecentRoomStore.clear() }
                 return
-            case .error:
-                break // transient failure: keep last state
             }
+            // Offered even when the room reads FULL. One of those slots is very likely
+            // this player's own, held for them by the relay, which takes a stored
+            // clientId back into it — the game only treats full as fatal for a FRESH
+            // joiner. Hiding the card here locks someone out of the room they were just
+            // in; a rejoin that genuinely bounces costs one page load and lands on the
+            // `game_full` banner.
+            //
+            // The probe also carries the §6 template, so the room names its box here
+            // even when nothing on the LAN is advertising it — re-read the slot to pick
+            // that up.
+            let template = founds.lazy.compactMap { result -> String? in
+                if case .found(let url, _, _) = result { return url } else { return nil }
+            }.first
+            RecentRoomStore.putPlatform(fromTemplate: template)
+            let room = RecentRoomStore.current() ?? recent
+            withAnimation(.spring(duration: 0.45)) { rejoin = room }
             do {
                 try await Task.sleep(for: roomPollInterval)
             } catch {

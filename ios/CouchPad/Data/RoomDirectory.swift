@@ -8,14 +8,14 @@ import Foundation
 let roomPollInterval: Duration = .seconds(10)
 
 enum RoomLookup: Equatable {
-    /// Room exists. url = host-declared controller-URL template (nil if none/blank);
-    /// origin = the room's declared origin (nil if none/blank). BOTH host-declared and
-    /// UNTRUSTED — resolve through the allow-list. A host may register an origin but no url.
+    /// Room exists. url = the host-declared §6 controller-URL template (nil if none/blank)
+    /// and the only thing that says where the room lives — UNTRUSTED, so resolve it
+    /// through the allow-list. Nil leaves nothing to resolve the code with.
     ///
     /// clients/maxClients are the room's live occupancy. Both 0 when the relay omitted
     /// them, and `isFull` is false in that case rather than guessing, so a relay that
     /// doesn't report occupancy never hides a joinable room.
-    case found(url: String?, origin: String?, clients: Int, maxClients: Int)
+    case found(url: String?, clients: Int, maxClients: Int)
     case notFound
     case error
 }
@@ -50,15 +50,9 @@ enum RoomDirectory {
                 guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     return .error
                 }
-                func nonBlank(_ key: String) -> String? {
-                    guard let s = body[key] as? String,
-                          !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-                    return s
-                }
-                // The relay sends the literal string "unknown" when a room registered
-                // no origin — not a URL, so treat it as absent.
-                let origin = nonBlank("origin").flatMap { $0 == "unknown" ? nil : $0 }
-                return .found(url: nonBlank("url"), origin: origin,
+                let url = (body["url"] as? String)
+                    .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+                return .found(url: url,
                               clients: body["clients"] as? Int ?? 0,
                               maxClients: body["maxClients"] as? Int ?? 0)
             case 404:
@@ -77,12 +71,12 @@ enum RoomDirectory {
 /// The one entry point for every join input: typed code, scanned QR, Universal Link,
 /// rejoin and nearby URLs. An input that carries its own origin IS the controller and
 /// resolves offline; an origin-less one (`originlessCode`) names a room but not a game,
-/// and only the relay directory knows which game owns that code. Routing them all through
-/// here is what stops a canonical couchpad.games/<code> link from being guessed onto the
-/// sole live game when the room belongs to another.
+/// and only the relay directory knows which game owns that code — there is nothing to
+/// guess with, so a code the directory can't place does not join.
 ///
-/// Probes ALL relays in parallel (the sole live game's own relayProbeBase first, then the
-/// shared relay deduped), awaits every probe, then applies the decision table.
+/// The relay names the owner through the §6 controller-URL template the display
+/// registered at room create; that template is host-declared and UNTRUSTED, so it is
+/// re-validated against the manifest allow-list before it loads.
 func resolveJoin(_ raw: String, games: [Game]) async -> JoinOutcome {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
@@ -93,21 +87,27 @@ func resolveJoin(_ raw: String, games: [Game]) async -> JoinOutcome {
     guard let code = originlessCode(trimmed), !code.isEmpty else {
         return JoinResolver.resolve(trimmed, games: games)
     }
-    return resolveLookups(code, results: await probeRelays(code, games: games),
-                          games: games, from: trimmed)
+    return resolveLookups(await probeRelays(code, games: games), games: games)
 }
 
-/// The relays a code is checked against: the game's own relay first (so it wins ties),
-/// then the shared directory. Probed in parallel, relay order preserved in the results.
+/// The relays a code could live on: every live game's own, then the shared directory.
+/// Probed in parallel, relay order preserved in the results, so a game's own wins ties.
 func probeRelays(_ code: String, games: [Game]) async -> [RoomLookup] {
-    let liveGames = games.filter { $0.isLive }
-    let sole: Game? = liveGames.count == 1 ? liveGames[0] : nil
+    await probeAll(code, preferred: games.filter { $0.isLive }.compactMap { $0.relayProbeBase })
+}
+
+/// The relays a room whose GAME is already known is checked against — the liveness poll
+/// behind the rejoin card. Its own relay first, then the shared directory: which of the
+/// two minted a given room is exactly what `probeRelays` can't assume at join time
+/// either, and a room must not be declared dead by a relay that never held it.
+func probeRoom(_ code: String, game: Game) async -> [RoomLookup] {
+    await probeAll(code, preferred: [game.relayProbeBase].compactMap { $0 })
+}
+
+private func probeAll(_ code: String, preferred: [String]) async -> [RoomLookup] {
     var relays: [String] = []
-    if let probeBase = sole?.relayProbeBase {
-        relays.append(probeBase)
-    }
-    if !relays.contains(CP.relayBase) {
-        relays.append(CP.relayBase)
+    for base in preferred + [CP.relayBase] where !relays.contains(base) {
+        relays.append(base)
     }
     var results = [RoomLookup](repeating: .error, count: relays.count)
     await withTaskGroup(of: (Int, RoomLookup).self) { group in
@@ -126,17 +126,7 @@ func probeRelays(_ code: String, games: [Game]) async -> [RoomLookup] {
 /// The decision table over already-fetched lookups — separate from `resolveJoin` so
 /// a caller that probed for its own reasons (`resolveNearby`'s fullness check) resolves
 /// from those results instead of probing the same relays a second time.
-///
-/// `from` is the input `code` was read out of, defaulting to the code itself. It matters
-/// only on the sole-live-game rungs, which re-resolve it whole so a canonical link keeps
-/// its query and fragment (`?cpp=`, `#instance`). The origin rung builds a fresh URL from
-/// the code and deliberately carries nothing over.
-func resolveLookups(_ code: String, results: [RoomLookup], games: [Game],
-                    from: String? = nil) -> JoinOutcome {
-    let source = from ?? code
-    let liveGames = games.filter { $0.isLive }
-    let sole: Game? = liveGames.count == 1 ? liveGames[0] : nil
-
+func resolveLookups(_ results: [RoomLookup], games: [Game]) -> JoinOutcome {
     // Deliberately NOT refused when full, though the lookup reports it: a full room still
     // takes its own players back (the relay swaps a stored clientId into the slot it is
     // holding for them), and from a code alone we cannot tell that player from a stranger.
@@ -145,55 +135,32 @@ func resolveLookups(_ code: String, results: [RoomLookup], games: [Game],
     // already turns into a banner. Only the nearby list, which never offers a room the
     // player has a slot in, can safely act on `isFull`.
 
-    // Rule 1: first Found with a non-nil url (relay-list order) → resolve that URL (untrusted; re-validated).
-    // A url that is itself origin-less (a couchpad.games/<code> template) declares nothing
-    // the directory hadn't already told us — skip it, so the room's own origin gets its
-    // turn instead of the code being handed to the sole live game.
+    // A relay knows the room and handed back the controller URL (relay-list order) →
+    // load exactly that (untrusted; re-validated). A url that is itself origin-less
+    // (a couchpad.games/<code> template) declares nothing the directory hadn't already
+    // told us, so it doesn't count as one.
     for result in results {
-        if case .found(let url, _, _, _) = result, let url, originlessCode(url) == nil {
+        if case .found(let url, _, _) = result, let url, originlessCode(url) == nil {
             return JoinResolver.resolve(url, games: games)
         }
     }
 
-    // Rule 1b: no url anywhere, but a Found declared an origin (e.g. a preview deployment
-    // on a launcher subdomain owned by a not-yet-"live" game) → load the code at
-    // that origin. Untrusted; the resolver host-checks it against the allow-list.
-    for result in results {
-        if case .found(_, let origin, _, _) = result, let origin {
-            return JoinResolver.resolve(origin.trimmingTrailingSlashes() + "/" + code, games: games)
-        }
-    }
-
-    let anyFound = results.contains { if case .found = $0 { return true } else { return false } }
-
-    // Rule 2: any Found (all nil urls and origins) + sole live game → bare-code resolve.
-    if anyFound, sole != nil {
-        return JoinResolver.resolve(source, games: games)
-    }
-    // Rule 3: any Found, no sole live game.
-    if anyFound {
+    // The room is there but nothing says where it lives. §6: registering a usable
+    // template is what makes a code joinable, so this is a display bug, and the honest
+    // answer is to say the code can't be placed rather than guess a game for it.
+    if results.contains(where: { if case .found = $0 { return true } else { return false } }) {
         return .failure(message: String(localized: "This code can’t be matched to a game right now."))
     }
-
-    // Rule 4: no Found; sole live game + at least one Error → optimistic bare-code resolve.
-    let anyError = results.contains(.error)
-    if sole != nil, anyError {
-        return JoinResolver.resolve(source, games: games)
-    }
-
-    // Rule 5: at least one NotFound.
     if results.contains(.notFound) {
         return .failure(message: String(localized: "Room not found or expired."))
     }
-
-    // Rule 6: everything errored, no sole live game.
     return .failure(message: String(localized: "Couldn’t reach the server. Try again."))
 }
 
 extension RoomLookup {
     /// The display occupies a slot too, so this is exact, not off by one.
     var isFull: Bool {
-        guard case .found(_, _, let clients, let maxClients) = self else { return false }
+        guard case .found(_, let clients, let maxClients) = self else { return false }
         return maxClients > 0 && clients >= maxClients
     }
 }

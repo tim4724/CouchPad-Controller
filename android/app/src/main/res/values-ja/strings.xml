@@ -57,8 +57,6 @@
 
     <string name="error_empty_code">コードが空です。</string>
     <string name="error_not_couchpad_room">このコードはCouchPadのルームではありません。</string>
-    <string name="error_no_live_game">利用可能なゲームが設定されていません。</string>
-    <string name="error_no_controller_url">このゲームにはコントローラーのURLがありません。</string>
     <string name="error_enter_room_code">ルームコードを入力してください。</string>
     <string name="error_code_unmatched">現在このコードをゲームに関連付けられません。</string>
     <string name="error_room_not_found_or_expired">ルームが見つからないか期限切れです。</string>

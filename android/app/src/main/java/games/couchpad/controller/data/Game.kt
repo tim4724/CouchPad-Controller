@@ -31,6 +31,8 @@ data class Game(
   // Square brand mark, same asset-path + cache rules as [art]. Distinct from the
   // 16:9 cover: a poster crop is unreadable at icon size (NearbyCard).
   val icon: String? = null,
+  // The game's canonical controller origin. Display only ([displayHost]): a join always
+  // loads a URL the scan or the relay directory named, never one built from this.
   val controllerBaseUrl: String?,
   val hosts: List<String>,       // domains that resolve to this game (subdomains included)
   // The game's own relay (pre-unification) — where its rooms actually live, so
@@ -41,9 +43,6 @@ data class Game(
   val tvApps: Map<String, String> = emptyMap(),
 ) {
   val isLive: Boolean get() = status == "live"
-
-  /** Where this game's rooms live: its own relay, else the shared one. */
-  val roomRelayBase: String get() = relayProbeBase ?: RELAY_BASE
 
   /**
    * Host to SHOW users, from the canonical controller URL — [hosts] is the

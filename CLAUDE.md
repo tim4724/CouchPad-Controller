@@ -57,8 +57,10 @@ always needs the mirrored change on the other. Both implement `CONTRACT.md` iden
 
 `CONTRACT.md` carries no wire version — every touchpoint is feature-detected, and the
 same deployed controller must keep working in a plain browser, so all shell behavior is
-gated on the presence of `cpName`. Relay-declared join targets (`url`/`origin`) are
-UNTRUSTED and re-validated against the manifest host allow-list before loading; a §8 mDNS
-advertisement carries only a room code, resolved through that same relay call.
+gated on the presence of `cpName`. The relay-declared join target (`url`) is UNTRUSTED and
+re-validated against the manifest host allow-list before loading, and it is the only thing
+that resolves an origin-less input — the launcher never guesses an owner for a code the
+directory can't place. A §8 mDNS advertisement carries only a room code, resolved through
+that same relay call.
 A change games can't survive ships as a new param or bridge name, never as a redefinition
 of an existing one — and lands in both apps together.

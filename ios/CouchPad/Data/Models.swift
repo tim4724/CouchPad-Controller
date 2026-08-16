@@ -81,6 +81,8 @@ struct Game: Identifiable, Hashable {
     /// Square brand mark, same asset-path + cache rules as `art`. Distinct from the
     /// 16:9 cover: a poster crop is unreadable at icon size (NearbyCard).
     let icon: String?
+    /// The game's canonical controller origin. Display only (`displayHost`): a join always
+    /// loads a URL the scan or the relay directory named, never one built from this.
     let controllerBaseUrl: String?
     let hosts: [String]
     let relayProbeBase: String?
@@ -109,9 +111,6 @@ struct Game: Identifiable, Hashable {
 
     /// Exact, case-sensitive comparison against "live".
     var isLive: Bool { status == "live" }
-
-    /// Where this game's rooms live.
-    var roomRelayBase: String { relayProbeBase ?? CP.relayBase }
 
     /// The host component of controllerBaseUrl — what's shown to users as the game's domain.
     var displayHost: String? { controllerBaseUrl.flatMap { URL(string: $0)?.host } }

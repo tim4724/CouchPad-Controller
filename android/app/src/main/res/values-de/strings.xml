@@ -56,8 +56,6 @@
 
     <string name="error_empty_code">Leerer Code.</string>
     <string name="error_not_couchpad_room">Dieser Code gehört zu keinem CouchPad-Raum.</string>
-    <string name="error_no_live_game">Kein aktives Spiel konfiguriert.</string>
-    <string name="error_no_controller_url">Dieses Spiel hat keine Controller-URL.</string>
     <string name="error_enter_room_code">Gib einen Raumcode ein.</string>
     <string name="error_code_unmatched">Dieser Code kann gerade keinem Spiel zugeordnet werden.</string>
     <string name="error_room_not_found_or_expired">Raum nicht gefunden oder abgelaufen.</string>

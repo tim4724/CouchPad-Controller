@@ -85,9 +85,9 @@ sealed interface JoinOutcome {
  * best-effort ([extractRoomCode]), used only to label and liveness-poll the rejoin
  * card; a URL that hides it still joins fine.
  *
- * The two code-first exceptions carry no origin of their own and resolve to the sole
- * live game's controllerBaseUrl: bare typed codes, and canonical couchpad.games/<code>
- * links (bare domain or www).
+ * An input with no origin of its own — a bare code, a canonical couchpad.games/<code>
+ * link — names a room but no controller, so it has nothing to resolve here and belongs
+ * to the relay directory ([resolveJoin]).
  */
 object JoinResolver {
 
@@ -97,18 +97,12 @@ object JoinResolver {
 
     val uri = runCatching { s.toUri() }.getOrNull()
     val host = uri?.host
-    if (uri?.scheme == null || host == null) {
-      // Bare code — no origin to load, and nothing riding along; the sole live game hosts it.
-      return soleLiveGameJoin(games, roomCode = s, source = null)
+    // No controller origin: a bare code, or a canonical couchpad.games/<code> link —
+    // that link is the launcher asking the directory who owns the code, not an answer.
+    // (Launcher SUBdomains are preview deployments and load their own origin — below.)
+    if (uri?.scheme == null || host == null || originlessCode(s) != null) {
+      return JoinOutcome.Failure(R.string.error_not_couchpad_room)
     }
-
-    // Canonical couchpad.games/<CODE> links (bare domain or www) carry no controller
-    // origin of their own, so the sole live game hosts them — the offline answer, and
-    // the fallback when [resolveJoin]'s directory probe can't name the owner. The App
-    // Links filter claims exactly-6-char paths, so the marketing index never reaches
-    // the app; a non-room 6-char path is rejected by validCode.
-    // (Subdomains are preview deployments and load their own origin — below.)
-    originlessCode(s)?.let { return soleLiveGameJoin(games, it, source = uri) }
 
     // A game's own domain, or a launcher subdomain (preview/branch deployment). The
     // subdomain prefix names the game when it can ("tinytrack-…"), purely for
@@ -144,34 +138,11 @@ object JoinResolver {
   // path segment, else a query value. "" when the URL surfaces none — the join still
   // loads; the rejoin card just can't show or liveness-poll the room.
   private fun extractRoomCode(uri: Uri): String {
-    uri.pathSegments.firstOrNull(::validCode)?.let { return it }
+    uri.pathSegments.firstOrNull(::validRoomCode)?.let { return it }
     for (name in uri.queryParameterNames) {
-      uri.getQueryParameters(name).firstOrNull(::validCode)?.let { return it }
+      uri.getQueryParameters(name).firstOrNull(::validRoomCode)?.let { return it }
     }
     return ""
-  }
-
-  /**
-   * Hosts an origin-less input on the sole live game. [source] is the URL it came from, or
-   * null for a bare code, which has no URL to keep.
-   *
-   * Only the ORIGIN is wrong on a canonical link — couchpad.games serves no controller —
-   * so swap that and pass the query and fragment through untouched. Re-attaching params by
-   * name is what silently dropped `cpp` (§6: the join URL is the only place a display ever
-   * declares its platform), and it would drop the next one too.
-   */
-  private fun soleLiveGameJoin(games: List<Game>, roomCode: String, source: Uri?): JoinOutcome {
-    val game = games.firstOrNull { it.isLive }
-      ?: return JoinOutcome.Failure(R.string.error_no_live_game)
-    val base = game.controllerBaseUrl
-      ?: return JoinOutcome.Failure(R.string.error_no_controller_url)
-    if (!validCode(roomCode)) return JoinOutcome.Failure(R.string.error_not_couchpad_room)
-    val joinUrl = buildString {
-      append(base.trimEnd('/')).append('/').append(roomCode)
-      source?.encodedQuery?.takeIf { it.isNotEmpty() }?.let { append('?').append(it) }
-      source?.encodedFragment?.takeIf { it.isNotEmpty() }?.let { append('#').append(it) }
-    }
-    return JoinOutcome.Success(game, roomCode, joinUrl)
   }
 
   // Stand-in metadata for a launcher subdomain that doesn't map to any known
@@ -186,9 +157,8 @@ object JoinResolver {
     controllerBaseUrl = null,
     hosts = emptyList(),
   )
-
-  private fun validCode(code: String): Boolean {
-    if (code.length != ROOM_CODE_LENGTH) return false
-    return code.all { it in BASE58 }
-  }
 }
+
+/** The suite's room-code shape: exact length, Base58, case-SENSITIVE. */
+fun validRoomCode(code: String): Boolean =
+  code.length == ROOM_CODE_LENGTH && code.all { it in BASE58 }

@@ -157,8 +157,7 @@ func homeRooms(_ rooms: [NearbyRoom], rejoin: RecentRoom? = nil) -> HomeRooms {
 /// can't be joined is worse than no card, since tapping it costs a whole page load only
 /// to bounce back on `game_full`.
 func resolveNearby(_ advert: NearbyAdvert, games: [Game]) async -> NearbyRoom? {
-    guard advert.code.count == CP.roomCodeLength,
-          advert.code.allSatisfy({ CP.base58.contains($0) }) else { return nil }
+    guard validRoomCode(advert.code) else { return nil }
     // One probe round serves both the fullness check and the URL resolution — this runs
     // on every 10s poll tick per advertised room, so a second identical round would
     // double the relay traffic for nothing.
@@ -167,7 +166,7 @@ func resolveNearby(_ advert: NearbyAdvert, games: [Game]) async -> NearbyRoom? {
     guard !founds.isEmpty, !founds.contains(where: { $0.isFull }) else { return nil }
 
     guard case .success(let game, let roomCode, let joinUrl) =
-            resolveLookups(advert.code, results: lookups, games: games) else { return nil }
+            resolveLookups(lookups, games: games) else { return nil }
     // A relayed record's instance name is the relaying phone's own, not the TV's.
     return NearbyRoom(label: advert.relayed ? "" : advert.label, game: game, roomCode: roomCode,
                       joinUrl: joinUrl)

@@ -213,17 +213,28 @@ struct QRScannerScreen: View {
             finish(.code(value))
             return
         }
-        switch JoinResolver.resolve(value, games: games) {
-        case .success:
+        // An origin-less payload (a bare code, a canonical couchpad.games/<code> link)
+        // names a room but no controller, so only the relay directory can place it:
+        // vet it on shape here and let the join path do the lookup.
+        let failure: String?
+        if let originless = originlessCode(value) {
+            failure = validRoomCode(originless)
+                ? nil : String(localized: "That code isn’t a CouchPad room.")
+        } else if case .failure(let message) = JoinResolver.resolve(value, games: games) {
+            failure = message
+        } else {
+            failure = nil
+        }
+        guard let failure else {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             finish(.code(value))
-        case .failure(let message):
-            // Once per distinct payload — the same code decodes on every frame, and
-            // two bad codes in one frame must not take turns buzzing.
-            guard rejected.insert(value).inserted else { return }
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
-            scanError = message
+            return
         }
+        // Once per distinct payload — the same code decodes on every frame, and
+        // two bad codes in one frame must not take turns buzzing.
+        guard rejected.insert(value).inserted else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+        scanError = failure
     }
 
     private func finish(_ result: QRScanResult) {

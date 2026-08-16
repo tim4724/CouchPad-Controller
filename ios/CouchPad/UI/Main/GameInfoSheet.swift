@@ -182,6 +182,9 @@ struct GameplayLoopView: View {
         .task {
             guard localURL == nil,
                   let remote = game.video.flatMap(URL.init(string:)) else { return }
+            // Before any player exists: a muted AVPlayer still activates the shared
+            // audio session, and the default category would stop the player's music.
+            await GameAudioSession.configureForMutedTrailer()
             localURL = await TrailerCache.fetch(remote)
         }
     }

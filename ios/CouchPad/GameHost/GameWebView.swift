@@ -3,24 +3,41 @@ import WebKit
 import UIKit
 import AVFAudio
 
-/// Configures the shared audio session once, on first game host. Deferred out of
-/// didFinishLaunching: the call round-trips to the audio server (tens of ms) and
-/// nothing needs it until a controller page can play sound.
+/// Configures the shared audio session. Deferred out of didFinishLaunching: the call
+/// round-trips to the audio server (tens of ms) and nothing needs it until something
+/// can actually play.
 enum GameAudioSession {
-    private static var configured = false
+    /// Set once a game host has claimed the session for playback — the trailer's
+    /// weaker category must never downgrade it from under a live controller.
+    private static var gameConfigured = false
 
+    /// On first game host.
     static func configureOnce() {
-        guard !configured else { return }
-        configured = true
+        guard !gameConfigured else { return }
+        gameConfigured = true
         // Off-main so the nav push into the game never drops frames on it; the page
         // needs seconds of network + boot before it can make any sound, so the
         // category is always set long before first playback.
         DispatchQueue.global(qos: .userInitiated).async {
             // .playback so WebView game sound is audible even with the silent switch
             // on; .mixWithOthers so it layers over the user's music/podcasts instead
-            // of stopping them (the trailer is muted, so it stays silent regardless).
+            // of stopping them.
             try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
         }
+    }
+
+    /// Before the info sheet's gameplay loop plays. The clip is muted, but AVPlayer
+    /// still activates the shared session, and the default `.soloAmbient` category is
+    /// non-mixing — browsing the catalog would stop the player's music for a clip they
+    /// can't hear. `.ambient` mixes by definition and follows the ringer switch. This
+    /// is Android's `setAudioFocusRequest(AUDIOFOCUS_NONE)` on the trailer VideoView.
+    ///
+    /// Awaited (off-main), so the category is in force before a player exists.
+    static func configureForMutedTrailer() async {
+        guard !gameConfigured else { return }
+        await Task.detached(priority: .userInitiated) {
+            try? AVAudioSession.sharedInstance().setCategory(.ambient)
+        }.value
     }
 }
 

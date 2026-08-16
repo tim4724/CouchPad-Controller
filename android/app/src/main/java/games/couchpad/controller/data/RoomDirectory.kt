@@ -48,7 +48,7 @@ sealed interface RoomLookup {
 
 object RoomDirectory {
   /** Probe the relay for a room code. Never throws; network failure → [RoomLookup.Error]. */
-  suspend fun lookup(code: String, relayBase: String = RELAY_BASE): RoomLookup = withContext(Dispatchers.IO) {
+  suspend fun lookup(code: String, relayBase: String): RoomLookup = withContext(Dispatchers.IO) {
     val trimmed = code.trim()
     if (trimmed.isEmpty()) return@withContext RoomLookup.NotFound
     val conn = runCatching {
@@ -134,6 +134,7 @@ fun resolveLookups(results: List<RoomLookup>, games: List<Game>): JoinOutcome {
   // and let the relay decide — a stranger bounces back on `game_full`, which the shell
   // already turns into a banner. Only the nearby list, which never offers a room the
   // player has a slot in, can safely act on `isFull`.
+
   // A `url` that is itself origin-less (a couchpad.games/<code> template) declares nothing
   // the directory hadn't already told us, so it doesn't count as one.
   val foundUrl = founds.firstOrNull { it.url != null && originlessCode(it.url) == null }?.url

@@ -34,7 +34,7 @@ enum RoomDirectory {
     /// GET {relayBase}/room/{androidUriEncode(code)}. Never throws.
     /// 200 + JSON object → .found; 404 → .notFound; anything else → .error.
     /// Empty trimmed code → .notFound (no network).
-    static func lookup(code: String, relayBase: String = CP.relayBase) async -> RoomLookup {
+    static func lookup(code: String, relayBase: String) async -> RoomLookup {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             return .notFound
@@ -50,9 +50,9 @@ enum RoomDirectory {
                 guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     return .error
                 }
-                let url = (body["url"] as? String)
+                let template = (body["url"] as? String)
                     .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
-                return .found(url: url,
+                return .found(url: template,
                               clients: body["clients"] as? Int ?? 0,
                               maxClients: body["maxClients"] as? Int ?? 0)
             case 404:

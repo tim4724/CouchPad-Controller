@@ -225,16 +225,16 @@ struct QRScannerScreen: View {
         } else {
             failure = nil
         }
-        guard let failure else {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            finish(.code(value))
+        if let failure {
+            // Once per distinct payload — the same code decodes on every frame, and
+            // two bad codes in one frame must not take turns buzzing.
+            guard rejected.insert(value).inserted else { return }
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            scanError = failure
             return
         }
-        // Once per distinct payload — the same code decodes on every frame, and
-        // two bad codes in one frame must not take turns buzzing.
-        guard rejected.insert(value).inserted else { return }
-        UINotificationFeedbackGenerator().notificationOccurred(.error)
-        scanError = failure
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        finish(.code(value))
     }
 
     private func finish(_ result: QRScanResult) {
@@ -256,8 +256,9 @@ private struct CameraPreview: UIViewRepresentable {
         override static var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
 
-        /// The layer-to-frame mapping only exists once the view has bounds, so the
-        /// scan region is (re-)derived here as well as when the session starts.
+        /// The scan region is derived from the view's bounds, so it has to be re-derived
+        /// whenever they change (rotation, resize) — the one case the session-start
+        /// retry can't cover, since it has already succeeded by then.
         var onLayout: (() -> Void)?
 
         override func layoutSubviews() {

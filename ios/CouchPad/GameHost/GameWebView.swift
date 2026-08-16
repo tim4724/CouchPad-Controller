@@ -10,6 +10,8 @@ enum GameAudioSession {
     /// Set once a game host has claimed the session for playback — the trailer's
     /// weaker category must never downgrade it from under a live controller.
     private static var gameConfigured = false
+    /// Set once the trailer category is in force; only [gameConfigured] outranks it.
+    private static var trailerConfigured = false
 
     /// Claims the session for game audio, on the first game host. Latches
     /// [gameConfigured] so nothing weaker can take it back for the rest of the launch.
@@ -33,9 +35,12 @@ enum GameAudioSession {
     /// can't hear. `.ambient` mixes by definition and follows the ringer switch. This
     /// is Android's `setAudioFocusRequest(AUDIOFOCUS_NONE)` on the trailer VideoView.
     ///
-    /// Awaited (off-main), so the category is in force before a player exists.
+    /// Awaited (off-main), so the category is in force before a player exists — which
+    /// is why it latches too: every sheet open would otherwise pay the audio-server
+    /// round trip this enum exists to defer, to set the category it already holds.
     static func configureForMutedTrailer() async {
-        guard !gameConfigured else { return }
+        guard !gameConfigured, !trailerConfigured else { return }
+        trailerConfigured = true
         await Task.detached(priority: .userInitiated) {
             try? AVAudioSession.sharedInstance().setCategory(.ambient)
         }.value

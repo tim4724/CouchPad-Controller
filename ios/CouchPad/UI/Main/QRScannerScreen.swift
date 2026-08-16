@@ -244,6 +244,15 @@ private struct CameraPreview: UIViewRepresentable {
     final class PreviewView: UIView {
         override static var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+
+        /// The layer-to-frame mapping only exists once the view has bounds, so the
+        /// scan region is (re-)derived here as well as when the session starts.
+        var onLayout: (() -> Void)?
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            onLayout?()
+        }
     }
 
     final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
@@ -258,6 +267,10 @@ private struct CameraPreview: UIViewRepresentable {
         // to it (so a SwiftUI update that changed something else doesn't re-lock it).
         private var device: AVCaptureDevice?
         private var torchOn = false
+        // Main-thread state: the running output, published from the session queue only
+        // once it is live, and the view whose bounds define the scan region.
+        private var metadataOutput: AVCaptureMetadataOutput?
+        private weak var previewView: PreviewView?
 
         init(onCode: @escaping (String) -> Void, onFailure: @escaping (String) -> Void,
              onTorchProbed: @escaping (Bool) -> Void) {
@@ -305,6 +318,12 @@ private struct CameraPreview: UIViewRepresentable {
                     output.metadataObjectTypes = [.qr]
                     self.session.commitConfiguration()
                     self.session.startRunning()
+                    // Only now can the preview layer have a connection to convert
+                    // through, so the scan region is derived here (and on every layout).
+                    DispatchQueue.main.async {
+                        self.metadataOutput = output
+                        self.applyScanRegionWhenReady()
+                    }
                 } catch {
                     let message = error.localizedDescription
                     DispatchQueue.main.async { self.onFailure(message) }
@@ -334,6 +353,46 @@ private struct CameraPreview: UIViewRepresentable {
             if device.isExposureModeSupported(.continuousAutoExposure) {
                 device.exposureMode = .continuousAutoExposure
             }
+        }
+
+        /// Confine decoding to the frame the player can actually see. `.resizeAspectFill`
+        /// crops the camera frame to the screen, so without this a code sitting just
+        /// outside the preview — the TV next to the one they're aiming at, a poster on
+        /// the wall — decodes and joins a room they never pointed at. Android gets the
+        /// same guarantee from its CameraX ViewPort (ScanScreen.kt).
+        ///
+        /// Main thread only. Deliberately conservative: until the session is running
+        /// there is no layer-to-frame mapping, and a conversion that lands outside the
+        /// unit square or degenerate is discarded rather than applied — a bad region
+        /// scans nothing at all. Reports whether a region was actually installed.
+        @discardableResult
+        func applyScanRegion() -> Bool {
+            guard let output = metadataOutput, let view = previewView,
+                  view.previewLayer.connection != nil,
+                  view.bounds.width > 0, view.bounds.height > 0 else { return false }
+            let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+            let region = view.previewLayer
+                .metadataOutputRectConverted(fromLayerRect: view.previewLayer.bounds)
+                .intersection(unit)
+            guard !region.isNull, region.width > 0.05, region.height > 0.05 else { return false }
+            output.rectOfInterest = region
+            return true
+        }
+
+        /// Keeps trying until the region lands, because the fallback for one that never
+        /// does is the whole camera frame — the exact thing it exists to prevent, and
+        /// invisible when it happens. Layout is not a dependable second chance: the view
+        /// is normally laid out well before the session comes up, so the attempt right
+        /// after `startRunning` can be the last one anything triggers.
+        func applyScanRegionWhenReady(attemptsLeft: Int = 10) {
+            if applyScanRegion() || attemptsLeft == 0 { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.applyScanRegionWhenReady(attemptsLeft: attemptsLeft - 1)
+            }
+        }
+
+        func attach(_ view: PreviewView) {
+            previewView = view
         }
 
         /// The scanner's own flashlight — the room code is often on a card or a
@@ -382,6 +441,8 @@ private struct CameraPreview: UIViewRepresentable {
         view.backgroundColor = .black
         view.previewLayer.session = context.coordinator.session
         view.previewLayer.videoGravity = .resizeAspectFill
+        view.onLayout = { [weak coordinator = context.coordinator] in coordinator?.applyScanRegion() }
+        context.coordinator.attach(view)
         context.coordinator.start()
         return view
     }

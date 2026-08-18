@@ -34,8 +34,7 @@ jobs:
     steps:
       # third_party/zxing-cpp is compiled from source by :app (see android/app/build.gradle.kts),
       # so the submodule has to be present or CMake configuration fails. Not recursive: zxing's
-      # own zint submodule is unused, and the fork must stay public for the default token to
-      # be able to fetch it.
+      # own zint submodule is unused.
       - uses: actions/checkout@v7
         with:
           submodules: true

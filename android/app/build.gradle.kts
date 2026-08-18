@@ -29,8 +29,8 @@ val hasReleaseKeystore = releaseStoreFile != null
 // ScanScreen asks for — and take the fixes for the other two, which together move the arm64
 // .so from 1,747 KB to 540 KB. Nothing is vendored; the Kotlin wrapper and JNI glue are
 // compiled straight out of the submodule, so a bump is just moving the submodule pointer.
-// It is pinned to a fork carrying https://github.com/zxing-cpp/zxing-cpp/pull/1151; re-point
-// it at upstream once that lands, and don't rewrite the fork's history while it is pinned.
+// The two fixes are upstream as of zxing-cpp/zxing-cpp#1151, so the submodule tracks
+// upstream master.
 val zxingCppWrapperSrc = rootProject.file("../third_party/zxing-cpp/wrappers/android/zxingcpp/src/main")
 
 android {

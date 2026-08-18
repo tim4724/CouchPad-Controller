@@ -21,6 +21,9 @@ too. Both apps implement it identically.
 - `android/` — Jetpack Compose / Material 3 app (Kotlin)
 - `ios/` — SwiftUI app (Swift, project generated with XcodeGen; see
   [ios/README.md](ios/README.md))
+- `third_party/zxing-cpp/` — git submodule tracking upstream zxing-cpp; Android
+  compiles its QR decoder from here rather than using the published AAR (why:
+  `android/app/build.gradle.kts`)
 
 ## Android: build & run
 

@@ -26,11 +26,12 @@ val hasReleaseKeystore = releaseStoreFile != null
 // zxing-cpp is built from source (third_party/zxing-cpp submodule) rather than taken from its
 // published AAR: that AAR ships all six decoder families and re-exports its static libc++,
 // which blocks --gc-sections. Building it here lets us keep only QR — the sole format
-// ScanScreen asks for — and take the fixes for the other two, which together move the arm64
-// .so from 1,747 KB to 540 KB. Nothing is vendored; the Kotlin wrapper and JNI glue are
+// ScanScreen asks for — and take the upstream fixes for the rest, which together move the
+// arm64 .so from 1,747 KB to 392 KB. Nothing is vendored; the Kotlin wrapper and JNI glue are
 // compiled straight out of the submodule, so a bump is just moving the submodule pointer.
-// The two fixes are upstream as of zxing-cpp/zxing-cpp#1151, so the submodule tracks
-// upstream master.
+// The fixes are upstream as of zxing-cpp/zxing-cpp#1151 (std::locale out of the reader path,
+// no re-exported libc++) and #1152 (libc++abi's demangler no longer linked in), so the
+// submodule tracks upstream master.
 val zxingCppWrapperSrc = rootProject.file("../third_party/zxing-cpp/wrappers/android/zxingcpp/src/main")
 
 android {

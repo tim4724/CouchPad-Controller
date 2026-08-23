@@ -360,12 +360,18 @@ struct JoinButtons: View {
 
             // Explicit tonal fill: `.bordered` would derive a translucent fill from
             // the ambient tint and never read the palette's secondaryContainer, so
-            // the fill would drift from Android's FilledTonalButton.
+            // the fill would drift from Android's FilledTonalButton. The cost of
+            // building the pill by hand is that the label must claim its own hit
+            // area: a `.plain` button is only tappable where its label DRAWS, so
+            // without the content shape the fill is decoration and every tap that
+            // misses the glyphs falls through — the wider the pill, the deader it
+            // feels (verified on device).
             Button(action: onEnterCode) {
                 Text("Enter code manually")
                     .font(.cpTitleMedium)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 15)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .background(

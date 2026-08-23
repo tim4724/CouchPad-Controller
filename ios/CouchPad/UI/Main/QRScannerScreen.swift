@@ -137,6 +137,9 @@ struct QRScannerScreen: View {
                                 .font(.cpTitleMedium)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
+                                // The pill is a background BEHIND a `.plain` button —
+                                // only the label's own shape is tappable (see JoinButtons).
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .background(

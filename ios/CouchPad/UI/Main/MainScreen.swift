@@ -813,13 +813,15 @@ private struct NearbyStatusCard: View {
     }
 
     /// Explicit tonal fill, matching JoinButtons' "Enter code manually" — see the note
-    /// there on why `.bordered` can't be used.
+    /// there on why `.bordered` can't be used, and on why the label needs a content
+    /// shape of its own.
     private func askButton(_ text: Text, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             text
                 .font(.cpTitleMedium)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(

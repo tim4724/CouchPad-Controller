@@ -71,8 +71,15 @@ struct ProfileSheet: View {
                         name = String(newValue.prefix(16))
                     }
                 }
+            // The glyph is the whole label, and a `.plain` button is tappable only
+            // where its label draws — so a bare emoji is a ~22pt target. The frame is
+            // the touch area, not the art: Android's dice sits in an IconButton and
+            // gets the 48dp minimum for free.
             Button { name = FunnyName.random() } label: {
-                Text("🎲").font(.title3)
+                Text("🎲")
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }

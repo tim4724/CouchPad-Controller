@@ -248,6 +248,7 @@ struct GameWebView: UIViewRepresentable {
     static func dismantleUIView(_ webView: CPWebView, coordinator: Coordinator) {
         coordinator.isTearingDown = true
         coordinator.titleObservation = nil
+        coordinator.haptics.shutdown()
         NotificationCenter.default.removeObserver(coordinator)
         webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "cpHost")
@@ -273,6 +274,10 @@ struct GameWebView: UIViewRepresentable {
         // that navigation instead of snapping back to portrait while the next page is
         // still on its way.
         private var orientationAsked = false
+
+        // The page's navigator.vibrate() (CONTRACT.md §12). Lazy inside — no haptic
+        // engine is created until a game actually asks for one.
+        let haptics = GameHaptics()
 
         // Weak: the coordinator must not extend the web view's life past dismantle.
         // Set once from makeUIView.
@@ -506,6 +511,10 @@ struct GameWebView: UIViewRepresentable {
                 // Not fire-once: games arm and disarm repeatedly (a dialog opening and
                 // closing). The shim already coerced to a boolean, so only "true" arms.
                 backEdgeGesture?.isEnabled = (body["value"] as? String) == "true"
+            case "vibrate":
+                // Not fire-once, and the highest-rate message on the bridge — a
+                // controller buzzes on nearly every tap.
+                haptics.play(parseVibrationPattern(body["value"] as? String))
             case "setOrientation":
                 // Not fire-once: a game may run its lobby portrait and its match
                 // landscape. The shim already narrowed to the two legal keywords.

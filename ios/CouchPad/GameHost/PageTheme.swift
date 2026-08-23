@@ -61,16 +61,40 @@ func gameEndMessage(_ reason: String?) -> String {
     }
 }
 
+/// Bridge input is untrusted page data, and the shim's own clamping is no guarantee —
+/// a page can post to `cpHost` directly. Comma-separated milliseconds, alternating
+/// vibrate/pause (the Vibration API's pattern shape); empty is its cancel call.
+/// A malformed entry keeps the valid prefix rather than dropping the buzz entirely.
+/// Both the entry count and the total run time are capped: nothing a page sends may
+/// leave the phone shaking after the tap that caused it.
+func parseVibrationPattern(_ csv: String?) -> [Int] {
+    guard let csv, !csv.isEmpty, csv.utf16.count <= 512 else { return [] }
+    var pattern: [Int] = []
+    var total = 0
+    for field in csv.split(separator: ",", omittingEmptySubsequences: false) {
+        guard pattern.count < 32, total < 5000, let milliseconds = Int(field), milliseconds >= 0
+        else { break }
+        let clamped = min(milliseconds, 5000 - total)
+        pattern.append(clamped)
+        total += clamped
+    }
+    return pattern
+}
+
 enum GameHostJS {
     /// Document-start user script (all frames): defines
     /// `window.CouchPadHost.{gameEnded,themeChanged,enableSystemBack,setOrientation}`
-    /// posting `{type, value}` to `window.webkit.messageHandlers.cpHost`. Idempotent —
-    /// the shim must exist on every page load/navigation, but never redefine an
-    /// already-installed bridge.
+    /// posting `{type, value}` to `window.webkit.messageHandlers.cpHost`, and polyfills
+    /// `navigator.vibrate` over the same channel (CONTRACT.md §12) — WebKit ships no
+    /// Vibration API, which is why a game's haptics are silent on iOS but not on
+    /// Android. Idempotent — the shim must exist on every page load/navigation, but
+    /// never redefine an already-installed bridge.
     ///
     /// `enableSystemBack` and `setOrientation` narrow to a boolean / the two legal
     /// keywords here, so the native side sees the contract's strict comparison (Android
     /// gets the same for free from its typed JS bridge) rather than JS truthiness.
+    /// `vibrate` likewise normalizes to the spec's millisecond array and returns the
+    /// spec's boolean, so a page sees the same shape and return type as the real API.
     static let bridgeShim = """
     (function () {
       if (window.CouchPadHost) { return; }
@@ -90,6 +114,22 @@ enum GameHostJS {
           post('setOrientation', mode === 'landscape' ? 'landscape' : 'portrait');
         }
       };
+      try {
+        navigator.vibrate = function (pattern) {
+          var list = Array.isArray(pattern) ? pattern : [pattern];
+          var out = [];
+          // Entry count and per-entry milliseconds mirror parseVibrationPattern's caps
+          // (CONTRACT.md §12). Two languages, no shared constant: the native side is
+          // authoritative and re-checks everything — keep these in step with it.
+          for (var i = 0; i < list.length && i < 32; i++) {
+            var ms = Math.round(Number(list[i]));
+            if (!isFinite(ms) || ms < 0) { return false; }
+            out.push(Math.min(ms, 5000));
+          }
+          post('vibrate', out.join(','));
+          return true;
+        };
+      } catch (e) {}
     })();
     """
 

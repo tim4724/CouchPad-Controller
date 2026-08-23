@@ -430,6 +430,36 @@ exist — Android's WebView and Chrome — attach the listener directly; there i
 Unchanged in a plain browser: mobile Safari runs the same code and shows its own dialog,
 which is the whole point of asking from a gesture.
 
+## 12. Game → device, haptics: `navigator.vibrate(pattern)`
+
+Like §11 this is the web platform's API, not a launcher bridge — but only one of the two
+engines implements it. Android's WebView has the Vibration API natively (the launcher's
+part is holding the `VIBRATE` permission); WebKit has never shipped it, so on iOS
+`navigator.vibrate` is absent in Safari and in a plain `WKWebView` alike, and the usual
+`if (navigator.vibrate)` guard silently skips every buzz.
+
+The iOS launcher closes that gap: it defines `navigator.vibrate` before the document
+runs and plays the pattern through Core Haptics. A controller therefore writes the
+standard call once and feels the same on both platforms:
+
+```js
+navigator.vibrate(15);          // one short tick
+navigator.vibrate([8, 8, 8]);   // alternating vibrate/pause, in milliseconds
+navigator.vibrate(0);           // cancel whatever is still running
+```
+
+Feature-detect as always — the polyfill is what makes the guard true inside the launcher,
+and in mobile Safari it stays false, so keep haptics decorative and never gate game state
+on them.
+
+Two limits are worth designing around. Pulses shorter than ~40 ms play as a crisp tap
+whose strength tracks the duration you asked for, so the usual 2 ms / 15 ms / 23 ms
+gradations stay distinguishable; longer pulses play as a continuous buzz. And the pattern
+is capped — 32 entries, five seconds total — because it arrives as untrusted page input.
+
+Unchanged in a plain browser: Android Chrome runs the same code against the real API,
+and iOS Safari does nothing, exactly as it does today.
+
 ## Checklist for a new game
 
 1. Read `cpName`; when it's there: skip name entry, don't persist the name, suppress own

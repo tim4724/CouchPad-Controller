@@ -394,6 +394,36 @@ from. In Android split-screen the system ignores orientation
 requests entirely — the page keeps the shape it has, and the request takes effect when
 the app is full-screen again.
 
+## 11. Game → device, tilt controls: `DeviceOrientationEvent.requestPermission()`
+
+Motion and orientation are the web platform's, not a launcher bridge — a controller reads
+them exactly as it does in a browser. The launcher's only part is answering the gate iOS
+puts in front of them: a `WKWebView` asks its **host app** whether the page may have the
+sensors, and CouchPad grants it for any origin already on the navigation allow-list. So
+there is no permission dialog inside the launcher on either platform, and no
+launcher-specific code to write.
+
+What does not change is the web API's own rule: on iOS the request must come from a user
+gesture. Ask from the tap that turns tilt on — a probe at startup, or one behind a
+`setTimeout`, rejects with `NotAllowedError`, and a game that reads that as "this phone
+has no sensor" will report tilt unavailable on hardware that has it.
+
+```js
+// In the click/touch handler that enables tilt steering — not at load.
+if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+  const verdict = await DeviceOrientationEvent.requestPermission();   // iOS/WebKit
+  if (verdict !== 'granted') return showTiltUnavailable();
+}
+addEventListener('deviceorientation', onTilt);
+```
+
+Feature-detect on `requestPermission` being a *function*, not on its verdict: its presence
+means "this engine gates the sensors", never "the sensors are missing". Where it doesn't
+exist — Android's WebView and Chrome — attach the listener directly; there is no gate.
+
+Unchanged in a plain browser: mobile Safari runs the same code and shows its own dialog,
+which is the whole point of asking from a gesture.
+
 ## Checklist for a new game
 
 1. Read `cpName`; when it's there: skip name entry, don't persist the name, suppress own

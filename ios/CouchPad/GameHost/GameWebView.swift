@@ -409,6 +409,26 @@ struct GameWebView: UIViewRepresentable {
             return nil
         }
 
+        /// Tilt controls. `DeviceOrientationEvent.requestPermission()` inside a
+        /// WKWebView is answered by the HOST app, not by WebKit: with this delegate
+        /// method unimplemented the request is denied without ever showing a dialog,
+        /// so a game asking for the sensor concludes the phone hasn't got one.
+        ///
+        /// Granted rather than prompted, for the same reason the launcher adds no gate
+        /// of its own anywhere else: Android's WebView hands the page orientation with
+        /// no permission at all, and a phone whose entire job is to be a controller
+        /// asking twice — once to join, once to tilt — is friction the games would have
+        /// to design around on one platform only. The origin still has to be on the
+        /// navigation allow-list (that is the trust boundary here), and WebKit requires
+        /// the page to ask from a user gesture, so the sensor never opens unasked.
+        func webView(_ webView: WKWebView,
+                     requestDeviceOrientationAndMotionPermissionFor origin: WKSecurityOrigin,
+                     initiatedByFrame frame: WKFrameInfo,
+                     decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+            let allowed = parent.allowedDomains.contains { hostInDomain(origin.host, $0) }
+            decisionHandler(allowed ? .grant : .deny)
+        }
+
         /// The page's own name (ground truth over the manifest): drives the Leave bar
         /// and feeds the home rejoin card, so games not in the bundled manifest show a
         /// real name instead of the generic fallback. putTitle returns the sanitized

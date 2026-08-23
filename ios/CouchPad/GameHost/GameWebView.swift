@@ -268,6 +268,11 @@ struct GameWebView: UIViewRepresentable {
         // home only once. (A load failure is NOT terminal: it flips `failed` for the
         // retry overlay, so it doesn't gate on this.)
         private var didEnd = false
+        // Has the document now loading exercised §10? Cleared when a new main-frame
+        // navigation starts — it is what lets the launcher HOLD the orientation across
+        // that navigation instead of snapping back to portrait while the next page is
+        // still on its way.
+        private var orientationAsked = false
 
         // Weak: the coordinator must not extend the web view's life past dismantle.
         // Set once from makeUIView.
@@ -375,12 +380,18 @@ struct GameWebView: UIViewRepresentable {
         }
 
         /// Neither the §9 arming nor the §10 orientation may outlive the page that asked
-        /// for it — both revert to the launcher's default here. Main frame only, and not
-        /// fired for same-document navigations, so a page that pushes history mid-session
-        /// keeps both.
+        /// for it — but they expire differently, because one is input safety and the
+        /// other is cosmetic. Back DISARMS here: an unloaded page must never inherit a
+        /// live exit gesture. Orientation is only re-armed for the verdict — the device
+        /// HOLDS what it has until the incoming document has had its say (didFinish
+        /// below, or the failure path). Reverting here instead rotates the phone to
+        /// portrait for the length of a page load and straight back again the moment the
+        /// new page's §10 call lands — which is every self-reload a landscape game does.
+        /// Main frame only, and not fired for same-document navigations, so a page that
+        /// pushes history mid-session keeps both.
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             backEdgeGesture?.isEnabled = false
-            parent.onLandscape(false)
+            orientationAsked = false
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -442,6 +453,9 @@ struct GameWebView: UIViewRepresentable {
             // Ignore our own teardown and a game already ended.
             guard !isTearingDown, !didEnd else { return }
             if isDeliberateNavigationCancellation(error) { return }
+            // Nothing is going to ask now — the held orientation would otherwise strand
+            // the retry cover sideways with no page behind it.
+            if !orientationAsked { parent.onLandscape(false) }
             // Not terminal — surface the in-place retry overlay; Retry re-issues the load.
             DispatchQueue.main.async { self.parent.failed = true }
         }
@@ -457,6 +471,11 @@ struct GameWebView: UIViewRepresentable {
         /// through the error callbacks). The page's <title> needs nothing here — the
         /// KVO observer set up in makeUIView tracks it continuously.
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // The §10 verdict for this document: a page that has said nothing by the time
+            // it is loaded gets the launcher's portrait. A LATER call still rotates — §10
+            // supports deciding once the socket connects — this only closes the window
+            // where a silent page could inherit its predecessor's landscape.
+            if !isTearingDown, !orientationAsked { parent.onLandscape(false) }
             if let js = GameHostJS.nameInjection(name: parent.playerName) {
                 webView.evaluateJavaScript(js, completionHandler: nil)
             }
@@ -490,6 +509,7 @@ struct GameWebView: UIViewRepresentable {
             case "setOrientation":
                 // Not fire-once: a game may run its lobby portrait and its match
                 // landscape. The shim already narrowed to the two legal keywords.
+                orientationAsked = true
                 parent.onLandscape((body["value"] as? String) == "landscape")
             default:
                 break

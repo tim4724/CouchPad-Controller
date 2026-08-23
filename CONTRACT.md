@@ -348,10 +348,16 @@ window.CouchPadHost?.setOrientation?.('landscape');   // match started
 window.CouchPadHost?.setOrientation?.('portrait');    // back to the lobby
 ```
 
-The launcher *implements* `setOrientation`, the game *calls* it. **Default `'portrait'`**,
-including before the first call and after every page load — an orientation never outlives
-the page that asked for it. Only the literal `'landscape'` rotates; every other value,
-including a non-string, means portrait.
+The launcher *implements* `setOrientation`, the game *calls* it. **Default `'portrait'`** —
+before the first call, and again on any page that loads without asking, so a document
+never keeps an orientation it didn't ask for. Only the literal `'landscape'` rotates;
+every other value, including a non-string, means portrait.
+
+That default lands when the incoming page is **loaded**, not when it starts loading:
+across a navigation the device holds the orientation it has until the new document has
+had its say, and falls back to portrait only if that document finishes (or fails) without
+asking. So a landscape page that reloads itself never flaps through portrait and back —
+provided its call is in a `<head>` script, per the note below.
 
 | Mode | The device |
 |------|-----------|

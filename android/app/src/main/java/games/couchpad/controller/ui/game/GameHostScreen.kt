@@ -197,8 +197,12 @@ private fun GameHostContent(
   // the safe state: edges excluded, LEAVE the only exit. Reset on every navigation.
   var systemBackEnabled by remember { mutableStateOf(false) }
   // Has the page asked for landscape (CONTRACT.md §10)? Default false — the launcher's
-  // portrait. Reset on every navigation, like the §9 arming.
+  // portrait.
   var landscape by remember { mutableStateOf(false) }
+  // Has the document now loading exercised §10? Cleared when a new navigation starts —
+  // it is what lets the launcher HOLD the orientation across that navigation instead of
+  // snapping back to portrait while the next page is still on its way.
+  var orientationAsked by remember { mutableStateOf(false) }
   val displayTitle = pageTitle ?: title
   val surfaceArgb = MaterialTheme.colorScheme.surface.toArgb()
   // The bridge/WebView client outlive recompositions but must call the CURRENT
@@ -254,7 +258,10 @@ private fun GameHostContent(
       onGameEnded = { if (exited.compareAndSet(false, true)) currentOnGameEnd(it) },
       onThemeChanged = { currentOnPageTheme(it) },
       onSystemBackEnabled = { systemBackEnabled = it },
-      onLandscape = { landscape = it },
+      onLandscape = {
+        orientationAsked = true
+        landscape = it
+      },
     )
   }
 
@@ -589,13 +596,25 @@ private fun GameHostContent(
           webViewClient = AllowListWebViewClient(
             allowed,
             // Neither the §9 arming nor the §10 orientation may outlive the page that
-            // asked for it — both revert to the launcher's default on every navigation.
+            // asked for it — but they expire differently, because one is input safety
+            // and the other is cosmetic. Back DISARMS here: an unloaded page must never
+            // inherit a live exit gesture. Orientation is only re-armed for the verdict
+            // in onLoaded — the device HOLDS what it has until the incoming document has
+            // had its say. Reverting here instead rotates the phone to portrait for the
+            // length of a page load and straight back again the moment the new page's
+            // §10 call lands — which is every self-reload a landscape game does.
             onNavigationStart = {
               systemBackEnabled = false
-              landscape = false
+              orientationAsked = false
             },
             onLoaded = {
               loading = false
+              // The §10 verdict for this document: a page that has said nothing by the
+              // time it is loaded gets the launcher's portrait. A LATER call still
+              // rotates — §10 supports deciding once the socket connects — this only
+              // closes the window where a silent page could inherit its predecessor's
+              // landscape.
+              if (!orientationAsked) landscape = false
               injectName(profile.name)
               watchPageTheme()
               pushSafeZone()
@@ -606,6 +625,9 @@ private fun GameHostContent(
             onConnectionError = {
               if (!exited.get()) {
                 loading = false
+                // Nothing is going to ask now — the held orientation would otherwise
+                // strand the retry cover sideways with no page behind it.
+                if (!orientationAsked) landscape = false
                 failed = true
               }
             },

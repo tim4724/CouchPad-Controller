@@ -228,6 +228,15 @@ struct GameHostScreen: View {
             if await requestLocalNetworkAccess() { NearbyOptIn.set() }
             lanGateOpen = true
         }
+        // The room is not idle while its player is looking at it: hold the recent-room
+        // slot open for as long as the host is up, so a long session can't age out from
+        // under the rejoin card (RecentRoomStore.inRoom).
+        .task {
+            RecentRoomStore.enter()
+            defer { RecentRoomStore.leave() }
+            // Park until the task is cancelled — i.e. until this screen goes away.
+            while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        }
         // Relay this room to the local network while we're in it, so the next player can
         // tap instead of scan — and so the room stays discoverable even if its display
         // never advertised. Publishes the room code only (§8); no URL, no device name.

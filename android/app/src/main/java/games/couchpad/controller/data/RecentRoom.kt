@@ -19,9 +19,10 @@ class RecentRoom(
 /**
  * Single-slot, in-memory memory of the current room. Deliberately not persisted:
  * rejoin is a same-session convenience, so the slot dies with the process and ages out
- * after [TTL_MS] — a fresh launch simply shows no card. [remember] sets the base at join,
- * platform included when the join URL declares one; the title arrives later, captured
- * in-game, and so does the platform when that URL named no box.
+ * [TTL_MS] after the player LEFT the room — a fresh launch simply shows no card.
+ * [remember] sets the base at join, platform included when the join URL declares one;
+ * the title arrives later, captured in-game, and so does the platform when that URL
+ * named no box.
  */
 object RecentRoomStore {
   private const val TTL_MS = 20L * 60 * 1000
@@ -32,6 +33,15 @@ object RecentRoomStore {
   private var title: String? = null
   private var platform: String? = null
   private var savedAt: Long = 0
+
+  /**
+   * True while the game host is up. The slot must not age out under a player who is
+   * still IN the room — a session outlasting [TTL_MS] would otherwise clear itself from
+   * under the home poll and take the rejoin card (and the room's §8 advertisement, which
+   * reads the slot) with it. [leave] restarts the clock, so the TTL measures time since
+   * the player left.
+   */
+  private var inRoom = false
 
   @Synchronized
   fun remember(game: Game, joinUrl: String, roomCode: String) {
@@ -68,11 +78,24 @@ object RecentRoomStore {
     return clean
   }
 
+  /** Called by the game host for as long as it is on screen (see [inRoom]). */
+  @Synchronized
+  fun enter() {
+    inRoom = true
+  }
+
+  /** The player is out of the room: age it from here. */
+  @Synchronized
+  fun leave() {
+    inRoom = false
+    savedAt = System.currentTimeMillis()
+  }
+
   /** The current room while still fresh, else null (clearing an aged-out slot). */
   @Synchronized
   fun current(): RecentRoom? {
     val g = game ?: return null
-    if (System.currentTimeMillis() - savedAt > TTL_MS) {
+    if (!inRoom && System.currentTimeMillis() - savedAt > TTL_MS) {
       clear()
       return null
     }

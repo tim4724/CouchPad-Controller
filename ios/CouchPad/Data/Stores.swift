@@ -110,9 +110,10 @@ struct RecentRoom {
 
 /// Single-slot, in-memory memory of the current room. Deliberately not persisted:
 /// rejoin is a same-session convenience, so the slot dies with the process and ages
-/// out after `ttl` — a fresh launch simply shows no card. `remember` sets the base at
-/// join, platform included when the join URL declares one; the title arrives later,
-/// captured in-game, and so does the platform when that URL named no box.
+/// out `ttl` after the player LEFT the room — a fresh launch simply shows no card.
+/// `remember` sets the base at join, platform included when the join URL declares one;
+/// the title arrives later, captured in-game, and so does the platform when that URL
+/// named no box.
 enum RecentRoomStore {
 
     private static let ttl: TimeInterval = 20 * 60
@@ -125,6 +126,12 @@ enum RecentRoomStore {
     private static var title: String?
     private static var platform: String?
     private static var savedAt = Date.distantPast
+    /// True while the game host is up. The slot must not age out under a player who is
+    /// still IN the room — a session outlasting `ttl` would otherwise clear itself from
+    /// under the home poll and take the rejoin card (and the room's §8 advertisement,
+    /// which reads the slot) with it. `leave` restarts the clock, so the TTL measures
+    /// time since the player left.
+    private static var inRoom = false
 
     static func remember(game: Game, joinUrl: String, roomCode: String) {
         lock.lock(); defer { lock.unlock() }
@@ -163,11 +170,24 @@ enum RecentRoomStore {
         return cleaned
     }
 
+    /// Called by the game host for as long as it is on screen (see `inRoom`).
+    static func enter() {
+        lock.lock(); defer { lock.unlock() }
+        inRoom = true
+    }
+
+    /// The player is out of the room: age it from here.
+    static func leave() {
+        lock.lock(); defer { lock.unlock() }
+        inRoom = false
+        savedAt = Date()
+    }
+
     /// The current room while still fresh, else nil (clearing an aged-out slot).
     static func current() -> RecentRoom? {
         lock.lock(); defer { lock.unlock() }
         guard let game else { return nil }
-        if Date().timeIntervalSince(savedAt) > ttl {
+        if !inRoom, Date().timeIntervalSince(savedAt) > ttl {
             clearLocked()
             return nil
         }

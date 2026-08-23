@@ -90,6 +90,33 @@ func distinctAdverts(_ adverts: [NearbyAdvert]) -> [NearbyAdvert] {
         .filter { seen.insert($0.code).inserted }
 }
 
+/// How long a room keeps its place on the list after the last record carrying it went away.
+private let advertLingerSeconds: TimeInterval = 90
+
+/// Holds a room's advertisement for `advertLingerSeconds` past its last sighting, so mDNS
+/// decides when to START offering a room and the RELAY decides when to stop.
+///
+/// A record going away is not a room ending: the phone relaying it may just have backed
+/// out to home, a goodbye may be lost, a browse may flap. The relay does answer that
+/// question, and a held room keeps being probed like any other — so a room that really
+/// ended, filled, or died still leaves the list within one poll.
+///
+/// Bounded, because the relay answers from anywhere while the record is what makes a room
+/// NEARBY: an unbounded hold would keep a room on the list long after the player carried
+/// the phone off that network.
+@MainActor final class AdvertLinger {
+
+    private var held: [String: (advert: NearbyAdvert, seen: Date)] = [:]
+
+    /// `adverts` as the LAN currently has them, plus every room still inside the window.
+    func hold(_ adverts: [NearbyAdvert]) -> [NearbyAdvert] {
+        let now = Date()
+        for advert in adverts { held[advert.code] = (advert, now) }
+        held = held.filter { now.timeIntervalSince($0.value.seen) <= advertLingerSeconds }
+        return held.values.map(\.advert)
+    }
+}
+
 /// An advertisement whose code resolved, through the relay, to a real join target.
 struct NearbyRoom: Identifiable, Equatable {
     let label: String

@@ -239,10 +239,13 @@ two TVs can tell them apart.
 - The SRV port is never dialed. The launcher reads the TXT record and nothing else.
   Advertise any listening port your responder needs; it stays unused.
 - Advertise at room create, withdraw at room close (an mDNS goodbye — records at TTL 0).
-  Withdrawing when the room **fills**, and re-publishing when a slot frees, is
-  recommended: the launcher already hides a full room (it compares `clients` against
-  `maxClients` on resolve), but it only re-checks when a record appears, so a display that
-  goes quiet is what keeps a full room off the list promptly.
+  Withdrawing when the room **fills**, and re-publishing when a slot frees, is good
+  citizenship but never the launcher's source of truth: it re-resolves every room it is
+  listing on a poll, so a room that fills or closes leaves the list on the relay's answer
+  either way. A withdrawal is therefore not a removal — the launcher holds a record that
+  stops appearing for a short while, because a record can go quiet for reasons that have
+  nothing to do with the room (a relaying phone put down, a lost goodbye, a flapping
+  browse), and only the relay can tell those from a room that ended.
 - A record that outlives its room is harmless — resolution 404s and no card appears.
 - Two displays hosting two rooms produce two records; the launcher lists both. One room
   announced by its display *and* by every controller in it also produces several records;

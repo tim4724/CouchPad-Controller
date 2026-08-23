@@ -12,6 +12,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.SystemClock
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -89,6 +90,35 @@ data class NearbyAdvert(
  */
 fun distinctAdverts(adverts: List<NearbyAdvert>): List<NearbyAdvert> =
   adverts.sortedBy { it.relayed }.distinctBy { it.code }
+
+/** How long a room keeps its place on the list after the last record carrying it went away. */
+private const val ADVERT_LINGER_MS = 90_000L
+
+/**
+ * Holds a room's advertisement for [ADVERT_LINGER_MS] past its last sighting, so mDNS
+ * decides when to START offering a room and the RELAY decides when to stop.
+ *
+ * A record going away is not a room ending: the phone relaying it may just have backed
+ * out to home, a goodbye may be lost, a browse may flap. The relay does answer that
+ * question, and a held room keeps being probed like any other — so a room that really
+ * ended, filled, or died still leaves the list within one poll.
+ *
+ * Bounded, because the relay answers from anywhere while the record is what makes a room
+ * NEARBY: an unbounded hold would keep a room on the list long after the player carried
+ * the phone off that network.
+ */
+class AdvertLinger {
+
+  private val held = LinkedHashMap<String, Pair<NearbyAdvert, Long>>()
+
+  /** [adverts] as the LAN currently has them, plus every room still inside the window. */
+  fun hold(adverts: List<NearbyAdvert>): List<NearbyAdvert> {
+    val now = SystemClock.elapsedRealtime()
+    for (advert in adverts) held[advert.code] = advert to now
+    held.values.removeAll { now - it.second > ADVERT_LINGER_MS }
+    return held.values.map { it.first }
+  }
+}
 
 /** An advertisement whose code resolved, through the relay, to a real join target. */
 data class NearbyRoom(

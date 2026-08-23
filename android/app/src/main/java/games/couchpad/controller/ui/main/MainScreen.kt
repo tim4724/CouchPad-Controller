@@ -105,6 +105,7 @@ import games.couchpad.controller.data.Game
 import games.couchpad.controller.data.ManifestStore
 import games.couchpad.controller.data.JoinOutcome
 import games.couchpad.controller.data.LAUNCHER_HOST
+import games.couchpad.controller.data.AdvertLinger
 import games.couchpad.controller.data.NearbyAdvert
 import games.couchpad.controller.data.NearbyRoom
 import games.couchpad.controller.data.distinctAdverts
@@ -218,12 +219,15 @@ fun MainScreen(
   // cadence as the rejoin card: both promise "you can enter this", so both have to notice
   // when the room dies or fills. Lifecycle-gated — no polling while backgrounded.
   val resolved = remember { mutableStateMapOf<String, NearbyRoom>() }
+  // A record that stops appearing doesn't end a room — only the relay does, and a held
+  // room keeps being probed until it answers (see AdvertLinger).
+  val linger = remember { AdvertLinger() }
   LaunchedEffect(adverts, games) {
     lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
       while (true) {
         // One probe per ROOM, not per record: a room announced by its display and by
         // every phone in it is still one code.
-        val distinct = distinctAdverts(adverts)
+        val distinct = linger.hold(distinctAdverts(adverts))
         resolved.keys.retainAll(distinct.map { it.code }.toSet())
         coroutineScope {
           distinct.map { advert ->

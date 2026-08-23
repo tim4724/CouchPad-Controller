@@ -48,6 +48,9 @@ struct MainScreen: View {
     /// An advertised code becomes a card only once the relay has resolved it — that call
     /// is what supplies the join URL, `cpp` and the occupancy check.
     @State private var resolvedNearby: [String: NearbyRoom] = [:]
+    // A record that stops appearing doesn't end a room — only the relay does, and a
+    // held room keeps being probed until it answers (see AdvertLinger).
+    @State private var linger = AdvertLinger()
     @State private var profile: Profile = ProfileStore.load()
     // Item-based presentation: values are snapshotted into the request at
     // present time. @State read inside a sheet/cover content closure is not
@@ -271,7 +274,7 @@ struct MainScreen: View {
             while !Task.isCancelled {
                 // One probe per ROOM, not per record: a room announced by its display
                 // and by every phone in it is still one code.
-                let adverts = distinctAdverts(nearby.adverts)
+                let adverts = linger.hold(distinctAdverts(nearby.adverts))
                 resolvedNearby = resolvedNearby.filter { key, _ in
                     adverts.contains { $0.code == key }
                 }

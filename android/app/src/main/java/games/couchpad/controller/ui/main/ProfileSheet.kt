@@ -75,6 +75,10 @@ fun ProfileSheet(
   val compact = remember { screenHeightDp < COMPACT_HEIGHT_BREAKPOINT }
 
   // No auto-focus on purpose: the sheet settles first, the keyboard comes on tap.
+  // Focusing a sheet that is still animating in opens and shuts the keyboard again.
+  // iOS deliberately diverges — it focuses on open, because in a compact height UIKit
+  // presents its sheet full-screen and the keyboard is what fills it (see its
+  // ProfileSheet); this one is content-height in both orientations, so it has no hole.
   AppSheet(onDismiss = onDismiss, surfaceTint = surfaceTint) {
     Column(
       Modifier.fillMaxWidth().imePadding().padding(

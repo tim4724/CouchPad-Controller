@@ -10,6 +10,14 @@ struct ProfileSheet: View {
     let onSave: (Profile) -> Void
 
     @State private var name: String
+    /// The sheet exists to type one name, so it opens with the field live. It also
+    /// earns the height: in a compact height (landscape, in-game) UIKit presents this
+    /// FULL-SCREEN — the keyboard is what fills the 220pt that would otherwise sit
+    /// empty under the Save button, and the content clears it either way. Android
+    /// doesn't mirror it: its sheet is content-height in both orientations, and
+    /// focusing one that is still animating in opens and shuts the keyboard again
+    /// (see the note in its ProfileSheet).
+    @FocusState private var nameFocused: Bool
     @Environment(\.cpPalette) private var palette
 
     init(initial: Profile, title: String = String(localized: "Name"),
@@ -52,11 +60,13 @@ struct ProfileSheet: View {
         .padding(.horizontal, 20)
         .padding(.top, 24)
         .padding(.bottom, 28)
+        .onAppear { nameFocused = true }
     }
 
     private var nameField: some View {
         HStack(spacing: 8) {
             TextField("", text: $name)
+                .focused($nameFocused)
                 .textInputAutocapitalization(.words)
                 // A player name is a proper noun — correcting it is always wrong. It
                 // also drops the QuickType bar, which is height this sheet can't spare

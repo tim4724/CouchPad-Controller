@@ -50,8 +50,6 @@ struct GameHostScreen: View {
     @State private var chromeHeight: CGFloat = 0
     @State private var chromeWidth: CGFloat = 0
     @State private var chipRight: CGFloat = 0
-    // The landscape icon rail's intrusion from the physical right edge (window points).
-    @State private var railEnd: CGFloat = 0
     @State private var cutout = EdgeInsets()
     // Safe-area-bounded size from cutoutReader — orientation truth for the chrome.
     @State private var hostSize: CGSize = .zero
@@ -96,6 +94,15 @@ struct GameHostScreen: View {
         return bar
     }
 
+    /// The side strip landscape reserves: the display cutout, or the icon rail plus a
+    /// hairline each side, whichever is wider. Published as the safe-zone side (§5) AND
+    /// used to place the rail, which is what makes the rail concentric with the band the
+    /// game is told to leave — measuring the rail and publishing THAT instead can only
+    /// ever produce a strip the rail sits flush against on its inner edge.
+    private var landscapeStrip: CGFloat {
+        max(max(cutout.leading, cutout.trailing), chromeButtonSize + 2 * railGap)
+    }
+
     /// Safe-zone geometry (points, ints). In PORTRAIT the top is the chrome's full
     /// extent (inset + Leave bar) and the sides carry the chip's gutter. In
     /// LANDSCAPE there is no bar — the chrome collapses to the icon rail in the
@@ -109,7 +116,7 @@ struct GameHostScreen: View {
         let sideCutout = max(cutout.leading, cutout.trailing)
         let safeTop = isLandscape ? cutout.top : chromeHeight
         let side = isLandscape
-            ? max(sideCutout, railEnd)
+            ? landscapeStrip
             : (chromeWidth > 0 ? max(chromeWidth - chipRight, sideCutout) : sideCutout)
         let safeBottom = cutout.bottom
         // Ceil, not round, matching Android: an inset that lands mid-point must cover
@@ -290,7 +297,7 @@ struct GameHostScreen: View {
     /// mid-edge, so that corner is always free — none of Android's dodge-or-flip
     /// geometry for corner cameras is needed here.
     private var landscapeChrome: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: railGap) {
             railButton("xmark", label: "Leave game", action: onLeave)
             railButton(
                 "person.fill",
@@ -300,27 +307,18 @@ struct GameHostScreen: View {
                 action: { renameRequest = RenameRequest(profile: profile) }
             )
         }
-        // Center the buttons inside the strip when it's wide enough; hug the edge
-        // otherwise — the published side inset grows to the rail's extent either way.
+        // Half the slack outside, half inside: the strip is published as the safe-zone
+        // side, so this is the same gap on both sides of the buttons. Any asymmetry the
+        // player still sees is the page's own margin on top of `--cp-safe-*`, which the
+        // launcher can't see and mustn't guess at.
         // The layoutDirection ternary here and on the alignment below KEEPS the rail
         // physically right: SwiftUI mirrors `.trailing`/`.topTrailing` under RTL, so
         // asking for the physical side means asking for the opposite semantic one.
         .padding(
             layoutDirection == .leftToRight ? .trailing : .leading,
-            max((max(cutout.leading, cutout.trailing) - 44) / 2, 4)
+            (landscapeStrip - chromeButtonSize) / 2
         )
-        .padding(.top, cutout.top + 4)
-        .onGeometryChange(for: CGRect.self) { proxy in
-            proxy.frame(in: .global)
-        } action: { frame in
-            // Intrusion from the physical right edge, in both layout directions and
-            // with no ternary of its own: `.global` is window space, which SwiftUI
-            // does NOT mirror, and the alignment above already lands the rail on the
-            // physical right either way (see the ternaries — they exist to defeat
-            // SwiftUI's mirroring of `.trailing`, not to follow it).
-            let fullWidth = hostSize.width + cutout.leading + cutout.trailing
-            railEnd = fullWidth - frame.minX
-        }
+        .padding(.top, cutout.top + railGap)
         .frame(
             maxWidth: .infinity, maxHeight: .infinity,
             alignment: layoutDirection == .leftToRight ? .topTrailing : .topLeading
@@ -332,9 +330,9 @@ struct GameHostScreen: View {
     private func railButton(_ systemName: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: chromeIconSize, weight: .medium))
                 .foregroundStyle(barContent ?? hostPalette.onSurfaceVariant)
-                .frame(width: 44, height: 44)
+                .frame(width: chromeButtonSize, height: chromeButtonSize)
                 .background(barTarget.opacity(0.55), in: Circle())
                 .contentShape(Circle())
         }
@@ -388,6 +386,23 @@ struct GameHostScreen: View {
         .ignoresSafeArea(edges: [.top, .horizontal])
     }
 }
+
+/// The LANDSCAPE rail's touch targets (Leave, rename), matching Android's. Above the 44pt
+/// HIG floor on purpose: the rail floats in a screen corner the player is holding the
+/// phone by, reached one-handed mid-match, so the floor is not enough — a missed Leave
+/// means fumbling at the edge of the screen while the game runs on. The portrait Leave bar
+/// is a stock toolbar and keeps stock metrics; it is read as one, and sizing it up would
+/// make the chrome — and the safe top it publishes — bigger than the app's own bars.
+private let chromeButtonSize: CGFloat = 56
+
+/// The rail's breathing room against the screen edge when the cutout leaves it none.
+private let railGap: CGFloat = 4
+
+/// The glyph inside `chromeButtonSize`, scaled with it. Growing the puck alone leaves a
+/// button that still READS small, which is the half of "too small to hit" a touch target
+/// can't fix. Android's CHROME_ICON is its counterpart, at the value ITS icon convention
+/// asks for (Material's 24-in-48 ratio) — the two are deliberately not the same number.
+private let chromeIconSize: CGFloat = 24
 
 private struct RenameRequest: Identifiable {
     let id = UUID()

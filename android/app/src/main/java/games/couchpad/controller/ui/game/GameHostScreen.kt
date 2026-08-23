@@ -408,8 +408,6 @@ private fun GameHostContent(
   var chromeHeightPx by remember { mutableStateOf(0) }
   var chromeWidthPx by remember { mutableStateOf(0) }
   var chipRightPx by remember { mutableStateOf(0) }
-  // The landscape icon column's intrusion from its own screen edge, in window px.
-  var railEndPx by remember { mutableStateOf(0) }
   val isLandscapeUi =
     LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val cutout = WindowInsets.displayCutout
@@ -429,6 +427,13 @@ private fun GameHostContent(
     navBars.getLeft(density, layoutDirection),
     navBars.getRight(density, layoutDirection),
   )
+  // The side strip landscape reserves: the obstruction above, or the icon column plus
+  // a hairline each side, whichever is wider. Published as the side inset AND used to
+  // place the column, which is what makes the column concentric with the band the game
+  // is told to leave — measuring the column and publishing THAT instead can only ever
+  // produce a strip it sits flush against on its inner edge.
+  val landscapeStripPx =
+    maxOf(sideInsetPx, with(density) { (CHROME_BUTTON + CHROME_GAP * 2).roundToPx() })
   var safeTopPx by remember { mutableStateOf(0) }
   var safeLeftPx by remember { mutableStateOf(0) }
   var safeRightPx by remember { mutableStateOf(0) }
@@ -461,7 +466,7 @@ private fun GameHostContent(
     chromeHeightPx,
     chromeWidthPx,
     chipRightPx,
-    railEndPx,
+    landscapeStripPx,
     sideInsetPx,
     cutoutTop,
     cutoutBottom,
@@ -480,7 +485,7 @@ private fun GameHostContent(
     // the cost of the two apps disagreeing about the same page. In portrait the cutout
     // is on the top edge, so both sides were already equal and this changes nothing.
     val side =
-      if (isLandscapeUi) maxOf(railEndPx, sideInsetPx)
+      if (isLandscapeUi) landscapeStripPx
       else if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx).coerceAtLeast(sideInsetPx)
       else sideInsetPx
     safeLeftPx = side
@@ -676,8 +681,7 @@ private fun GameHostContent(
         onEditName = { showProfile = true },
         barColor = barColor,
         contentColor = barContent,
-        sideInsetPx = sideInsetPx,
-        onRailEnd = { railEndPx = it },
+        stripPx = landscapeStripPx,
       )
     } else {
       // Portrait: status-bar strip + LEAVE bar over a scrim. Top + horizontal
@@ -744,6 +748,22 @@ private fun GameHostContent(
 
 }
 
+/** The LANDSCAPE rail's touch targets (Leave, rename), matching iOS's. Above the 48dp
+ * Material floor on purpose: the rail floats in a screen corner the player is holding the
+ * phone by, reached one-handed mid-match, so the floor is not enough — a missed Leave
+ * means fumbling at the edge of the screen while the game runs on. The portrait bar is a
+ * stock toolbar and keeps stock metrics; it is read as one, and sizing it up would make
+ * the chrome — and the safe top it publishes — bigger than the app's own bars. */
+private val CHROME_BUTTON = 56.dp
+
+/** The column's breathing room against the screen edge when the cutout leaves it none. */
+private val CHROME_GAP = 4.dp
+
+/** The glyph inside [CHROME_BUTTON]. Scaled with it — Material's default 24-in-48 is the
+ * ratio this keeps. Growing the puck alone leaves a button that still READS small, which
+ * is the half of "too small to hit" a touch target can't fix. */
+private val CHROME_ICON = 28.dp
+
 // The launcher-owned chrome floating over the game: Close (leaving a live game
 // ends the session — it isn't navigation), the game's name, and the tappable name
 // chip (the in-game rename affordance). [contentColor] is non-null only when the
@@ -797,9 +817,8 @@ private fun LeaveBar(
 // mid-edge punch-hole sits half way down the side and leaves the corner free, so
 // the column stays top-right; a corner camera on the right flips the column to
 // the left when that corner is free, and only when both corners are occupied
-// does it stay right and drop below the rect. [onRailEnd] reports the column's
-// intrusion from its own screen edge (window px) so the host can fold it into
-// the levelled published side inset.
+// does it stay right and drop below the rect. [stripPx] is the levelled side inset
+// the host publishes, and the column is centered in it.
 @Composable
 private fun BoxScope.LandscapeChrome(
   playerName: String,
@@ -807,24 +826,24 @@ private fun BoxScope.LandscapeChrome(
   onEditName: () -> Unit,
   barColor: Color,
   contentColor: Color?,
-  sideInsetPx: Int,
-  onRailEnd: (Int) -> Unit,
+  stripPx: Int,
 ) {
   val view = LocalView.current
   val density = LocalDensity.current
-  val buttonPx = with(density) { 48.dp.toPx() }
-  val gapPx = with(density) { 4.dp.toPx() }
-  // Center the buttons inside the strip when it's wide enough; hug the edge
-  // otherwise — the published side inset grows to the column's extent either way,
-  // so game UI never sits under a touch target.
-  val edgePadPx = ((sideInsetPx - buttonPx) / 2).coerceAtLeast(gapPx)
+  val buttonPx = with(density) { CHROME_BUTTON.toPx() }
+  val gapPx = with(density) { CHROME_GAP.toPx() }
+  // Half the slack outside, half inside: [stripPx] is what the host publishes as the
+  // side inset, so this is the same gap on both sides of the buttons. Any asymmetry
+  // the player still sees is the page's own margin on top of `--cp-safe-*`, which the
+  // launcher can't see and mustn't guess at.
+  val edgePadPx = (stripPx - buttonPx) / 2
   val colEndPx = edgePadPx + buttonPx
   val colHeightPx = buttonPx * 2 + gapPx * 2
   // Pick the side, then how far to drop below any cutout rect the column would
   // overlap (keyed on the inset so it re-reads after a rotation or a 180° flip
   // re-dispatches the insets). Right is preferred; a corner camera there flips
   // the column to the left unless the left corner is occupied too.
-  val (onRight, dodgePx) = remember(view, sideInsetPx) {
+  val (onRight, dodgePx) = remember(view, stripPx) {
     val rects = ViewCompat.getRootWindowInsets(view)?.displayCutout?.boundingRects.orEmpty()
     fun dodgeFor(right: Boolean): Float {
       var top = 0f
@@ -846,13 +865,9 @@ private fun BoxScope.LandscapeChrome(
       .absolutePadding(
         left = if (onRight) 0.dp else edgePad,
         right = if (onRight) edgePad else 0.dp,
-        top = with(density) { dodgePx.toDp() } + 4.dp,
-      )
-      .onGloballyPositioned {
-        val b = it.boundsInWindow()
-        onRailEnd((if (onRight) view.width - b.left else b.right).roundToInt())
-      },
-    verticalArrangement = Arrangement.spacedBy(4.dp),
+        top = with(density) { dodgePx.toDp() } + CHROME_GAP,
+      ),
+    verticalArrangement = Arrangement.spacedBy(CHROME_GAP),
   ) {
     val colors = IconButtonDefaults.iconButtonColors(
       containerColor = barColor.copy(alpha = 0.55f),
@@ -863,12 +878,20 @@ private fun BoxScope.LandscapeChrome(
     // not the button's colors.contentColor — so without this a dark-mode launcher
     // draws a white (invisible) ripple on a light game-theme scrim.
     CompositionLocalProvider(LocalContentColor provides content) {
-      IconButton(onClick = onLeave, colors = colors) {
-        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.leave_game))
+      IconButton(onClick = onLeave, colors = colors, modifier = Modifier.size(CHROME_BUTTON)) {
+        Icon(
+          Icons.Filled.Close,
+          contentDescription = stringResource(R.string.leave_game),
+          modifier = Modifier.size(CHROME_ICON),
+        )
       }
       // Icon-only rename affordance; announces the name it edits, like the chip.
-      IconButton(onClick = onEditName, colors = colors) {
-        Icon(Icons.Filled.Person, contentDescription = playerName.ifBlank { stringResource(R.string.set_name) })
+      IconButton(onClick = onEditName, colors = colors, modifier = Modifier.size(CHROME_BUTTON)) {
+        Icon(
+          Icons.Filled.Person,
+          contentDescription = playerName.ifBlank { stringResource(R.string.set_name) },
+          modifier = Modifier.size(CHROME_ICON),
+        )
       }
     }
   }

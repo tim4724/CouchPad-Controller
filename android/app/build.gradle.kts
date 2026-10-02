@@ -137,6 +137,10 @@ android {
         // reads these.
         excludes += "/META-INF/**/LICENSE.txt"
         excludes += "/META-INF/NOTICE.md"
+        // At runtime, Kotlin builtins metadata is read only by kotlin-reflect, and the probes file
+        // only by the coroutines debug agent; the app uses neither.
+        excludes += "/kotlin/**"
+        excludes += "/DebugProbesKt.bin"
       }
     }
 

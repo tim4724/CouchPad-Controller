@@ -26,8 +26,8 @@ val hasReleaseKeystore = releaseStoreFile != null
 // zxing-cpp is built from source (third_party/zxing-cpp submodule) rather than taken from its
 // published AAR: that AAR ships all six decoder families and re-exports its static libc++,
 // which blocks --gc-sections. Building it here lets us keep only QR — the sole format
-// ScanScreen asks for — and take the upstream fixes for the rest, which together move the
-// arm64 .so from 1,747 KB to 392 KB. Nothing is vendored; the Kotlin wrapper and JNI glue are
+// ScanScreen asks for — and take the upstream fixes for the rest, which together shrink the
+// .so several-fold. Nothing is vendored; the Kotlin wrapper and JNI glue are
 // compiled straight out of the submodule, so a bump is just moving the submodule pointer.
 // The fixes are upstream as of zxing-cpp/zxing-cpp#1151 (std::locale out of the reader path,
 // no re-exported libc++) and #1152 (libc++abi's demangler no longer linked in), so the
@@ -39,10 +39,10 @@ android {
     // to the applicationId below.
     namespace = "games.couchpad.controller"
     compileSdk = 37
-    compileSdkMinor = 1
+    compileSdkMinor = 2
     // Pinned because zxing-cpp is compiled here: the NDK decides the shipped .so's contents,
     // so leaving it to AGP's default would make the native build vary between machines and CI.
-    ndkVersion = "28.2.13676358"
+    ndkVersion = "30.0.16248370"
     defaultConfig {
         // Play Store identity, reverse-DNS of couchpad.games. Changed in the 2026-07
         // rebrand while the app was still unpublished — this is a one-way door once

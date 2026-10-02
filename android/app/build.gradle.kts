@@ -71,6 +71,11 @@ android {
                     "-DZXING_ENABLE_DATAMATRIX=OFF",
                     "-DZXING_ENABLE_MAXICODE=OFF",
                     "-DZXING_ENABLE_PDF417=OFF",
+                    // Drops libzueci's legacy charset tables (GBK, Big5, Shift_JIS, …).
+                    // UTF-8 and pure-ASCII payloads — every join code and URL — still
+                    // decode; anything else comes back as empty text, which JoinResolver
+                    // would reject anyway.
+                    "-DZXING_ENABLE_UNICODE=OFF",
                     // APS2 relocation packing needs API 23; minSdk is 24 above.
                     "-DCMAKE_C_FLAGS=-flto=thin",
                     "-DCMAKE_CXX_FLAGS=-flto=thin",

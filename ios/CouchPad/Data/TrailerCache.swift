@@ -2,9 +2,9 @@ import CryptoKit
 import Foundation
 
 /// On-demand URL-keyed download caches in Caches/, so the OS reclaims the bytes
-/// under storage pressure. Entries are NEVER revalidated — a changed remote file
-/// must ship under a new URL (file rename or ?v= bump in the manifest), which
-/// simply fetches a new entry here.
+/// under storage pressure. Entries are NEVER revalidated — a changed remote
+/// file must ship under a new file name, which simply fetches a new entry here.
+/// Not a ?v= bump: that breaks the bundled-art lookup (README §Where things live).
 ///
 /// - `TrailerCache`: gameplay mp4s — not bundled, they'd grow the install per game.
 ///   The info sheet shows cover art while the file lands, then plays from disk.

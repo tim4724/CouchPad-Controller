@@ -623,6 +623,9 @@ private fun GameHostContent(
               // closes the window where a silent page could inherit its predecessor's
               // landscape.
               if (!orientationAsked) landscape = false
+              // Chromium delivers orientation events only to a focused page, and
+              // nothing focuses the WebView until the player's first touch.
+              requestFocus()
               injectName(profile.name)
               watchPageTheme()
               pushSafeZone()

@@ -86,7 +86,9 @@ fails the check. Run it after any string change.
   `hexstacker-16x9-v2.webp`) in the served manifest and in both bundles; changed
   bytes under an unchanged name go unnoticed by design. Not a `?v=` bump: the
   query string lands inside the file name both bundle lookups use, so every app
-  would re-download art it already ships. Encode covers with
+  would re-download art it already ships. Trailers (`video`) are never bundled,
+  so a changed trailer is just a `?v=` bump, once the new file is live. Encode
+  covers with
 
   ```sh
   tools/encode_artwork.sh <master>...    # 1280x720 q85 -> both bundles

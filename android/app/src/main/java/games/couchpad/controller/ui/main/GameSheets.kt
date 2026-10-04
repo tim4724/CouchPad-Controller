@@ -49,7 +49,6 @@ import games.couchpad.controller.ui.components.AppSheet
 import games.couchpad.controller.ui.components.GameArt
 import games.couchpad.controller.ui.components.JoinButtons
 import games.couchpad.controller.ui.components.PlaySteps
-import games.couchpad.controller.ui.components.PosterStatusChip
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -80,15 +79,10 @@ fun GameInfoSheet(
         )
         game.playersRange?.let { PlayersChip(it) }
       }
-      Box {
-        if (game.video != null) {
-          GameplayLoop(game, game.video)
-        } else {
-          GameArt(game, Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.large))
-        }
-        if (!game.isLive) {
-          PosterStatusChip(game, Modifier.align(Alignment.BottomEnd).padding(14.dp))
-        }
+      if (game.video != null) {
+        GameplayLoop(game, game.video)
+      } else {
+        GameArt(game, Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.large))
       }
       if (game.tvApps.isNotEmpty() || game.displayHost != null) PlatformTiles(game)
       if (game.isLive) {
@@ -253,9 +247,8 @@ private fun GameplayLoop(game: Game, url: String) {
     AnimatedVisibility(visible = !videoRendering, exit = fadeOut()) {
       GameArt(game, Modifier.fillMaxSize())
     }
-    // Top end: the bottom end holds a not-yet-live game's status chip. The puck
-    // matches the scanner's flashlight toggle — the icon shows the state, the
-    // label names the action.
+    // The puck matches the scanner's flashlight toggle — the icon shows the state,
+    // the label names the action.
     if (videoRendering && hasAudio) {
       IconButton(
         onClick = {

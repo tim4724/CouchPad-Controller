@@ -40,12 +40,6 @@ struct GameInfoSheet: View {
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(alignment: .bottomTrailing) {
-                if !game.isLive {
-                    PosterStatusChip(game: game)
-                        .padding(14)
-                }
-            }
 
             if !game.tvApps.isEmpty || game.displayHost != nil {
                 PlatformTiles(game: game)
@@ -184,9 +178,8 @@ struct GameplayLoopView: View {
                 LoopingPlayerView(url: localURL, muted: muted)
             }
         }
-        // Top trailing: the bottom trailing corner holds a not-yet-live game's
-        // status chip. The puck matches the scanner's flashlight toggle — the
-        // symbol shows the state, the label names the action.
+        // The puck matches the scanner's flashlight toggle — the symbol shows the
+        // state, the label names the action.
         .overlay(alignment: .topTrailing) {
             if hasAudio {
                 Button {

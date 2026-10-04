@@ -325,8 +325,7 @@ fun JoinButtons(onScan: () -> Unit, onEnterCode: () -> Unit) {
 
 // Solid accent = live, accent-tinted dark = coming soon. The chip can land on
 // bright art (the scrim thins toward its top), so the soon-variant needs its own
-// dark base rather than a bare translucent tint. Shared by the home poster cards
-// and the info sheet's art overlay.
+// dark base rather than a bare translucent tint. Used by the home poster cards.
 @Composable
 fun PosterStatusChip(game: Game, modifier: Modifier = Modifier) {
   val bg =

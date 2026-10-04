@@ -15,6 +15,8 @@
     <string name="device_web">Navegador</string>
     <string name="status_live">Disponível</string>
     <string name="status_coming_soon">Em breve</string>
+    <string name="trailer_unmute">Ativar som</string>
+    <string name="trailer_mute">Desativar som</string>
 
     <string name="join_title">Jogar</string>
     <string name="join_open_host">Abra %1$s na sua TV ou computador.</string>

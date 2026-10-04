@@ -18,15 +18,16 @@ enum GameAudioSession {
     /// never drops a frame on the audio-server round trip.
     private static let queue = DispatchQueue(label: "games.couchpad.controller.audio-session",
                                              qos: .userInitiated)
-    /// Set once a game host has claimed the session for playback — the trailer's
-    /// weaker category must never downgrade it from under a live controller.
+    /// Set once the session is claimed for playback (a game host, or an unmuted
+    /// trailer) — the muted trailer's weaker category must never downgrade it from
+    /// under a live controller.
     private static var gameConfigured = false
     /// Set once the trailer category is in force; only [gameConfigured] outranks it.
     private static var trailerConfigured = false
 
-    /// Claims the session for game audio, on the first game host. The page needs seconds
-    /// of network + boot before it can make any sound, so the category is always in force
-    /// long before first playback.
+    /// Claims the session for game audio, on the first game host (or when the user
+    /// unmutes a trailer). A game page needs seconds of network + boot before it can
+    /// make any sound, so for games the category is in force long before first playback.
     static func configureOnce() {
         queue.async {
             guard !gameConfigured else { return }
@@ -38,7 +39,7 @@ enum GameAudioSession {
         }
     }
 
-    /// Before the info sheet's gameplay loop plays. The clip is muted, but AVPlayer
+    /// Before the info sheet's gameplay loop plays. The clip starts muted, but AVPlayer
     /// still activates the shared session, and the default `.soloAmbient` category is
     /// non-mixing — browsing the catalog would stop the player's music for a clip they
     /// can't hear. `.ambient` mixes by definition and follows the ringer switch. This

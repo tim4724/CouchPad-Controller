@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -53,9 +55,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Pure game info — name, media, players. A live game shows its muted gameplay
- * loop; a not-yet-live game (no video) shows its cover art instead. Joining
- * lives on the home's Join card.
+ * Pure game info — name, media, players. A live game shows its gameplay loop,
+ * muted until the user unmutes it; a not-yet-live game (no video) shows its
+ * cover art instead. Joining lives on the home's Join card.
  */
 @Composable
 fun GameInfoSheet(
@@ -194,15 +196,22 @@ private fun PlayersChip(range: String) {
   }
 }
 
-// A muted gameplay loop, fetched to cache on demand (TrailerCache) and played
-// from disk. Cover art fills the slot immediately and stays on top until the
-// video renders its first frame — a VideoView is SurfaceView-backed, so it
-// shows through as black until then. VideoView over ExoPlayer: a local 30s
-// loop doesn't justify the Media3 dependency.
+// A gameplay loop, fetched to cache on demand (TrailerCache) and played from
+// disk. Cover art fills the slot immediately and stays on top until the video
+// renders its first frame — a VideoView is SurfaceView-backed, so it shows
+// through as black until then. VideoView over ExoPlayer: a local 30s loop
+// doesn't justify the Media3 dependency.
+//
+// Every open starts muted; a clip with an audio track gets a mute toggle. Unmuted
+// sound still takes no audio focus, so it layers over the user's music the way
+// game audio does — iOS mixes the same way (GameAudioSession).
 @Composable
 private fun GameplayLoop(game: Game, url: String) {
   val context = LocalContext.current
   var videoRendering by remember { mutableStateOf(false) }
+  var player by remember { mutableStateOf<MediaPlayer?>(null) }
+  var hasAudio by remember { mutableStateOf(false) }
+  var muted by remember { mutableStateOf(true) }
   val file by produceState<File?>(initialValue = null, url) {
     value = withContext(Dispatchers.IO) { TrailerCache.fetch(context, url) }
   }
@@ -217,8 +226,8 @@ private fun GameplayLoop(game: Game, url: String) {
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
           VideoView(ctx).apply {
-            // The clip is muted, so never take audio focus — stock VideoView otherwise
-            // pauses whatever the user is listening to. (No-op below API 26.)
+            // Never take audio focus — stock VideoView otherwise pauses whatever the
+            // user is listening to. (No-op below API 26.)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
               setAudioFocusRequest(AudioManager.AUDIOFOCUS_NONE)
             }
@@ -227,9 +236,13 @@ private fun GameplayLoop(game: Game, url: String) {
               if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) videoRendering = true
               true
             }
+            // Runs again with a new MediaPlayer when VideoView reopens the file after
+            // its surface was recreated (app backgrounded), so it reapplies `muted`.
             setOnPreparedListener { mp ->
+              player = mp
+              hasAudio = mp.trackInfo.any { it.trackType == MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO }
               mp.isLooping = true
-              mp.setVolume(0f, 0f)
+              mp.applyMuted(muted)
               mp.start()
             }
           }
@@ -240,5 +253,33 @@ private fun GameplayLoop(game: Game, url: String) {
     AnimatedVisibility(visible = !videoRendering, exit = fadeOut()) {
       GameArt(game, Modifier.fillMaxSize())
     }
+    // Top end: the bottom end holds a not-yet-live game's status chip. The puck
+    // matches the scanner's flashlight toggle — the icon shows the state, the
+    // label names the action.
+    if (videoRendering && hasAudio) {
+      IconButton(
+        onClick = {
+          muted = !muted
+          // VideoView releases its player when the surface goes and the reopen
+          // briefly lags it; the prepared listener applies `muted` on reopen anyway.
+          runCatching { player?.applyMuted(muted) }
+        },
+        modifier = Modifier
+          .align(Alignment.TopEnd)
+          .padding(8.dp)
+          .background(Color.Black.copy(alpha = 0.35f), CircleShape),
+      ) {
+        Icon(
+          painterResource(if (muted) R.drawable.ic_volume_off else R.drawable.ic_volume_up),
+          contentDescription = stringResource(if (muted) R.string.trailer_unmute else R.string.trailer_mute),
+          tint = Color.White,
+        )
+      }
+    }
   }
+}
+
+private fun MediaPlayer.applyMuted(muted: Boolean) {
+  val volume = if (muted) 0f else 1f
+  setVolume(volume, volume)
 }

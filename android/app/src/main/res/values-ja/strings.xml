@@ -16,6 +16,8 @@
     <string name="device_web">ブラウザ</string>
     <string name="status_live">プレイ可能</string>
     <string name="status_coming_soon">近日公開</string>
+    <string name="trailer_unmute">ミュート解除</string>
+    <string name="trailer_mute">ミュート</string>
 
     <string name="join_title">プレイ</string>
     <string name="join_open_host">テレビまたはパソコンで %1$s を開いてください。</string>

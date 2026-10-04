@@ -28,8 +28,8 @@ struct GameInfoSheet: View {
                 }
             }
 
-            // A live game shows its muted gameplay loop; a not-yet-live game
-            // (no video) shows its cover art instead.
+            // A live game shows its gameplay loop, muted until the user unmutes
+            // it; a not-yet-live game (no video) shows its cover art instead.
             Group {
                 if game.video != nil {
                     GameplayLoopView(game: game)
@@ -163,20 +163,48 @@ private struct PlatformTiles: View {
 
 // MARK: - GameplayLoopView
 
-/// A muted gameplay loop, fetched to cache on demand (TrailerCache) and played
-/// from disk. Cover art fills the slot immediately; the player sits on top and
-/// stays transparent until frames render, so the art shows through while the
-/// trailer downloads and simply disappears behind the first frame.
+/// A gameplay loop, fetched to cache on demand (TrailerCache) and played from
+/// disk. Cover art fills the slot immediately; the player sits on top and stays
+/// transparent until frames render, so the art shows through while the trailer
+/// downloads and simply disappears behind the first frame.
+///
+/// Every open starts muted; a clip with an audio track gets a mute toggle (Android
+/// matches).
 struct GameplayLoopView: View {
     let game: Game
 
     @State private var localURL: URL?
+    @State private var hasAudio = false
+    @State private var muted = true
 
     var body: some View {
         ZStack {
             GameArt(game: game)
             if let localURL {
-                LoopingPlayerView(url: localURL)
+                LoopingPlayerView(url: localURL, muted: muted)
+            }
+        }
+        // Top trailing: the bottom trailing corner holds a not-yet-live game's
+        // status chip. The puck matches the scanner's flashlight toggle — the
+        // symbol shows the state, the label names the action.
+        .overlay(alignment: .topTrailing) {
+            if hasAudio {
+                Button {
+                    muted.toggle()
+                    // Unmuting is a request to hear it, so take the game category:
+                    // audible through the silent switch, mixed over the user's music.
+                    if !muted { GameAudioSession.configureOnce() }
+                } label: {
+                    Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(Color.black.opacity(0.35), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(muted ? String(localized: "Unmute") : String(localized: "Mute"))
+                .padding(8)
             }
         }
         .task {
@@ -185,7 +213,9 @@ struct GameplayLoopView: View {
             // Before any player exists: a muted AVPlayer still activates the shared
             // audio session, and the default category would stop the player's music.
             await GameAudioSession.configureForMutedTrailer()
-            localURL = await TrailerCache.fetch(remote)
+            guard let local = await TrailerCache.fetch(remote) else { return }
+            hasAudio = (try? await AVURLAsset(url: local).loadTracks(withMediaType: .audio))?.isEmpty == false
+            localURL = local
         }
     }
 }
@@ -194,6 +224,7 @@ struct GameplayLoopView: View {
 
 private struct LoopingPlayerView: UIViewRepresentable {
     let url: URL
+    let muted: Bool
 
     final class PlayerUIView: UIView {
         override static var layerClass: AnyClass { AVPlayerLayer.self }
@@ -203,16 +234,20 @@ private struct LoopingPlayerView: UIViewRepresentable {
         private var player: AVQueuePlayer?
         private var looper: AVPlayerLooper?
 
-        func configure(url: URL) {
+        func configure(url: URL, muted: Bool) {
             guard player == nil else { return }
             let item = AVPlayerItem(url: url)
             let queuePlayer = AVQueuePlayer()
-            queuePlayer.isMuted = true
+            queuePlayer.isMuted = muted
             looper = AVPlayerLooper(player: queuePlayer, templateItem: item)
             player = queuePlayer
             playerLayer.player = queuePlayer
             playerLayer.videoGravity = .resizeAspectFill
             queuePlayer.play()
+        }
+
+        func setMuted(_ muted: Bool) {
+            player?.isMuted = muted
         }
 
         func teardown() {
@@ -226,11 +261,13 @@ private struct LoopingPlayerView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PlayerUIView {
         let view = PlayerUIView()
-        view.configure(url: url)
+        view.configure(url: url, muted: muted)
         return view
     }
 
-    func updateUIView(_ uiView: PlayerUIView, context: Context) {}
+    func updateUIView(_ uiView: PlayerUIView, context: Context) {
+        uiView.setMuted(muted)
+    }
 
     static func dismantleUIView(_ uiView: PlayerUIView, coordinator: ()) {
         uiView.teardown()

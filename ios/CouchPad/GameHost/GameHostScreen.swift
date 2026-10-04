@@ -400,8 +400,8 @@ struct GameHostScreen: View {
 /// HIG floor on purpose: the rail floats in a screen corner the player is holding the
 /// phone by, reached one-handed mid-match, so the floor is not enough — a missed Leave
 /// means fumbling at the edge of the screen while the game runs on. The portrait Leave bar
-/// is a stock toolbar and keeps stock metrics; it is read as one, and sizing it up would
-/// make the chrome — and the safe top it publishes — bigger than the app's own bars.
+/// keeps toolbar-sized 44pt controls inside its fixed 56pt height; sizing them up would
+/// grow the chrome — and the safe top it publishes — past a toolbar's.
 private let chromeButtonSize: CGFloat = 56
 
 /// The rail's breathing room against the screen edge when the cutout leaves it none.
@@ -421,7 +421,8 @@ private struct RenameRequest: Identifiable {
 /// The launcher-owned chrome floating over the game: Close (leaving a live game
 /// ends the session — it isn't navigation), the game's name, and the tappable name
 /// chip (the in-game rename affordance). `barContent` is non-nil only when the game
-/// supplied its own theme-color — then the whole bar's content flips together.
+/// supplied its own theme-color — then the X and title flip together; the chip keeps
+/// the game accent, matching Android.
 private struct LeaveBar: View {
     let title: String
     let playerName: String
@@ -435,29 +436,31 @@ private struct LeaveBar: View {
     var body: some View {
         HStack(spacing: 0) {
             Button(action: onLeave) {
+                // Glyph at the toolbar's symbol size (home's About).
                 Image(systemName: "xmark")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.title2)
                     .foregroundStyle(barContent ?? palette.onSurfaceVariant)
                     .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                    .modifier(ChromeGlass(shape: Circle()))
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Leave game")
-            .padding(.leading, 4)
+            // Mirrors the chip's trailing inset.
+            .padding(.leading, 12)
 
             Text(title)
                 .font(.cpTitleMedium)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .foregroundStyle(barContent ?? palette.onSurface)
-                .padding(.leading, 4)
+                .padding(.leading, 12)
 
             Spacer(minLength: 12)
 
             // Report the chip's trailing edge (global coords) so the host can align
             // the page's horizontal safe zone with it.
             PlayerChip(name: playerName, action: onEditName)
-                .environment(\.cpPalette, barContent.map { palette.flippedForBar($0) } ?? palette)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.frame(in: .global).maxX
                 } action: { maxX in
@@ -469,16 +472,3 @@ private struct LeaveBar: View {
     }
 }
 
-private extension CPPalette {
-    /// Route a game-supplied bar content color through the tokens the bar's chip
-    /// actually reads (label/icon = onSurface, border = outline at 50%), so
-    /// everything on the bar flips together. The chip's fill keeps reading
-    /// `primary` — the game accent — untouched, matching Android.
-    func flippedForBar(_ content: Color) -> CPPalette {
-        var p = self
-        p.onSurface = content
-        p.onSurfaceVariant = content
-        p.outline = content.opacity(0.5)
-        return p
-    }
-}

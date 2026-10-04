@@ -3,7 +3,9 @@ import UIKit
 
 // MARK: - PlayerChip
 
-/// Tappable player-identity chip (home header + in-game bar).
+/// In-game name chip. Mirrors home's toolbar pill (MainScreen `chipButton`) in the game
+/// accent the host's remapped palette carries. A plain button over glass rather than
+/// `.bordered`, which is shorter than 44pt and only hit-tests its visible shape.
 struct PlayerChip: View {
     let name: String
     let action: () -> Void
@@ -20,21 +22,41 @@ struct PlayerChip: View {
             HStack(spacing: 6) {
                 Image(systemName: "person.crop.circle.fill")
                     .symbolRenderingMode(.hierarchical)
+                    // The size iOS 26's toolbar gives home's glyph.
+                    .font(.title2)
                 Text(displayName)
                     .font(.cpLabelLarge)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+            .foregroundStyle(palette.primary)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 44)
+            .modifier(ChromeGlass(shape: Capsule(), fallback: palette.primary.opacity(0.15)))
+            .contentShape(Capsule())
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        // Home inherits the root mono tint; the game host's remapped palette
-        // makes this the game accent there.
-        .tint(palette.primary)
+        .buttonStyle(.plain)
     }
 
     private var displayName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? String(localized: "Set name") : name
+    }
+}
+
+// MARK: - ChromeGlass
+
+/// Liquid Glass behind the in-game bar's controls on iOS 26, matching the home toolbar's
+/// glass pills. Earlier releases have no glass in their toolbars, so they get `fallback`.
+struct ChromeGlass<S: Shape>: ViewModifier {
+    let shape: S
+    var fallback: Color = .clear
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            content.background(fallback, in: shape)
+        }
     }
 }
 

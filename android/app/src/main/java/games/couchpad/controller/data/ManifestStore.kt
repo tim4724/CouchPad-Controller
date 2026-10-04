@@ -53,7 +53,7 @@ object ManifestStore {
     flow.value = games
   }
 
-  private fun fetchText(): String? = httpGet(MANIFEST_URL) { input ->
+  private fun fetchText(): String? = httpGet(MANIFEST_URL) { input, _ ->
     val out = ByteArrayOutputStream()
     val buf = ByteArray(16 * 1024)
     while (true) {

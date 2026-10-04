@@ -17,6 +17,8 @@
     <string name="status_coming_soon">Bald verfügbar</string>
     <string name="trailer_unmute">Ton einschalten</string>
     <string name="trailer_mute">Ton ausschalten</string>
+    <string name="trailer_fullscreen">Im Vollbild abspielen</string>
+    <string name="trailer_close">Video schließen</string>
 
     <string name="join_title">Spielen</string>
     <string name="join_open_host">Öffne %1$s auf deinem Fernseher oder Laptop.</string>

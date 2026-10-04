@@ -18,6 +18,8 @@
     <string name="status_coming_soon">Coming soon</string>
     <string name="trailer_unmute">Unmute</string>
     <string name="trailer_mute">Mute</string>
+    <string name="trailer_fullscreen">Play fullscreen</string>
+    <string name="trailer_close">Close video</string>
 
     <!-- Join card -->
     <string name="join_title">Play</string>

@@ -12,8 +12,10 @@ import Foundation
 ///   ship (a game added or re-artworked after install; see ArtCache).
 enum TrailerCache {
     /// Local file for `url`, downloading it first if absent. Nil on any failure.
-    static func fetch(_ url: URL) async -> URL? {
-        await fetchCached(url, dirName: "trailers", ext: "mp4")
+    /// `onProgress` gets the downloaded fraction (0...1) as bytes land, off the main
+    /// actor — never on a cache hit, nor when the server sends no length.
+    static func fetch(_ url: URL, onProgress: @escaping @Sendable (Double) -> Void) async -> URL? {
+        await fetchCached(url, dirName: "trailers", ext: "mp4", delegate: DownloadProgress(onProgress))
     }
 }
 
@@ -24,7 +26,8 @@ enum ArtworkCache {
     }
 }
 
-private func fetchCached(_ url: URL, dirName: String, ext: String) async -> URL? {
+private func fetchCached(_ url: URL, dirName: String, ext: String,
+                         delegate: URLSessionTaskDelegate? = nil) async -> URL? {
     let fm = FileManager.default
     let dir = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent(dirName, isDirectory: true)
@@ -32,7 +35,7 @@ private func fetchCached(_ url: URL, dirName: String, ext: String) async -> URL?
     let key = digest.map { String(format: "%02x", $0) }.joined().prefix(16)
     let dest = dir.appendingPathComponent("\(key).\(ext)")
     if fm.fileExists(atPath: dest.path) { return dest }
-    guard let (tmp, response) = try? await URLSession.shared.download(from: url),
+    guard let (tmp, response) = try? await URLSession.shared.download(from: url, delegate: delegate),
           (response as? HTTPURLResponse)?.statusCode == 200
     else { return nil }
     try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -43,4 +46,20 @@ private func fetchCached(_ url: URL, dirName: String, ext: String) async -> URL?
         return fm.fileExists(atPath: dest.path) ? dest : nil
     }
     return dest
+}
+
+/// Reports a download's progress by observing the task's own `Progress`.
+private final class DownloadProgress: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @Sendable (Double) -> Void
+    private var observation: NSKeyValueObservation?
+
+    init(_ onProgress: @escaping @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+        observation = task.progress.observe(\.fractionCompleted) { [onProgress] progress, _ in
+            if progress.totalUnitCount > 0 { onProgress(progress.fractionCompleted) }
+        }
+    }
 }

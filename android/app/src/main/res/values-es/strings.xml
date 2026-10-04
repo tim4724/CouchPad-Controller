@@ -17,6 +17,8 @@
     <string name="status_coming_soon">Próximamente</string>
     <string name="trailer_unmute">Activar sonido</string>
     <string name="trailer_mute">Silenciar</string>
+    <string name="trailer_fullscreen">Reproducir en pantalla completa</string>
+    <string name="trailer_close">Cerrar vídeo</string>
 
     <string name="join_title">Jugar</string>
     <string name="join_open_host">Abre %1$s en tu TV o portátil.</string>

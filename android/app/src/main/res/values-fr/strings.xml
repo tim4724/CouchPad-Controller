@@ -17,6 +17,8 @@
     <string name="status_coming_soon">Bientôt disponible</string>
     <string name="trailer_unmute">Activer le son</string>
     <string name="trailer_mute">Couper le son</string>
+    <string name="trailer_fullscreen">Lire en plein écran</string>
+    <string name="trailer_close">Fermer la vidéo</string>
 
     <string name="join_title">Jouer</string>
     <string name="join_open_host">Ouvre %1$s sur ta TV ou ton ordinateur.</string>

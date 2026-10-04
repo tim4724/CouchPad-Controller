@@ -16,8 +16,13 @@ import java.security.MessageDigest
  *   ship (a game added or re-artworked after install; see GameArt).
  */
 object TrailerCache {
-  /** Cached file for [url], downloading it first if absent. Blocking — call on IO. Null on any failure. */
-  fun fetch(context: Context, url: String): File? = fetchCached(context, url, "trailers", "mp4")
+  /**
+   * Cached file for [url], downloading it first if absent. Blocking — call on IO. Null on any failure.
+   * [onProgress] gets the downloaded fraction (0..1) as bytes land — never on a cache hit, nor when
+   * the server sends no length.
+   */
+  fun fetch(context: Context, url: String, onProgress: (Float) -> Unit): File? =
+    fetchCached(context, url, "trailers", "mp4", onProgress)
 }
 
 object ArtworkCache {
@@ -25,7 +30,13 @@ object ArtworkCache {
   fun fetch(context: Context, url: String): File? = fetchCached(context, url, "artwork", "img")
 }
 
-private fun fetchCached(context: Context, url: String, dirName: String, ext: String): File? {
+private fun fetchCached(
+  context: Context,
+  url: String,
+  dirName: String,
+  ext: String,
+  onProgress: (Float) -> Unit = {},
+): File? {
   val dir = File(context.cacheDir, dirName)
   dir.mkdirs()
   val key = MessageDigest.getInstance("SHA-256")
@@ -38,8 +49,18 @@ private fun fetchCached(context: Context, url: String, dirName: String, ext: Str
   // download can never be served.
   val tmp = runCatching { File.createTempFile(key, ".part", dir) }.getOrNull() ?: return null
   try {
-    httpGet(url, readTimeoutMs = 30_000) { input ->
-      tmp.outputStream().use { input.copyTo(it) }
+    httpGet(url, readTimeoutMs = 30_000) { input, length ->
+      tmp.outputStream().use { out ->
+        val buf = ByteArray(64 * 1024)
+        var done = 0L
+        while (true) {
+          val n = input.read(buf)
+          if (n < 0) break
+          out.write(buf, 0, n)
+          done += n
+          if (length > 0) onProgress(done.toFloat() / length)
+        }
+      }
     } ?: return null
     return if (tmp.renameTo(file) || file.length() > 0) file else null
   } finally {

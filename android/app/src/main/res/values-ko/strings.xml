@@ -18,6 +18,8 @@
     <string name="status_coming_soon">출시 예정</string>
     <string name="trailer_unmute">음소거 해제</string>
     <string name="trailer_mute">음소거</string>
+    <string name="trailer_fullscreen">전체 화면으로 재생</string>
+    <string name="trailer_close">동영상 닫기</string>
 
     <string name="join_title">플레이</string>
     <string name="join_open_host">TV나 노트북에서 %1$s에 접속하세요.</string>

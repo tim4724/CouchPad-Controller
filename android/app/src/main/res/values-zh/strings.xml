@@ -17,6 +17,8 @@
     <string name="status_coming_soon">即将推出</string>
     <string name="trailer_unmute">取消静音</string>
     <string name="trailer_mute">静音</string>
+    <string name="trailer_fullscreen">全屏播放</string>
+    <string name="trailer_close">关闭视频</string>
 
     <string name="join_title">开始游戏</string>
     <string name="join_open_host">在电视或电脑上打开 %1$s。</string>

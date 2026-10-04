@@ -162,20 +162,44 @@ private struct PlatformTiles: View {
 /// transparent until frames render, so the art shows through while the trailer
 /// downloads and simply disappears behind the first frame.
 ///
-/// Every open starts muted; a clip with an audio track gets a mute toggle (Android
-/// matches).
+/// Every open starts muted; a clip with an audio track gets a mute toggle. A tap
+/// plays the clip fullscreen (TrailerFullscreenView), pausing this one meanwhile.
+/// Android matches throughout.
 struct GameplayLoopView: View {
     let game: Game
 
     @State private var localURL: URL?
     @State private var hasAudio = false
     @State private var muted = true
+    @State private var progress: Double?
+    @State private var fullscreen = false
 
     var body: some View {
         ZStack {
             GameArt(game: game)
             if let localURL {
-                LoopingPlayerView(url: localURL, muted: muted)
+                LoopingPlayerView(url: localURL, muted: muted, paused: fullscreen)
+                    .contentShape(Rectangle())
+                    .onTapGesture { fullscreen = true }
+                    .accessibilityElement()
+                    .accessibilityLabel(String(localized: "Play fullscreen"))
+                    .accessibilityAddTraits(.isButton)
+            }
+        }
+        // A download in flight — never shown for a cached clip. Stays full from the
+        // last byte until the player takes over. Inset as a pill on its own track,
+        // clear of the rounded corners.
+        .overlay(alignment: .bottom) {
+            if let progress, localURL == nil {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.black.opacity(0.35))
+                        Capsule().fill(game.accentColor).frame(width: geo.size.width * progress)
+                    }
+                }
+                .frame(height: 4)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 6)
             }
         }
         // The puck matches the scanner's flashlight toggle — the symbol shows the
@@ -200,17 +224,101 @@ struct GameplayLoopView: View {
                 .padding(8)
             }
         }
+        .fullScreenCover(isPresented: $fullscreen) {
+            if let localURL { TrailerFullscreenView(url: localURL) }
+        }
         .task {
             guard localURL == nil,
                   let remote = game.video.flatMap(URL.init(string:)) else { return }
             // Before any player exists: a muted AVPlayer still activates the shared
             // audio session, and the default category would stop the player's music.
             await GameAudioSession.configureForMutedTrailer()
-            guard let local = await TrailerCache.fetch(remote) else { return }
+            // Starts no sooner than 2s after the sheet opens, cached or not: the art
+            // gets a moment of its own, and the clip never starts under the sheet's
+            // slide-in.
+            async let fetched = TrailerCache.fetch(remote) { fraction in
+                Task { @MainActor in progress = fraction }
+            }
+            try? await Task.sleep(for: .seconds(2))
+            guard let local = await fetched else { return }
             hasAudio = (try? await AVURLAsset(url: local).loadTracks(withMediaType: .audio))?.isEmpty == false
             localURL = local
         }
     }
+}
+
+// MARK: - TrailerFullscreenView
+
+/// The clip fullscreen in landscape, with sound, played once from the start —
+/// closing itself at the end. Unlike the inline loop it interrupts the user's
+/// audio while it plays (GameAudioSession.beginFullscreenTrailer).
+private struct TrailerFullscreenView: View {
+    let url: URL
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if let player {
+                // The X sits on the video's corner rather than the screen's, where it
+                // would straddle the pillarbox edge on a wider screen.
+                PlayerLayerView(player: player)
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .overlay(alignment: .topLeading) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(Color.black.opacity(0.35), in: Circle())
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(String(localized: "Close video"))
+                        .padding(12)
+                    }
+            }
+        }
+        .ignoresSafeArea()
+        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
+        .onAppear { ChromeState.shared.orientation = .landscape }
+        .onDisappear {
+            player?.pause()
+            GameAudioSession.endFullscreenTrailer()
+            ChromeState.shared.orientation = .portrait
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            if let item = note.object as? AVPlayerItem, item === player?.currentItem { dismiss() }
+        }
+        .task {
+            await GameAudioSession.beginFullscreenTrailer()
+            let player = AVPlayer(url: url)
+            self.player = player
+            player.play()
+        }
+    }
+}
+
+private struct PlayerLayerView: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> PlayerLayerUIView {
+        let view = PlayerLayerUIView()
+        view.playerLayer.player = player
+        return view
+    }
+
+    func updateUIView(_ uiView: PlayerLayerUIView, context: Context) {}
+}
+
+/// A view whose backing layer is an AVPlayerLayer, so it resizes with the view.
+private class PlayerLayerUIView: UIView {
+    override static var layerClass: AnyClass { AVPlayerLayer.self }
+
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
 
 // MARK: - Looping player (private)
@@ -218,12 +326,9 @@ struct GameplayLoopView: View {
 private struct LoopingPlayerView: UIViewRepresentable {
     let url: URL
     let muted: Bool
+    let paused: Bool
 
-    final class PlayerUIView: UIView {
-        override static var layerClass: AnyClass { AVPlayerLayer.self }
-
-        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
-
+    final class PlayerUIView: PlayerLayerUIView {
         private var player: AVQueuePlayer?
         private var looper: AVPlayerLooper?
 
@@ -239,8 +344,9 @@ private struct LoopingPlayerView: UIViewRepresentable {
             queuePlayer.play()
         }
 
-        func setMuted(_ muted: Bool) {
+        func update(muted: Bool, paused: Bool) {
             player?.isMuted = muted
+            if paused { player?.pause() } else { player?.play() }
         }
 
         func teardown() {
@@ -259,7 +365,7 @@ private struct LoopingPlayerView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PlayerUIView, context: Context) {
-        uiView.setMuted(muted)
+        uiView.update(muted: muted, paused: paused)
     }
 
     static func dismantleUIView(_ uiView: PlayerUIView, coordinator: ()) {

@@ -17,6 +17,8 @@
     <string name="status_coming_soon">Çok yakında</string>
     <string name="trailer_unmute">Sesi aç</string>
     <string name="trailer_mute">Sesi kapat</string>
+    <string name="trailer_fullscreen">Tam ekranda oynat</string>
+    <string name="trailer_close">Videoyu kapat</string>
 
     <string name="join_title">Oyna</string>
     <string name="join_open_host">TV\'nde veya bilgisayarında %1$s adresini aç.</string>

@@ -49,12 +49,43 @@ enum GameAudioSession {
     /// latches too: every sheet open would otherwise pay the audio-server round trip
     /// this enum exists to defer, to set the category it already holds.
     static func configureForMutedTrailer() async {
+        await onQueue {
+            guard !gameConfigured, !trailerConfigured else { return }
+            trailerConfigured = true
+            try? AVAudioSession.sharedInstance().setCategory(.ambient)
+        }
+    }
+
+    /// The fullscreen trailer: the user asked to watch, so its sound interrupts theirs
+    /// for the duration — `.playback` without mixing (Android: transient audio focus).
+    /// Awaited, so the category is in force before the player starts.
+    static func beginFullscreenTrailer() async {
+        await onQueue {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setCategory(.playback)
+            try? session.setActive(true)
+        }
+    }
+
+    /// Hands the user's audio back — deactivating with notifyOthersOnDeactivation is
+    /// what lets their music resume — and restores the category that was in force.
+    static func endFullscreenTrailer() {
+        queue.async {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            if gameConfigured {
+                try? session.setCategory(.playback, options: [.mixWithOthers])
+            } else {
+                try? session.setCategory(.ambient)
+            }
+        }
+    }
+
+    private static func onQueue(_ work: @escaping () -> Void) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             queue.async {
-                defer { continuation.resume() }
-                guard !gameConfigured, !trailerConfigured else { return }
-                trailerConfigured = true
-                try? AVAudioSession.sharedInstance().setCategory(.ambient)
+                work()
+                continuation.resume()
             }
         }
     }

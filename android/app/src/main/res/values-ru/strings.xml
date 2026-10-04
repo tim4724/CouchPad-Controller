@@ -17,6 +17,8 @@
     <string name="status_coming_soon">Скоро</string>
     <string name="trailer_unmute">Включить звук</string>
     <string name="trailer_mute">Выключить звук</string>
+    <string name="trailer_fullscreen">Смотреть на весь экран</string>
+    <string name="trailer_close">Закрыть видео</string>
 
     <string name="join_title">Играть</string>
     <string name="join_open_host">Открой %1$s на телевизоре или ноутбуке.</string>

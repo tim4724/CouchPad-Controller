@@ -27,7 +27,7 @@ import CoreHaptics
         for (index, milliseconds) in pattern.enumerated() {
             let duration = TimeInterval(milliseconds) / 1000
             if index.isMultiple(of: 2), duration > 0 {
-                events.append(pulse(at: elapsed, duration: duration))
+                events += pulse(at: elapsed, duration: duration)
             }
             elapsed += duration
         }
@@ -52,23 +52,20 @@ import CoreHaptics
         running = false
     }
 
-    /// A pulse under ~40ms is imperceptible as a continuous event but lands as the
-    /// short tick `navigator.vibrate(15)` gives on Android, so it becomes a transient.
-    /// Intensity tracks duration over that range for the same reason: a game spends
-    /// single-digit milliseconds on a UI tick and tens on a gameplay hit, and the two
-    /// must not feel identical.
-    private func pulse(at start: TimeInterval, duration: TimeInterval) -> CHHapticEvent {
-        let intensity = Float(min(max(duration / 0.04, 0.35), 1.0))
+    /// Full intensity, as Android drives the motor at full amplitude and only length
+    /// varies. A transient plus a continuous event, as a continuous event alone barely
+    /// registers at the 10–25ms a game spends on a tap, and a transient alone has no length.
+    private func pulse(at start: TimeInterval, duration: TimeInterval) -> [CHHapticEvent] {
         let parameters = [
-            CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity),
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5),
         ]
-        if duration < 0.04 {
-            return CHHapticEvent(eventType: .hapticTransient, parameters: parameters,
-                                 relativeTime: start)
-        }
-        return CHHapticEvent(eventType: .hapticContinuous, parameters: parameters,
-                             relativeTime: start, duration: duration)
+        return [
+            CHHapticEvent(eventType: .hapticTransient, parameters: parameters,
+                          relativeTime: start),
+            CHHapticEvent(eventType: .hapticContinuous, parameters: parameters,
+                          relativeTime: start, duration: duration),
+        ]
     }
 
     private func startedEngine() -> CHHapticEngine? {
@@ -78,6 +75,9 @@ import CoreHaptics
             // controller buzzes on nearly every tap, and a per-tap engine start would
             // put an audio-server round trip in front of the feedback.
             created.isAutoShutdownEnabled = false
+            // Plays no audio events, which lets the engine skip audio setup and start
+            // with less latency.
+            created.playsHapticsOnly = true
             created.stoppedHandler = { [weak self] _ in
                 Task { @MainActor in self?.running = false }
             }

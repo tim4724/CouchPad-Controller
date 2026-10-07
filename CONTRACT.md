@@ -455,10 +455,21 @@ Feature-detect as always — the polyfill is what makes the guard true inside th
 and in mobile Safari it stays false, so keep haptics decorative and never gate game state
 on them.
 
-Two limits are worth designing around. Pulses shorter than ~40 ms play as a crisp tap
-whose strength tracks the duration you asked for, so the usual 2 ms / 15 ms / 23 ms
-gradations stay distinguishable; longer pulses play as a continuous buzz. And the pattern
-is capped — 128 entries, as in Chromium, and five seconds total — because it arrives as untrusted page input.
+The API only switches a motor on and off; what that feels like is the motor's physics,
+and the two platforms' motors differ. Android's spins up slowly and coasts through short
+gaps; the iPhone's starts and stops dead, and Core Haptics plays every pulse at full
+strength with only its length varying. Patterns within these rules feel alike on both:
+
+- **A tap** is one pulse of 10–40 ms. Longer feels heavier.
+- **A rhythm** keeps every pause at 50 ms or more, e.g. `[10, 50, 10]` — each pulse is
+  felt on its own.
+- **A held buzz** is one pulse of 100 ms or more, re-issued before it ends and stopped
+  with `vibrate(0)`. It is full strength; the API has no lighter variant.
+- **Lighter** means shorter or sparser pulses, never rapid on/off: pauses under 50 ms
+  blur into a hum on Android but play as harsh bursts on iOS.
+
+The pattern is also capped — 128 entries, as in Chromium, and five seconds total —
+because it arrives as untrusted page input.
 
 Unchanged in a plain browser: Android Chrome runs the same code against the real API,
 and iOS Safari does nothing, exactly as it does today.

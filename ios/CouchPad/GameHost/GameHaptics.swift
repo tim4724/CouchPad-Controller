@@ -53,19 +53,19 @@ import CoreHaptics
     }
 
     /// Full intensity, as Android drives the motor at full amplitude and only length
-    /// varies. A transient plus a continuous event, as a continuous event alone barely
-    /// registers at the 10–25ms a game spends on a tap, and a transient alone has no length.
+    /// varies. A continuous event alone barely registers at the 10–25ms a game spends on
+    /// a tap, so a short pulse leads with a transient; a long one doesn't need it, and a
+    /// held buzz the page re-issues before it ends then continues without a click.
     private func pulse(at start: TimeInterval, duration: TimeInterval) -> [CHHapticEvent] {
         let parameters = [
             CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5),
         ]
-        return [
-            CHHapticEvent(eventType: .hapticTransient, parameters: parameters,
-                          relativeTime: start),
-            CHHapticEvent(eventType: .hapticContinuous, parameters: parameters,
-                          relativeTime: start, duration: duration),
-        ]
+        let body = CHHapticEvent(eventType: .hapticContinuous, parameters: parameters,
+                                 relativeTime: start, duration: duration)
+        guard duration < 0.04 else { return [body] }
+        return [CHHapticEvent(eventType: .hapticTransient, parameters: parameters,
+                              relativeTime: start), body]
     }
 
     private func startedEngine() -> CHHapticEngine? {

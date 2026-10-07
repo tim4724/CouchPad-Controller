@@ -458,7 +458,7 @@ on them.
 Two limits are worth designing around. Pulses shorter than ~40 ms play as a crisp tap
 whose strength tracks the duration you asked for, so the usual 2 ms / 15 ms / 23 ms
 gradations stay distinguishable; longer pulses play as a continuous buzz. And the pattern
-is capped — 32 entries, five seconds total — because it arrives as untrusted page input.
+is capped — 128 entries, as in Chromium, and five seconds total — because it arrives as untrusted page input.
 
 Unchanged in a plain browser: Android Chrome runs the same code against the real API,
 and iOS Safari does nothing, exactly as it does today.

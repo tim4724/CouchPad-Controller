@@ -66,13 +66,14 @@ func gameEndMessage(_ reason: String?) -> String {
 /// vibrate/pause (the Vibration API's pattern shape); empty is its cancel call.
 /// A malformed entry keeps the valid prefix rather than dropping the buzz entirely.
 /// Both the entry count and the total run time are capped: nothing a page sends may
-/// leave the phone shaking after the tap that caused it.
+/// leave the phone shaking after the tap that caused it. The entry cap is Chromium's,
+/// so any pattern Android's WebView plays in full plays in full here too.
 func parseVibrationPattern(_ csv: String?) -> [Int] {
-    guard let csv, !csv.isEmpty, csv.utf16.count <= 512 else { return [] }
+    guard let csv, !csv.isEmpty, csv.utf16.count <= 1024 else { return [] }
     var pattern: [Int] = []
     var total = 0
     for field in csv.split(separator: ",", omittingEmptySubsequences: false) {
-        guard pattern.count < 32, total < 5000, let milliseconds = Int(field), milliseconds >= 0
+        guard pattern.count < 128, total < 5000, let milliseconds = Int(field), milliseconds >= 0
         else { break }
         let clamped = min(milliseconds, 5000 - total)
         pattern.append(clamped)
@@ -121,7 +122,7 @@ enum GameHostJS {
           // Entry count and per-entry milliseconds mirror parseVibrationPattern's caps
           // (CONTRACT.md §12). Two languages, no shared constant: the native side is
           // authoritative and re-checks everything — keep these in step with it.
-          for (var i = 0; i < list.length && i < 32; i++) {
+          for (var i = 0; i < list.length && i < 128; i++) {
             var ms = Math.round(Number(list[i]));
             if (!isFinite(ms) || ms < 0) { return false; }
             out.push(Math.min(ms, 5000));

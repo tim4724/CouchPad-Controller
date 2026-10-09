@@ -238,6 +238,7 @@ struct GameWebView: UIViewRepresentable {
         // process freezer; iOS keeps sockets alive in the out-of-process network
         // stack) — the page's own pagehide/visibilitychange handlers do the work.
         coordinator.observeBackgrounding(of: webView)
+        coordinator.observeIncomingLinks()
         if let url = URL(string: joinUrl) {
             webView.load(URLRequest(url: url))
         }
@@ -315,6 +316,8 @@ struct GameWebView: UIViewRepresentable {
         // Weak: the coordinator must not extend the web view's life past dismantle.
         // Set once from makeUIView.
         private weak var hostedWebView: CPWebView?
+        // The SwiftUI host view the web view was lifted out of while a link hands over.
+        private weak var parkedIn: UIView?
         // The armed state IS the recognizer's isEnabled — no separate flag to drift.
         weak var backEdgeGesture: UIScreenEdgePanGestureRecognizer?
         private static let minBackTravel: CGFloat = 60     // pt
@@ -341,6 +344,31 @@ struct GameWebView: UIViewRepresentable {
 
         @objc private func appDidEnterBackground() {
             hostedWebView?.evaluateJavaScript(GameHostJS.dispatchPageHide, completionHandler: nil)
+        }
+
+        /// Puts the page to sleep while an incoming link replaces it (SceneDelegate). Out of a
+        /// window is the one state WebKit reports as hidden — `isHidden` doesn't count.
+        func observeIncomingLinks() {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(incomingLinkWillOpen),
+                name: .incomingLinkWillOpen, object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(incomingLinkDidFail),
+                name: .incomingLinkDidFail, object: nil
+            )
+        }
+
+        @objc private func incomingLinkWillOpen() {
+            guard !isTearingDown, let webView = hostedWebView, let superview = webView.superview else { return }
+            parkedIn = superview
+            webView.removeFromSuperview()
+        }
+
+        @objc private func incomingLinkDidFail() {
+            guard let webView = hostedWebView, let parkedIn else { return }
+            parkedIn.addSubview(webView)
+            self.parkedIn = nil
         }
 
         /// A completed edge swipe while the page has armed system back (CONTRACT.md §9).

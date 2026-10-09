@@ -67,12 +67,36 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         #endif
     }
 
+    // Universal Links while running. A link replaces any live game page, but continue()
+    // lands after willEnterForeground — the outgoing page would already have been told it's
+    // visible and reconnected, so the display sees join, leave, join. willContinue comes
+    // before the foreground, so the game host puts its page to sleep there.
+    func scene(_ scene: UIScene, willContinueUserActivityWithType userActivityType: String) {
+        guard userActivityType == NSUserActivityTypeBrowsingWeb else { return }
+        NotificationCenter.default.post(name: .incomingLinkWillOpen, object: nil)
+    }
+
+    func scene(_ scene: UIScene, didFailToContinueUserActivityWithType userActivityType: String, error: Error) {
+        guard userActivityType == NSUserActivityTypeBrowsingWeb else { return }
+        NotificationCenter.default.post(name: .incomingLinkDidFail, object: nil)
+    }
+
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        // Universal Links while running.
-        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
-              let url = userActivity.webpageURL else { return }
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb else { return }
+        guard let url = userActivity.webpageURL else {
+            // willContinue already put the game page to sleep — nothing will replace it.
+            NotificationCenter.default.post(name: .incomingLinkDidFail, object: nil)
+            return
+        }
         router.handleIncomingURL(url)
     }
+}
+
+extension Notification.Name {
+    /// A Universal Link is on its way in; the game page it will replace must not wake.
+    static let incomingLinkWillOpen = Notification.Name("games.couchpad.incomingLinkWillOpen")
+    /// The announced link never arrived — the game page carries on.
+    static let incomingLinkDidFail = Notification.Name("games.couchpad.incomingLinkDidFail")
 }
 
 // MARK: - Root hosting controller

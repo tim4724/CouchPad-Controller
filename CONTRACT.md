@@ -214,7 +214,9 @@ zombie player on the display.
 There is no synthetic counterpart on return: the engine fires the standard
 `visibilitychange` → `visible`, and the controller should reconnect there. Both events are
 ordinary web behavior, so the same code is correct in a plain browser. Additive in v1 — a
-game without a `pagehide` handler keeps today's behavior.
+game without a `pagehide` handler keeps today's behavior. The exception is a return through
+a join link (a re-scan): the backgrounded page is torn down without becoming visible again,
+so the incoming page's join is the only one the display sees.
 
 ## 8. Native display app → local network: room advertisement
 

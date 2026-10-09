@@ -24,6 +24,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -93,6 +94,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.Insets
+import androidx.core.util.Consumer
 import androidx.core.view.DisplayCutoutCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -406,6 +408,17 @@ private fun GameHostContent(
   // Reconnect needs no help: the engine fires visibilitychange → visible on return.
   LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
     webView?.evaluateJavascript(DISPATCH_PAGE_HIDE_JS, null)
+  }
+
+  // A join link (re-scan) pops this host, but the activity resumes on it first and the
+  // page would reconnect just before the pop drops it — the display sees join, leave,
+  // join. onNewIntent precedes onResume, so pause the WebView (reports the page hidden).
+  // dataString != null is what MainActivity treats as a deep link.
+  DisposableEffect(Unit) {
+    val activity = context.findActivity() as? ComponentActivity
+    val listener = Consumer<Intent> { if (it.dataString != null) webView?.onPause() }
+    activity?.addOnNewIntentListener(listener)
+    onDispose { activity?.removeOnNewIntentListener(listener) }
   }
 
   // A game-supplied theme-color becomes the chrome's scrim tint; its content

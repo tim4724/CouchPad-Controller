@@ -2,6 +2,7 @@ package games.couchpad.controller
 
 import android.content.ContentValues
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Environment
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -29,6 +31,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
+import games.couchpad.controller.data.setNearbyOptedIn
 import java.io.File
 import org.junit.After
 import org.junit.Before
@@ -67,6 +70,13 @@ class StoreScreenshotTest {
     // First launch mints a random FunnyName — pin the name BEFORE the activity starts
     // so assertions and store screenshots are deterministic.
     ProfileStore.save(appContext, Profile(PLAYER_NAME))
+    // Already opted in to nearby discovery, so home shows "Searching for rooms…" rather
+    // than the one-time Local Network ask: the stored opt-in below API 37, the permission
+    // grant from 37 on (see nearbyOptedIn).
+    setNearbyOptedIn(appContext)
+    if (Build.VERSION.SDK_INT >= 37) {
+      shell("pm grant ${appContext.packageName} android.permission.ACCESS_LOCAL_NETWORK")
+    }
     // A fresh device shows the one-time "Viewing full screen" education overlay the
     // first time an app hides the system bars (the in-game host does) — pre-confirm it.
     shell("settings put secure immersive_mode_confirmations confirmed")
@@ -93,7 +103,11 @@ class StoreScreenshotTest {
     // pass — not in the CI script.
     applyDemoStatusBar()
     ActivityScenario.launch(MainActivity::class.java).use { walkHomeFlow(suffix) }
-    captureInGame(suffix)
+    // Once: a game page draws itself the same in either theme.
+    if (!dark) {
+      captureInGame(IN_GAME_URL, "06-in-game")
+      captureInGame(TINY_TRACK_URL, "07-tinytrack", landscape = true)
+    }
   }
 
   private fun applyDemoStatusBar() {
@@ -119,6 +133,8 @@ class StoreScreenshotTest {
     compose.onNodeWithText(str(R.string.join_title)).assertIsDisplayed()
     compose.onNodeWithText(str(R.string.scan_code)).assertIsDisplayed()
     compose.onNodeWithText(PLAYER_NAME).assertIsDisplayed()
+    // Before MainScreen's search grace period settles it to "No rooms found".
+    compose.onNodeWithText(str(R.string.nearby_searching)).assertIsDisplayed()
     screenshot("01-home-$suffix")
 
     // ---- Game info sheet: manifest copy + join actions for the live game ----
@@ -169,25 +185,36 @@ class StoreScreenshotTest {
     screenshot("05-about-$suffix")
   }
 
-  /** Deep-link (the App Link path) into the controller's scenario harness and capture
-   *  the in-game touchpad once the "Joining…" cover has faded. */
-  private fun captureInGame(suffix: String) {
-    val intent = Intent(Intent.ACTION_VIEW, IN_GAME_URL.toUri(), appContext, MainActivity::class.java)
-    ActivityScenario.launch<MainActivity>(intent).use {
+  /** Deep-link (the App Link path) into a controller's scenario harness and capture it
+   *  once the "Joining…" cover has faded — after the turn, for a [landscape] page, which
+   *  asks for it (CONTRACT §10) before its first paint. */
+  private fun captureInGame(url: String, name: String, landscape: Boolean = false) {
+    val intent = Intent(Intent.ACTION_VIEW, url.toUri(), appContext, MainActivity::class.java)
+    ActivityScenario.launch<MainActivity>(intent).use { scenario ->
       // "Joining %1$s…" localized prefix, title-independent (the page <title>
       // replaces the manifest name while the cover is still up).
       val joiningPrefix = str(R.string.joining_game, MARKER).substringBefore(MARKER)
-      // The cover composes with the game host; wait for it, then for the page paint.
+      // Wait for the game host (its Leave control), then for the cover to be gone. Only
+      // its absence, never its appearance: a page the WebView has cached can paint
+      // before the first check, and the cover is already gone.
       compose.waitUntil(timeoutMillis = 15_000) {
-        compose.onAllNodes(hasText(joiningPrefix, substring = true)).fetchSemanticsNodes().isNotEmpty()
+        compose.onAllNodesWithContentDescription(str(R.string.leave_game)).fetchSemanticsNodes().isNotEmpty()
       }
       compose.waitUntil(timeoutMillis = 30_000) {
         compose.onAllNodes(hasText(joiningPrefix, substring = true)).fetchSemanticsNodes().isEmpty()
       }
+      if (landscape) {
+        compose.waitUntil(timeoutMillis = 15_000) {
+          var turned = false
+          scenario.onActivity { turned = it.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE }
+          turned
+        }
+      }
       // The shell fades the cover on WebView's visual-state callback, so the cover
       // being gone means the page has actually been drawn (not merely loaded).
-      Thread.sleep(1_000) // fonts + touchpad canvas settle
-      screenshot("06-in-game-$suffix")
+      // Fonts and the touchpad canvas; Tiny Track's 3D car previews take longer.
+      Thread.sleep(if (landscape) 2_000 else 1_000)
+      screenshot(name)
     }
   }
 
@@ -250,5 +277,8 @@ class StoreScreenshotTest {
     // the production bundle): renders the playing screen with a stubbed connection.
     const val IN_GAME_URL =
       "https://hexstacker.com/$ROOM_CODE?scenario=playing&name=$PLAYER_NAME&color=0"
+    // Tiny Track's own harness (TestHarness.js): the lobby's car picker, landscape-only.
+    const val TINY_TRACK_URL =
+      "https://tinytrack.couchpad.games/$ROOM_CODE?scenario=lobby-host&color=0"
   }
 }

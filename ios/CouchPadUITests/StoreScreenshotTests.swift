@@ -24,6 +24,12 @@ final class StoreScreenshotTests: XCTestCase {
         "https://hexstacker.com/\(roomCode)?scenario=playing&name=\(playerName)&color=0"
     }
 
+    /// Tiny Track's own harness (TestHarness.js): the lobby's car picker. Landscape-only —
+    /// the page asks the launcher for landscape (CONTRACT §10) before its first paint.
+    private var tinyTrackURL: String {
+        "https://tinytrack.couchpad.games/\(roomCode)?scenario=lobby-host&color=0"
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -39,17 +45,22 @@ final class StoreScreenshotTests: XCTestCase {
     private func runStoreFlow(dark: Bool) {
         let suffix = dark ? "dark" : "light"
         let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
         // First launch mints a random FunnyName — the NSArgumentDomain override pins
         // ProfileStore's UserDefaults key so assertions and screenshots are
         // deterministic. English and the interface style are forced the same way.
-        app.launchArguments += [
+        let baseArguments = [
             "-cp_profile.name", playerName,
+            // Already opted in to nearby discovery, so home shows "Searching for rooms…"
+            // rather than the one-time Local Network ask.
+            "-cp_nearby.opted_in", "YES",
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US",
             // Window-level override via the app's DEBUG hook — the documented
             // -UIUserInterfaceStyle launch arg proved unreliable on CI simulators.
             "-uitest.appearance", dark ? "dark" : "light",
         ]
+        app.launchArguments = baseArguments
         app.launch()
 
         // ---- Home: catalog, live status, join card, profile chip ----
@@ -62,6 +73,8 @@ final class StoreScreenshotTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Play"].firstMatch.exists)
         XCTAssertTrue(app.buttons["Scan code"].firstMatch.exists)
         XCTAssertTrue(app.buttons[playerName].firstMatch.exists)
+        // Before MainScreen's search grace period settles it to "No rooms found".
+        XCTAssertTrue(app.staticTexts["Searching for rooms…"].exists)
         snap("01-home-\(suffix)")
 
         // ---- Game info sheet: manifest copy + join actions for the live game ----
@@ -108,27 +121,64 @@ final class StoreScreenshotTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Version 1.0.0"].exists)
         snap("05-about-\(suffix)")
 
-        // ---- In-game: relaunch straight into the controller's scenario harness ----
-        app.launchArguments += ["-uitest.deepLink", inGameURL]
+        // Once: a game page draws itself the same in either theme.
+        guard !dark else { return }
+
+        captureInGame(app, arguments: baseArguments + ["-uitest.deepLink", inGameURL], name: "06-in-game")
+        captureInGame(
+            app, arguments: baseArguments + ["-uitest.deepLink", tinyTrackURL], name: "07-tinytrack", landscape: true
+        )
+    }
+
+    /// Relaunch straight into a controller's scenario harness and capture it once the
+    /// "Joining…" cover has faded — after the turn, for a [landscape] page, which asks
+    /// for it (CONTRACT §10) before its first paint.
+    private func captureInGame(_ app: XCUIApplication, arguments: [String], name: String, landscape: Bool = false) {
+        if landscape { XCUIDevice.shared.orientation = .landscapeLeft }
+        app.launchArguments = arguments
         app.launch()
-        // The leave bar (native chrome) carries the game title; the "Joining…" cover
+        // The game host's Leave control, in its portrait bar or landscape rail. The cover
         // may already have faded by the time launch() returns, so only require its
         // absence, not its appearance.
-        XCTAssertTrue(app.staticTexts["HexStacker"].firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Leave game"].firstMatch.waitForExistence(timeout: 15))
+        if landscape {
+            let window = app.windows.firstMatch
+            let turned = NSPredicate { _, _ in window.frame.width > window.frame.height }
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: turned, object: nil)], timeout: 15),
+                .completed
+            )
+        }
         let joining = app.staticTexts.matching(
             NSPredicate(format: "label BEGINSWITH 'Joining'")
         ).firstMatch
         // The shell fades the cover on its injected __firstFrame signal, so the
         // cover's absence means the page has actually painted (not merely loaded).
         XCTAssertTrue(joining.waitForNonExistence(timeout: 30))
-        Thread.sleep(forTimeInterval: 1) // fonts + touchpad canvas settle
-        snap("06-in-game-\(suffix)")
+        // Fonts and the touchpad canvas; Tiny Track's 3D car previews take longer.
+        Thread.sleep(forTimeInterval: landscape ? 2 : 1)
+        snap(name, landscape: landscape)
     }
 
     /// Full-screen capture attached to the result bundle; extract with
     /// `xcrun xcresulttool export attachments --path <xcresult> --output-path <dir>`.
-    private func snap(_ name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    ///
+    /// In landscape the capture's pixels stay in the portrait framebuffer, with the
+    /// orientation only in the image's metadata — which the PNG drops. [landscape]
+    /// redraws the image upright at its oriented (landscape) size.
+    private func snap(_ name: String, landscape: Bool = false) {
+        let screenshot = XCUIScreen.main.screenshot()
+        let attachment: XCTAttachment
+        if landscape {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = screenshot.image.scale
+            let upright = UIGraphicsImageRenderer(size: screenshot.image.size, format: format).image { _ in
+                screenshot.image.draw(at: .zero)
+            }
+            attachment = XCTAttachment(data: upright.pngData()!, uniformTypeIdentifier: "public.png")
+        } else {
+            attachment = XCTAttachment(screenshot: screenshot)
+        }
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)

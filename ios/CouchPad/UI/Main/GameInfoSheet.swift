@@ -233,13 +233,12 @@ struct GameplayLoopView: View {
             // Before any player exists: a muted AVPlayer still activates the shared
             // audio session, and the default category would stop the player's music.
             await GameAudioSession.configureForMutedTrailer()
-            // Starts no sooner than 2s after the sheet opens, cached or not: the art
-            // gets a moment of its own, and the clip never starts under the sheet's
-            // slide-in.
+            // Starts no sooner than 0.6s after the sheet opens, cached or not, so the
+            // clip never starts under the sheet's slide-in. Any longer reads as loading.
             async let fetched = TrailerCache.fetch(remote) { fraction in
                 Task { @MainActor in progress = fraction }
             }
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(0.6))
             guard let local = await fetched else { return }
             hasAudio = (try? await AVURLAsset(url: local).loadTracks(withMediaType: .audio))?.isEmpty == false
             localURL = local

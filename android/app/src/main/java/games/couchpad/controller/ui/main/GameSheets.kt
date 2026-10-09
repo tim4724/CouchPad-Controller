@@ -225,11 +225,11 @@ private fun GameplayLoop(game: Game, url: String) {
   var muted by remember { mutableStateOf(true) }
   var fullscreen by remember { mutableStateOf(false) }
   var progress by remember { mutableStateOf<Float?>(null) }
-  // Starts no sooner than 2s after the sheet opens, cached or not: the art gets a
-  // moment of its own, and the clip never starts under the sheet's slide-in.
+  // Starts no sooner than 0.6s after the sheet opens, cached or not, so the clip
+  // never starts under the sheet's slide-in. Any longer reads as loading.
   val file by produceState<File?>(initialValue = null, url) {
     val fetched = async(Dispatchers.IO) { TrailerCache.fetch(context, url) { progress = it } }
-    delay(2_000)
+    delay(600)
     value = fetched.await()
   }
   Box(

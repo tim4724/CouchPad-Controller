@@ -48,13 +48,13 @@ private val LightColors = lightColorScheme(
   // (and iOS mirrors this value).
   surfaceBright = SurfaceLightBase,
   // Much paler than the site's raw ladder: on the site only --surface-low
-  // (#F0EDE6, the facts panel) appears as a large fill; the deeper beige steps
-  // are hover/detail tones and read khaki when spread across a card or button.
+  // (--surface-low, the facts panel) appears as a large fill; the deeper steps are
+  // hover/detail tones and read muddy when spread across a card or button.
   surfaceContainerLowest = Color.White,
-  surfaceContainerLow = Color(0xFFF8F5EF),
-  surfaceContainer = Color(0xFFF3F0E8),
-  surfaceContainerHigh = Color(0xFFF0EDE6),
-  surfaceContainerHighest = Color(0xFFE9E4D9),
+  surfaceContainerLow = Color(0xFFF7F5F2),
+  surfaceContainer = Color(0xFFF2F0EC),
+  surfaceContainerHigh = Color(0xFFEFEDEA),
+  surfaceContainerHighest = Color(0xFFE7E4DF),
 )
 
 /**

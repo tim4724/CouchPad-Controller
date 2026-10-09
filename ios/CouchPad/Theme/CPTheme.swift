@@ -20,9 +20,9 @@ extension Color {
 
 /// INK & CONFETTI palette — the couchpad.games design tokens (Couch-Games
 /// assets/theme.css) mapped onto Material 3 roles; must stay value-identical to the
-/// Android theme (android theme/Color.kt + Theme.kt). Warm paper light, violet-tinted
-/// near-black dark; large fills use only the palest beige steps (the deep ones read
-/// khaki at card size). Members are `var` only so the copy helpers can mutate a copy;
+/// Android theme (android theme/Color.kt + Theme.kt). Faintly warm paper light,
+/// violet-tinted near-black dark; large fills use only the palest surface steps (the
+/// deep ones read muddy at card size). Members are `var` only so the copy helpers can mutate a copy;
 /// `.light`/`.dark` are the sole instances handed out.
 struct CPPalette: Equatable {
     var primary, onPrimary, primaryContainer, onPrimaryContainer: Color
@@ -35,27 +35,27 @@ struct CPPalette: Equatable {
     static let light = CPPalette(
         primary: Color(cpHex: 0x26242C),
         onPrimary: Color(cpHex: 0xFFFFFF),
-        primaryContainer: Color(cpHex: 0xE9E4D9),
+        primaryContainer: Color(cpHex: 0xE7E4DF),
         onPrimaryContainer: Color(cpHex: 0x26242C),
         secondary: Color(cpHex: 0x625B71),
         onSecondary: Color(cpHex: 0xFFFFFF),
-        // Ink-tinted greige, not a beige-ladder step (yellow-cast fills read khaki).
-        secondaryContainer: Color(cpHex: 0xDCD8D3),
+        // Near-neutral grey, not a surface-ladder step (its warm cast reads muddy as a fill).
+        secondaryContainer: Color(cpHex: 0xDAD8D6),
         onSecondaryContainer: Color(cpHex: 0x26242C),
-        background: Color(cpHex: 0xFBF9F4),
+        background: Color(cpHex: 0xFAF9F7),
         onBackground: Color(cpHex: 0x1C1B1F),
-        surface: Color(cpHex: 0xFBF9F4),
+        surface: Color(cpHex: 0xFAF9F7),
         onSurface: Color(cpHex: 0x1C1B1F),
-        surfaceVariant: Color(cpHex: 0xE9E4D9),
+        surfaceVariant: Color(cpHex: 0xE7E4DF),
         onSurfaceVariant: Color(cpHex: 0x5E5A66),
         outline: Color(cpHex: 0x77717F),
-        outlineVariant: Color(cpHex: 0xDFD9CD),
+        outlineVariant: Color(cpHex: 0xDCD9D3),
         surfaceContainerLowest: Color(cpHex: 0xFFFFFF),
-        surfaceContainerLow: Color(cpHex: 0xF8F5EF),
-        surfaceContainer: Color(cpHex: 0xF3F0E8),
-        surfaceContainerHigh: Color(cpHex: 0xF0EDE6),
-        surfaceContainerHighest: Color(cpHex: 0xE9E4D9),
-        surfaceBright: Color(cpHex: 0xFBF9F4),
+        surfaceContainerLow: Color(cpHex: 0xF7F5F2),
+        surfaceContainer: Color(cpHex: 0xF2F0EC),
+        surfaceContainerHigh: Color(cpHex: 0xEFEDEA),
+        surfaceContainerHighest: Color(cpHex: 0xE7E4DF),
+        surfaceBright: Color(cpHex: 0xFAF9F7),
         error: Color(cpHex: 0xB3261E),
         onError: Color(cpHex: 0xFFFFFF),
         inverseSurface: Color(cpHex: 0x313033),
@@ -64,14 +64,14 @@ struct CPPalette: Equatable {
     )
 
     static let dark = CPPalette(
-        primary: Color(cpHex: 0xF2EFE9),
+        primary: Color(cpHex: 0xF1EFEC),
         onPrimary: Color(cpHex: 0x26242C),
         primaryContainer: Color(cpHex: 0x3D3849),
-        onPrimaryContainer: Color(cpHex: 0xF2EFE9),
+        onPrimaryContainer: Color(cpHex: 0xF1EFEC),
         secondary: Color(cpHex: 0xCCC2DC),
         onSecondary: Color(cpHex: 0x332D41),
         secondaryContainer: Color(cpHex: 0x332F3F),
-        onSecondaryContainer: Color(cpHex: 0xF2EFE9),
+        onSecondaryContainer: Color(cpHex: 0xF1EFEC),
         background: Color(cpHex: 0x110F17),
         onBackground: Color(cpHex: 0xE6E1E5),
         surface: Color(cpHex: 0x110F17),

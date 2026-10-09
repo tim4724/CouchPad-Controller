@@ -6,40 +6,40 @@ import androidx.compose.ui.graphics.luminance
 // INK & CONFETTI — the couchpad.games design tokens (Couch-Games assets/theme.css)
 // mapped onto M3 roles. Neutral charcoal chrome still carries the structure and the
 // game posters still carry the color (console-shell pattern); the change from the old
-// Mono palette is warmth: paper-tinted light surfaces, violet-tinted near-black dark
+// Mono palette is tint: faintly warm paper light surfaces, violet-tinted near-black dark
 // ones, and the coral CTA. Container roles the site doesn't define are steps on the
 // site's surface ladder — except the tonal-button fill (secondaryContainer), which is
 // deliberately off-ladder; see its comment below.
 val PrimaryLight = Color(0xFF26242C) // --chrome
 val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFE9E4D9) // --surface-container
+val PrimaryContainerLight = Color(0xFFE7E4DF) // --surface-container
 val OnPrimaryContainerLight = Color(0xFF26242C)
 
-val PrimaryDark = Color(0xFFF2EFE9)
+val PrimaryDark = Color(0xFFF1EFEC)
 val OnPrimaryDark = Color(0xFF26242C)
 val PrimaryContainerDark = Color(0xFF3D3849)
-val OnPrimaryContainerDark = Color(0xFFF2EFE9)
+val OnPrimaryContainerDark = Color(0xFFF1EFEC)
 
-// Tonal-button fill: ink-tinted greige (paper blended toward --chrome), NOT a
-// step on the beige ladder — the beiges' yellow cast reads khaki as a fill.
+// Tonal-button fill: a near-neutral grey (the surface blended toward --chrome), NOT
+// a step on the surface ladder — the ladder's warm cast reads muddy as a fill.
 // Deep enough to read as a button on the surfaceContainerHigh Join card.
-val SecondaryContainerLight = Color(0xFFDCD8D3)
+val SecondaryContainerLight = Color(0xFFDAD8D6)
 val OnSecondaryContainerLight = Color(0xFF26242C)
-val SurfaceVariantLight = Color(0xFFE9E4D9) // --surface-container
+val SurfaceVariantLight = Color(0xFFE7E4DF) // --surface-container
 val OnSurfaceVariantLight = Color(0xFF5E5A66)
 val OutlineLight = Color(0xFF77717F)
-val OutlineVariantLight = Color(0xFFDFD9CD)
+val OutlineVariantLight = Color(0xFFDCD9D3)
 
 val SecondaryContainerDark = Color(0xFF332F3F) // --surface-highest
-val OnSecondaryContainerDark = Color(0xFFF2EFE9)
+val OnSecondaryContainerDark = Color(0xFFF1EFEC)
 val SurfaceVariantDark = Color(0xFF332F3F)
 val OnSurfaceVariantDark = Color(0xFFA8A3B1)
 val OutlineDark = Color(0xFF8D8798)
 val OutlineVariantDark = Color(0xFF2F2B3A)
 
-// Warm paper light, violet-tinted near-black dark (site --bg values).
+// Faintly warm paper light, violet-tinted near-black dark (site --bg values).
 val SurfaceDarkBase = Color(0xFF110F17)
-val SurfaceLightBase = Color(0xFFFBF9F4)
+val SurfaceLightBase = Color(0xFFFAF9F7)
 
 // --action. CTA container only, never small text: it is 3.4:1 against the light
 // background, so anything below large/bold sizes must use onSurface instead.

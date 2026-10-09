@@ -30,7 +30,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         ChromeState.shared.host = root
         // First frames before SwiftUI paints must already be the surface color
         // in the correct light/dark variant (no white flash in dark mode).
-        // CPPalette background (#110F17 / #FBF9F4) — keep in sync with CPTheme.swift.
+        // CPPalette background (#110F17 / #FAF9F7) — keep in sync with CPTheme.swift.
         window.backgroundColor = UIColor { traits in
             traits.userInterfaceStyle == .dark
                 ? UIColor(red: 0x11 / 255.0, green: 0x0F / 255.0, blue: 0x17 / 255.0, alpha: 1)

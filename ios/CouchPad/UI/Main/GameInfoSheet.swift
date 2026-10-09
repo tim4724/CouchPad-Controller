@@ -28,8 +28,8 @@ struct GameInfoSheet: View {
                 }
             }
 
-            // A live game shows its gameplay loop, muted until the user unmutes
-            // it; a not-yet-live game (no video) shows its cover art instead.
+            // A game with a trailer shows its gameplay loop, muted until the user
+            // unmutes it; one without shows its cover art instead.
             Group {
                 if game.video != nil {
                     GameplayLoopView(game: game)
@@ -50,7 +50,7 @@ struct GameInfoSheet: View {
             // act right here. Deliberately path-free ("start it", not "open the
             // app / the site") — where the game runs is the platform-chip row's
             // job (PlatformTiles).
-            if game.isLive {
+            if game.isPlayable {
                 VStack(alignment: .leading, spacing: 16) {
                     StepRow(number: 1, text: AttributedString(
                         String(format: String(localized: "Start %@ on your TV."), game.name)))

@@ -272,7 +272,7 @@ private fun StepRow(n: Int, text: AnnotatedString) {
 }
 
 /**
- * The two-step "start on your TV, then scan" how-to for a live game's info sheet —
+ * The two-step "start on your TV, then scan" how-to for a playable game's info sheet —
  * the app is the controller, so a first-timer who taps the card learns they need
  * the game running on a big screen first.
  */
@@ -286,7 +286,7 @@ fun PlaySteps(game: Game) {
   }
 }
 
-/** The two join actions — shared by the home Join card and a live game's info sheet. */
+/** The two join actions — shared by the home Join card and a playable game's info sheet. */
 @Composable
 fun JoinButtons(onScan: () -> Unit, onEnterCode: () -> Unit) {
   // Coral is reserved for this one CTA (site --action rule): large/bold only,
@@ -305,17 +305,22 @@ fun JoinButtons(onScan: () -> Unit, onEnterCode: () -> Unit) {
   }
 }
 
-// Solid accent = live, accent-tinted dark = coming soon. The chip can land on
+// Solid accent = playable (live or beta), accent-tinted dark = coming soon. The chip can land on
 // bright art (the scrim thins toward its top), so the soon-variant needs its own
 // dark base rather than a bare translucent tint. Used by the home poster cards.
 @Composable
 fun PosterStatusChip(game: Game, modifier: Modifier = Modifier) {
   val bg =
-    if (game.isLive) game.accentColor
+    if (game.isPlayable) game.accentColor
     else game.accentColor.copy(alpha = 0.32f).compositeOver(Color.Black.copy(alpha = 0.55f))
-  val fg = if (game.isLive) Color.Black.copy(alpha = 0.85f) else Color.White
+  val fg = if (game.isPlayable) Color.Black.copy(alpha = 0.85f) else Color.White
+  val label = when {
+    game.isBeta -> R.string.status_beta
+    game.isPlayable -> R.string.status_live
+    else -> R.string.status_coming_soon
+  }
   Text(
-    stringResource(if (game.isLive) R.string.status_live else R.string.status_coming_soon),
+    stringResource(label),
     style = MaterialTheme.typography.labelMedium,
     color = fg,
     modifier = modifier

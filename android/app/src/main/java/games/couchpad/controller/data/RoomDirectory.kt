@@ -100,10 +100,10 @@ suspend fun resolveJoin(raw: String, games: List<Game>): JoinOutcome {
   return resolveLookups(probeRelays(code, games), games)
 }
 
-/** The relays a code could live on: every live game's own, then the shared directory.
+/** The relays a code could live on: every playable game's own, then the shared directory.
  * Probed in parallel; a game's own relay comes first, so it wins ties. */
 suspend fun probeRelays(code: String, games: List<Game>): List<RoomLookup> =
-  probeAll(code, games.filter { it.isLive }.mapNotNull { it.relayProbeBase })
+  probeAll(code, games.filter { it.isPlayable }.mapNotNull { it.relayProbeBase })
 
 /**
  * The relays a room whose GAME is already known is checked against — the liveness poll

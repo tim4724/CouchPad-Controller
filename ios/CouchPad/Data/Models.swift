@@ -112,8 +112,10 @@ struct Game: Identifiable, Hashable {
         self.tvApps = tvApps
     }
 
-    /// Exact, case-sensitive comparison against "live".
-    var isLive: Bool { status == "live" }
+    /// Beta is playable like live, only labelled differently. Any other value —
+    /// including one a newer manifest invents — reads as coming soon.
+    var isPlayable: Bool { status == "live" || status == "beta" }
+    var isBeta: Bool { status == "beta" }
 
     /// The host component of controllerBaseUrl — what's shown to users as the game's domain.
     var displayHost: String? { controllerBaseUrl.flatMap { URL(string: $0)?.host } }

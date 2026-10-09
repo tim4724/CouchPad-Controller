@@ -22,7 +22,7 @@ val DefaultAccent = Color(0xFF6C5CE7)
 data class Game(
   val id: String,
   val name: String,
-  val status: String,            // "live" | "soon"
+  val status: String,            // "live" | "beta" | "soon"
   val minPlayers: Int? = null,   // player-count range endpoints, e.g. 1..8;
   val maxPlayers: Int? = null,   // rendered as the numeric players chip (GameSheets)
   val video: String? = null,     // https URL of a muted gameplay loop, cached on demand (TrailerCache)
@@ -43,7 +43,10 @@ data class Game(
   // device tiles in the info sheet (PlatformTiles), unknown ids are ignored.
   val tvApps: Map<String, String> = emptyMap(),
 ) {
-  val isLive: Boolean get() = status == "live"
+  // Beta is playable like live, only labelled differently. Any other value — including
+  // one a newer manifest invents — reads as coming soon.
+  val isPlayable: Boolean get() = status == "live" || status == "beta"
+  val isBeta: Boolean get() = status == "beta"
 
   /**
    * Host to SHOW users, from the canonical controller URL — [hosts] is the

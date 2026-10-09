@@ -15,6 +15,7 @@
     <string name="device_web">Browser</string>
     <string name="status_live">Disponibile</string>
     <string name="status_coming_soon">In arrivo</string>
+    <string name="status_beta">Beta</string>
     <string name="trailer_unmute">Attiva audio</string>
     <string name="trailer_mute">Disattiva audio</string>
     <string name="trailer_fullscreen">Riproduci a schermo intero</string>

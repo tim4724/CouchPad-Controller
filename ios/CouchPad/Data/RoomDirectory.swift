@@ -90,10 +90,10 @@ func resolveJoin(_ raw: String, games: [Game]) async -> JoinOutcome {
     return resolveLookups(await probeRelays(code, games: games), games: games)
 }
 
-/// The relays a code could live on: every live game's own, then the shared directory.
+/// The relays a code could live on: every playable game's own, then the shared directory.
 /// Probed in parallel, relay order preserved in the results, so a game's own wins ties.
 func probeRelays(_ code: String, games: [Game]) async -> [RoomLookup] {
-    await probeAll(code, preferred: games.filter { $0.isLive }.compactMap { $0.relayProbeBase })
+    await probeAll(code, preferred: games.filter { $0.isPlayable }.compactMap { $0.relayProbeBase })
 }
 
 /// The relays a room whose GAME is already known is checked against — the liveness poll

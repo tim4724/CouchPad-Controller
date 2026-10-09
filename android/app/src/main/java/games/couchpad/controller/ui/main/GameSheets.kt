@@ -91,9 +91,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Pure game info — name, media, players. A live game shows its gameplay loop,
- * muted until the user unmutes it; a not-yet-live game (no video) shows its
- * cover art instead. Joining lives on the home's Join card.
+ * Pure game info — name, media, players. A game with a trailer shows its gameplay
+ * loop, muted until the user unmutes it; one without shows its cover art instead.
+ * Joining lives on the home's Join card.
  */
 @Composable
 fun GameInfoSheet(
@@ -122,7 +122,7 @@ fun GameInfoSheet(
         GameArt(game, Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.large))
       }
       if (game.tvApps.isNotEmpty() || game.displayHost != null) PlatformTiles(game)
-      if (game.isLive) {
+      if (game.isPlayable) {
         PlaySteps(game)
         JoinButtons(onScan = onScan, onEnterCode = onEnterCode)
       }

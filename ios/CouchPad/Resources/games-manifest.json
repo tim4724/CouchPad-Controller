@@ -23,7 +23,7 @@
     {
       "id": "tinytrack",
       "name": "Tiny Track",
-      "status": "soon",
+      "status": "beta",
       "minPlayers": 1,
       "maxPlayers": 4,
       "art": "/artwork/tinytrack-16x9-v2.webp",

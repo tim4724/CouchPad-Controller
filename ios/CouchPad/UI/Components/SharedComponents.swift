@@ -358,7 +358,7 @@ struct StepRow: View {
 
 // MARK: - JoinButtons
 
-/// The two join actions — shared by the home Join card and a live game's info sheet.
+/// The two join actions — shared by the home Join card and a playable game's info sheet.
 struct JoinButtons: View {
     let onScan: () -> Void
     let onEnterCode: () -> Void
@@ -407,15 +407,15 @@ struct JoinButtons: View {
 
 // MARK: - PosterStatusChip
 
-/// Solid accent = live, accent-tinted dark = coming soon. The chip can land on
+/// Solid accent = playable (live or beta), accent-tinted dark = coming soon. The chip can land on
 /// bright art (the scrim thins toward its top), so the soon-variant needs its own
 /// dark base rather than a bare translucent tint. Used by the home poster cards.
 struct PosterStatusChip: View {
     let game: Game
 
     var body: some View {
-        if game.isLive {
-            Text("Live")
+        if game.isPlayable {
+            Text(game.isBeta ? LocalizedStringKey("Beta") : "Live")
                 .font(.cpLabelMedium)
                 .foregroundStyle(Color.black.opacity(0.85))
                 .padding(.horizontal, 10)

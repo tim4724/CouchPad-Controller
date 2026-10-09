@@ -16,6 +16,7 @@
     <string name="device_web">브라우저</string>
     <string name="status_live">플레이 가능</string>
     <string name="status_coming_soon">출시 예정</string>
+    <string name="status_beta">베타</string>
     <string name="trailer_unmute">음소거 해제</string>
     <string name="trailer_mute">음소거</string>
     <string name="trailer_fullscreen">전체 화면으로 재생</string>

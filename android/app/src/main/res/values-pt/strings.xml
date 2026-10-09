@@ -56,7 +56,7 @@
 
     <string name="game_end_room_not_found">Sala não encontrada</string>
     <string name="game_end_room_full">Sala cheia</string>
-    <string name="game_end_replaced">Você entrou em outro dispositivo</string>
+    <string name="game_end_replaced">Você entrou de outro dispositivo</string>
     <string name="game_end_generic">A festa acabou</string>
 
     <string name="error_empty_code">Código vazio.</string>

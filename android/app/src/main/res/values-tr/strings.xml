@@ -33,7 +33,7 @@
     <string name="cancel">İptal</string>
 
     <string name="enter_your_name">İsmini gir</string>
-    <string name="name">Ad</string>
+    <string name="name">İsim</string>
     <string name="save_and_continue">Kaydet ve devam et</string>
     <string name="save">Kaydet</string>
     <string name="set_name">İsim belirle</string>
@@ -43,7 +43,7 @@
     <string name="flashlight_off">El fenerini kapat</string>
     <string name="scan_hint">TV\'ndeki veya bilgisayarındaki QR kodu tara</string>
     <string name="camera_access_needed">Kamera erişimi gerekli</string>
-    <string name="camera_access_rationale">TV\'deki kodu taramak için kamera erişimine izin ver ya da oda kodunu elle gir.</string>
+    <string name="camera_access_rationale">TV\'ndeki kodu taramak için kamera erişimine izin ver ya da oda kodunu elle gir.</string>
     <string name="allow_camera_access">Kamera erişimine izin ver</string>
 
     <string name="joining_game">%1$s oyununa katılınıyor…</string>

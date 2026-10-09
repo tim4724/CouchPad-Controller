@@ -64,7 +64,7 @@
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "扫描显示的房间码。"
+            "value" : "扫描显示的房间代码。"
           }
         }
       }
@@ -99,7 +99,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "テレビで %@ を起動してください。"
+            "value" : "テレビで%@を起動してください。"
           }
         },
         "ko" : {
@@ -266,7 +266,7 @@
         }
       }
     },
-    "Allow camera access to scan the code on your TV — or type the room code instead." : {
+    "Allow camera access to scan the code on your TV, or type the room code instead." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -319,7 +319,7 @@
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TV'deki kodu taramak için kamera erişimine izin ver ya da oda kodunu elle gir."
+            "value" : "TV'ndeki kodu taramak için kamera erişimine izin ver ya da oda kodunu elle gir."
           }
         },
         "zh" : {
@@ -1344,7 +1344,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Введите код комнаты"
+            "value" : "Введи код комнаты"
           }
         },
         "tr" : {
@@ -1496,7 +1496,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Trete %@ bei…"
+            "value" : "Verbinden mit %@…"
           }
         },
         "es" : {
@@ -1514,7 +1514,7 @@
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Accesso a %@…"
+            "value" : "Connessione a %@…"
           }
         },
         "ja" : {
@@ -1550,7 +1550,7 @@
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在加入%@…"
+            "value" : "正在加入 %@…"
           }
         }
       }
@@ -1560,7 +1560,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Trete bei…"
+            "value" : "Verbinden…"
           }
         },
         "es" : {
@@ -1578,7 +1578,7 @@
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Accesso…"
+            "value" : "Connessione…"
           }
         },
         "ja" : {
@@ -1802,7 +1802,7 @@
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ad"
+            "value" : "İsim"
           }
         },
         "zh" : {
@@ -1913,7 +1913,7 @@
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "방을 찾을 수 없음"
+            "value" : "방을 찾지 못했어요"
           }
         },
         "pt" : {
@@ -2314,7 +2314,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Комната не найдена или устарела."
+            "value" : "Комната не найдена или уже закрыта."
           }
         },
         "tr" : {
@@ -2844,7 +2844,7 @@
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "该代码不是 CouchPad 房间。"
+            "value" : "这不是 CouchPad 房间的代码。"
           }
         }
       }
@@ -2984,7 +2984,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dieser Code kann gerade keinem Spiel zugeordnet werden."
+            "value" : "Dieser Code passt gerade zu keinem Spiel."
           }
         },
         "es" : {
@@ -3002,13 +3002,13 @@
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Al momento questo codice non può essere associato a un gioco."
+            "value" : "Al momento questo codice non corrisponde a nessun gioco."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在このコードをゲームに関連付けられません。"
+            "value" : "今はこのコードに対応するゲームが見つかりません。"
           }
         },
         "ko" : {
@@ -3026,7 +3026,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Сейчас этот код не удаётся сопоставить с игрой."
+            "value" : "Сейчас этот код не подходит ни к одной игре."
           }
         },
         "tr" : {
@@ -3343,13 +3343,13 @@
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Você entrou em outro dispositivo"
+            "value" : "Você entrou de outro dispositivo"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ты подключился с другого устройства"
+            "value" : "Вход выполнен с другого устройства"
           }
         },
         "tr" : {

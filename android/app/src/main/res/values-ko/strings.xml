@@ -9,7 +9,7 @@
     <string name="nearby_perm">근처 기기</string>
     <string name="nearby_allow">허용</string>
     <string name="nearby_no_wifi">근처 방을 찾으려면 Wi-Fi에 연결하세요</string>
-    <string name="nearby_none">방을 찾을 수 없음</string>
+    <string name="nearby_none">방을 찾지 못했어요</string>
     <string name="nearby_searching">방 검색 중…</string>
     <string name="device_apple_tv">Apple TV</string>
     <string name="device_android_tv">Android TV</string>

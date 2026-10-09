@@ -65,7 +65,7 @@ struct QRScannerScreen: View {
                 // grant it) and keep the typed-code path in reach — mirrors Android's
                 // PermissionDeniedContent.
                 VStack(spacing: 20) {
-                    Text("Allow camera access to scan the code on your TV — or type the room code instead.")
+                    Text("Allow camera access to scan the code on your TV, or type the room code instead.")
                         .font(.cpBodyMedium)
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)

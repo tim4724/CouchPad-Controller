@@ -48,7 +48,7 @@
     <string name="flashlight_off">Turn flashlight off</string>
     <string name="scan_hint">Scan the QR code on your TV or laptop</string>
     <string name="camera_access_needed">Camera access needed</string>
-    <string name="camera_access_rationale">Allow camera access to scan the code on your TV — or type the room code instead.</string>
+    <string name="camera_access_rationale">Allow camera access to scan the code on your TV, or type the room code instead.</string>
     <string name="allow_camera_access">Allow camera access</string>
 
     <!-- Game host -->

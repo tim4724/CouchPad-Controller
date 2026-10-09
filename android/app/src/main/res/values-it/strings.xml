@@ -28,7 +28,7 @@
 
     <string name="enter_room_code">Inserisci il codice della stanza</string>
     <string name="code_placeholder">es. %1$s</string>
-    <string name="joining">Accesso…</string>
+    <string name="joining">Connessione…</string>
     <string name="join">Gioca</string>
     <string name="cancel">Annulla</string>
 
@@ -46,7 +46,7 @@
     <string name="camera_access_rationale">Consenti l’accesso alla fotocamera per scansionare il codice sulla TV, oppure inserisci il codice della stanza.</string>
     <string name="allow_camera_access">Consenti accesso alla fotocamera</string>
 
-    <string name="joining_game">Accesso a %1$s…</string>
+    <string name="joining_game">Connessione a %1$s…</string>
     <string name="leave_game">Esci dal gioco</string>
 
     <string name="back">Indietro</string>
@@ -62,7 +62,7 @@
     <string name="error_empty_code">Codice vuoto.</string>
     <string name="error_not_couchpad_room">Questo codice non corrisponde a una stanza di CouchPad.</string>
     <string name="error_enter_room_code">Inserisci un codice stanza.</string>
-    <string name="error_code_unmatched">Al momento questo codice non può essere associato a un gioco.</string>
+    <string name="error_code_unmatched">Al momento questo codice non corrisponde a nessun gioco.</string>
     <string name="error_room_not_found_or_expired">Stanza non trovata o scaduta.</string>
     <string name="error_server_unreachable">Impossibile raggiungere il server. Riprova.</string>
     <string name="error_server_unreachable_short">Impossibile raggiungere il server.</string>

@@ -28,7 +28,7 @@
 
     <string name="enter_room_code">Raumcode eingeben</string>
     <string name="code_placeholder">z.&#160;B. %1$s</string>
-    <string name="joining">Trete bei…</string>
+    <string name="joining">Verbinden…</string>
     <string name="join">Spielen</string>
     <string name="cancel">Abbrechen</string>
 
@@ -46,7 +46,7 @@
     <string name="camera_access_rationale">Erlaube den Zugriff auf die Kamera, um den Code zu scannen, oder gib den Raumcode ein.</string>
     <string name="allow_camera_access">Kamerazugriff erlauben</string>
 
-    <string name="joining_game">Trete %1$s bei…</string>
+    <string name="joining_game">Verbinden mit %1$s…</string>
     <string name="leave_game">Spiel verlassen</string>
 
     <string name="back">Zurück</string>
@@ -62,7 +62,7 @@
     <string name="error_empty_code">Leerer Code.</string>
     <string name="error_not_couchpad_room">Dieser Code gehört zu keinem CouchPad-Raum.</string>
     <string name="error_enter_room_code">Gib einen Raumcode ein.</string>
-    <string name="error_code_unmatched">Dieser Code kann gerade keinem Spiel zugeordnet werden.</string>
+    <string name="error_code_unmatched">Dieser Code passt gerade zu keinem Spiel.</string>
     <string name="error_room_not_found_or_expired">Raum nicht gefunden oder abgelaufen.</string>
     <string name="error_server_unreachable">Server nicht erreichbar. Versuch es erneut.</string>
     <string name="error_server_unreachable_short">Server nicht erreichbar.</string>

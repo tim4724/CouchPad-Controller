@@ -46,7 +46,7 @@
     <string name="camera_access_rationale">允许使用相机来扫描电视上的二维码，或者直接输入房间代码。</string>
     <string name="allow_camera_access">允许使用相机</string>
 
-    <string name="joining_game">正在加入%1$s…</string>
+    <string name="joining_game">正在加入 %1$s…</string>
     <string name="leave_game">退出游戏</string>
 
     <string name="back">返回</string>
@@ -60,7 +60,7 @@
     <string name="game_end_generic">派对结束了</string>
 
     <string name="error_empty_code">代码为空。</string>
-    <string name="error_not_couchpad_room">该代码不是 CouchPad 房间。</string>
+    <string name="error_not_couchpad_room">这不是 CouchPad 房间的代码。</string>
     <string name="error_enter_room_code">请输入房间代码。</string>
     <string name="error_code_unmatched">目前无法将此代码匹配到游戏。</string>
     <string name="error_room_not_found_or_expired">房间未找到或已过期。</string>
@@ -68,6 +68,6 @@
     <string name="error_server_unreachable_short">无法连接服务器。</string>
     <string name="action_retry">重试</string>
     <string name="play_step_start">在电视上启动 %1$s。</string>
-    <string name="play_step_scan">扫描显示的房间码。</string>
+    <string name="play_step_scan">扫描显示的房间代码。</string>
     <string name="version_label">版本 %1$s</string>
 </resources>

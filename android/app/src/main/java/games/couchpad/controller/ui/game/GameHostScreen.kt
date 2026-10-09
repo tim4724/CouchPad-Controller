@@ -311,9 +311,10 @@ private fun GameHostContent(
   // still delivers the edge back swipe while it's hidden (the transient reveal is
   // the BOTTOM edge's gesture, not the sides'), and showing it would only re-grow
   // the safe zone the page just paid for.
+  val hostShowsNavBar = systemBackEnabled && !gestureNavEnabled(context)
   LaunchedEffect(systemBackEnabled) {
     val window = context.findActivity()?.window ?: return@LaunchedEffect
-    if (systemBackEnabled && !gestureNavEnabled(context)) {
+    if (hostShowsNavBar) {
       WindowCompat.getInsetsController(window, view).show(WindowInsetsCompat.Type.navigationBars())
     } else {
       hideNavigationBar(window, view)
@@ -442,13 +443,16 @@ private fun GameHostContent(
   val cutout = WindowInsets.displayCutout
   val cutoutTop = cutout.getTop(density)
   val cutoutBottom = cutout.getBottom(density)
-  val navBars = WindowInsets.navigationBars
+  // Counted only while the host itself shows the bar (the 3-button armed case above).
+  // The system also brings a hidden bar back for as long as the keyboard is up — the
+  // rename sheet's, or a page input's — and that must not reshape the page's safe zone
+  // under it: the bar leaves with the keyboard, so the game would squash and spring
+  // back with every name edit.
+  val navBars = if (hostShowsNavBar) WindowInsets.navigationBars else WindowInsets(0)
   val navBottom = navBars.getBottom(density)
   // What covers each side: the cutout on that edge — or the nav bar, because in
   // landscape the 3-BUTTON bar sits on a side, not the bottom, so a §9-armed page
   // bringing it back would otherwise cover "safe" game UI (and the icon column).
-  // Visible insets: all zero while the bars are hidden, and the gesture pill lands in
-  // navBottom, so nothing changes outside that one case.
   val leftObstructionPx =
     maxOf(cutout.getLeft(density, layoutDirection), navBars.getLeft(density, layoutDirection))
   val rightObstructionPx =

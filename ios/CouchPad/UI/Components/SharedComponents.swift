@@ -473,9 +473,10 @@ struct AppSheetContainer<Content: View>: View {
         ScrollView {
             content()
                 .frame(maxWidth: .infinity, alignment: .top)
-                // Take the content's IDEAL height: the detent starts near zero, and
-                // without this the compressed first layout (truncated text, collapsed
-                // aspect-ratio views) self-consistently measures as the final height.
+                // Take the content's IDEAL height: the first layout runs at the
+                // .medium placeholder, and without this the compressed first layout
+                // (truncated text, collapsed aspect-ratio views) self-consistently
+                // measures as the final height.
                 .fixedSize(horizontal: false, vertical: true)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
@@ -485,7 +486,10 @@ struct AppSheetContainer<Content: View>: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(max(measuredHeight, 1))])
+        // Placeholder until the first measurement, which lands after the slide-up
+        // starts. It must be a full-size detent: iOS 26 animates a tiny one out of the
+        // bottom-left corner.
+        .presentationDetents([measuredHeight > 0 ? .height(measuredHeight) : .medium])
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(28)
         .presentationBackground(surfaceTint ?? palette.surfaceContainerHigh)

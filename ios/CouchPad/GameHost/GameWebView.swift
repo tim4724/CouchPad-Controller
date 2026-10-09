@@ -196,6 +196,10 @@ struct GameWebView: UIViewRepresentable {
         config.userContentController.add(coordinator, name: "cpHost")
 
         let webView = CPWebView(frame: .zero, configuration: config)
+        // WebKit's did-change-frame handler, unlike will-show/will-change, doesn't check
+        // that the web view owns the keyboard, so the rename sheet's keyboard would shrink
+        // visualViewport. The page's own fields are still covered by will-change-frame.
+        NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
         webView.isOpaque = false
         // Match the dark chrome while the page is blank — kills the white flash.
         // CPPalette.dark.surface (#110F17) — keep in sync with CPTheme.swift.

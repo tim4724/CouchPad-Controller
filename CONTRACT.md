@@ -117,6 +117,11 @@ Horizontal insets align with the chrome's *content*, not just the cutout, so a t
 anchored to the safe zone lines up with the launcher's controls — expect a small non-zero
 value even with no notch.
 
+**The keyboard** never resizes the page's layout viewport. A field the page itself
+focuses gets the platform's own browser behaviour: `visualViewport` shrinks by the
+keyboard and the engine scrolls the field into view. The launcher's own keyboard (its
+rename sheet) reaches neither `visualViewport` nor the safe zone.
+
 **Each side is its own value** — what actually covers that edge, so left and right can
 differ (a one-sided cutout, the launcher's landscape controls on one side). Where the OS
 itself reports a cutout on both sides (iOS in landscape), so does the launcher.

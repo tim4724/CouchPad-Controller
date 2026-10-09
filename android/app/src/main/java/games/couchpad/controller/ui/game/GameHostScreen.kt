@@ -588,16 +588,21 @@ private fun GameHostContent(
           denyLocalFileAccess()
           // Match the dark chrome while the page is blank — kills the white flash.
           setBackgroundColor(surfaceArgb)
-          // Intercept insets, two jobs. (1) The REAL insets never reach WebView:
-          // on targetSdk 35+ Chromium self-applies IME insets, and the game surface
-          // must never resize for the keyboard (it overlays it). (2) Hand WebView a
+          // Intercept insets, two jobs. (1) The REAL insets never reach WebView, but
+          // IME insets do while the page's own editable field has the window focus:
+          // Chromium (targetSdk 35+) self-applies them, shrinking visualViewport and
+          // scrolling the field into view. The rename sheet is a separate window, so
+          // this one is unfocused while its keyboard is up. (2) Hand WebView a
           // SYNTHETIC display cutout equal to the full safe zone: viewport-fit=cover
           // pages then see the same four edges as --cp-safe-* through the standard
           // env(safe-area-inset-*). Chromium reads the DisplayCutout's safe insets;
           // the matching insets and per-edge bounding rects keep the object
           // self-consistent. Chromium only honors cutouts while the WebView spans
           // the whole display, so the --cp-safe-* vars stay the source of truth.
-          ViewCompat.setOnApplyWindowInsetsListener(this) { v, _ ->
+          ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+            val ime = WindowInsetsCompat.Type.ime()
+            val pageIme =
+              if (v.hasWindowFocus() && v.onCheckIsTextEditor()) insets.getInsets(ime) else Insets.NONE
             // Gate on the portrait chrome having measured once (the host always
             // enters in portrait), not on the published top — a landscape top is
             // legitimately 0.
@@ -611,6 +616,8 @@ private fun GameHostContent(
               }
               WindowInsetsCompat.Builder()
                 .setInsets(WindowInsetsCompat.Type.displayCutout(), safe)
+                .setInsets(ime, pageIme)
+                .setVisible(ime, pageIme != Insets.NONE)
                 .setDisplayCutout(DisplayCutoutCompat(Rect(safeLeftPx, safeTopPx, safeRightPx, safeBottomPx), bounds))
                 .build()
                 .toWindowInsets()
@@ -740,8 +747,8 @@ private fun GameHostContent(
       // Portrait: status-bar strip + LEAVE bar over a scrim. Top + horizontal
       // insets only, deliberately: when a keyboard opens the system re-marks the
       // (hidden) nav bar visible, and a nav-tracking inset would move the chrome.
-      // The game surface never resizes for anything — the keyboard overlays it,
-      // like a video player.
+      // The game surface never resizes for the keyboard (the page sees its own
+      // field's only through visualViewport).
       Column(
         Modifier
           .fillMaxWidth()

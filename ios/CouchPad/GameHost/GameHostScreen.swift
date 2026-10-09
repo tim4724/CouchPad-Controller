@@ -192,8 +192,8 @@ struct GameHostScreen: View {
                 .zIndex(2)
         }
         .background(cutoutReader)
-        // The game surface never resizes for anything — the keyboard overlays it,
-        // like a video player.
+        // The game surface never resizes for the keyboard (the page sees its own
+        // field's only through visualViewport).
         .ignoresSafeArea(.keyboard)
         // No back button and no interactive pop: the only way out of a live match is
         // the Leave bar, or the §9 back gesture the page armed — both routed

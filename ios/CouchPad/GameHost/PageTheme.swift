@@ -82,9 +82,21 @@ func parseVibrationPattern(_ csv: String?) -> [Int] {
     return pattern
 }
 
+/// `CouchPadHost.haptic(primitive, scale)` as the shim posts it: `<primitive>,<scale>`.
+/// Untrusted like the rest: an unknown primitive or a NaN/infinite scale plays nothing,
+/// and the scale is clamped to 0–1 (CONTRACT.md §13).
+func parseHaptic(_ value: String?) -> (primitive: HapticPrimitive, scale: Double)? {
+    guard let value, value.utf16.count <= 64 else { return nil }
+    let fields = value.split(separator: ",", omittingEmptySubsequences: false)
+    guard fields.count == 2, let primitive = HapticPrimitive(rawValue: String(fields[0])),
+          let scale = Double(fields[1]), scale.isFinite
+    else { return nil }
+    return (primitive, min(max(scale, 0), 1))
+}
+
 enum GameHostJS {
     /// Document-start user script (all frames): defines
-    /// `window.CouchPadHost.{gameEnded,themeChanged,enableSystemBack,setOrientation}`
+    /// `window.CouchPadHost.{gameEnded,themeChanged,enableSystemBack,setOrientation,haptic}`
     /// posting `{type, value}` to `window.webkit.messageHandlers.cpHost`, and polyfills
     /// `navigator.vibrate` over the same channel (CONTRACT.md §12) — WebKit ships no
     /// Vibration API, which is why a game's haptics are silent on iOS but not on
@@ -113,6 +125,11 @@ enum GameHostJS {
         enableSystemBack: function (on) { post('enableSystemBack', on === true); },
         setOrientation: function (mode) {
           post('setOrientation', mode === 'landscape' ? 'landscape' : 'portrait');
+        },
+        haptic: function (primitive, scale) {
+          // Android's typed JS bridge turns a non-number into 0 but passes NaN through;
+          // mirror it so the same call plays (or doesn't) on both.
+          post('haptic', String(primitive) + ',' + (typeof scale === 'number' ? scale : 0));
         }
       };
       try {

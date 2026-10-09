@@ -470,7 +470,7 @@ strength with only its length varying. Patterns within these rules feel alike on
 - **A rhythm** keeps every pause at 50 ms or more, e.g. `[10, 50, 10]` — each pulse is
   felt on its own.
 - **A held buzz** is one pulse of 100 ms or more, re-issued before it ends and stopped
-  with `vibrate(0)`. It is full strength; the API has no lighter variant.
+  with `vibrate(0)`. It is full strength; the API has no lighter variant (§13 has lighter ones).
 - **Lighter** means shorter or sparser pulses, never rapid on/off: pauses under 50 ms
   blur into a hum on Android but play as harsh bursts on iOS.
 
@@ -479,6 +479,45 @@ because it arrives as untrusted page input.
 
 Unchanged in a plain browser: Android Chrome runs the same code against the real API,
 and iOS Safari does nothing, exactly as it does today.
+
+## 13. Game → launcher, haptic primitives: `haptic(primitive, scale)`
+
+§12 can only switch the motor on and off, so lighter can only mean shorter. A controller
+that wants a weaker or shaped tap instead names one of Android's composition primitives
+and a strength — the vocabulary AirConsole's `vibrate({type: 'composition', …})` takes,
+so one effect table serves both shells.
+
+```js
+var host = window.CouchPadHost;
+if (host && typeof host.haptic === 'function') host.haptic('click', 0.7);
+else if (navigator.vibrate) navigator.vibrate(14);   // §12, also the plain-browser path
+```
+
+| `primitive` | Feel |
+|---|---|
+| `click` | strong, crisp tap |
+| `tick` | light, sharp tap, made for rapid repeats |
+| `low_tick` | soft, low tap, made for rapid repeats |
+| `thud` | low, percussive knock that rings out (~300 ms) |
+| `spin` | spinning wobble (~150 ms); best played two or three times in a row |
+| `quick_rise`, `slow_rise` | builds up to a peak (~150 / ~500 ms) |
+| `quick_fall` | drops away from a peak (~100 ms) |
+
+- **`scale`** is a number from 0 to 1, clamped. As on Android, 0 is the faintest buzz the
+  device can make, not silence — to stay quiet, don't call.
+- **One primitive per call.** A call replaces whatever haptic is still playing, §12's
+  included; a sequence is the game's own timers.
+- **It always plays something:** the device's own primitive where it has one, the
+  closest the launcher can build where it hasn't. A game never checks support.
+- **Untrusted input:** a name the launcher doesn't know, or a `scale` of `NaN` or
+  ±`Infinity`, plays nothing. Any other non-number counts as 0.
+
+The launcher files these as a game's vibrations, so on Android they follow the system's
+media-vibration setting, not touch feedback — which §12's WebView buzzes, untagged, do
+follow. The player's real switch is still the game's own haptics setting, and haptics
+stay decorative as in §12.
+
+Unchanged in a plain browser: there is no `CouchPadHost`, so the §12 path runs.
 
 ## Checklist for a new game
 
@@ -500,6 +539,8 @@ and iOS Safari does nothing, exactly as it does today.
     wants it — as early as possible — and handle the side-moving safe zone (§10).
 11. *(Native display apps only)* Advertise the room over `_couchpad._tcp` so the launcher
     can offer one-tap join (§8).
+12. *(Optional)* Play haptics through `CouchPadHost.haptic` where it exists, else
+    `navigator.vibrate` within §12's rules (§12–13).
 
 Every touchpoint above has a live reference implementation — a stand-in controller
 that arms and disarms system back, answers `back()` three different ways, swaps its

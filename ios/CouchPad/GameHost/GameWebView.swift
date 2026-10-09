@@ -308,8 +308,8 @@ struct GameWebView: UIViewRepresentable {
         // still on its way.
         private var orientationAsked = false
 
-        // The page's navigator.vibrate() (CONTRACT.md §12). Lazy inside — no haptic
-        // engine is created until a game actually asks for one.
+        // The page's navigator.vibrate() and CouchPadHost.haptic() (CONTRACT.md §12,
+        // §13). Lazy inside — no haptic engine is created until a game asks for one.
         let haptics = GameHaptics()
 
         // Weak: the coordinator must not extend the web view's life past dismantle.
@@ -548,6 +548,11 @@ struct GameWebView: UIViewRepresentable {
                 // Not fire-once, and the highest-rate message on the bridge — a
                 // controller buzzes on nearly every tap.
                 haptics.play(parseVibrationPattern(body["value"] as? String))
+            case "haptic":
+                // Same rate as vibrate — the §13 path for the same taps.
+                if let haptic = parseHaptic(body["value"] as? String) {
+                    haptics.play(haptic.primitive, scale: haptic.scale)
+                }
             case "setOrientation":
                 // Not fire-once: a game may run its lobby portrait and its match
                 // landscape. The shim already narrowed to the two legal keywords.

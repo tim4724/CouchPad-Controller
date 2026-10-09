@@ -263,6 +263,7 @@ private fun GameHostContent(
         orientationAsked = true
         landscape = it
       },
+      haptics = GameHaptics(context),
     )
   }
 
@@ -1017,6 +1018,7 @@ private class CouchPadHostBridge(
   private val onThemeChanged: (PageTheme) -> Unit,
   private val onSystemBackEnabled: (Boolean) -> Unit,
   private val onLandscape: (Boolean) -> Unit,
+  private val haptics: GameHaptics,
 ) {
   private val fired = AtomicBoolean(false)
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -1053,5 +1055,13 @@ private class CouchPadHostBridge(
   fun setOrientation(mode: String?) {
     val wantsLandscape = mode == "landscape"
     mainHandler.post { onLandscape(wantsLandscape) }
+  }
+
+  // A named haptic primitive at a strength (CONTRACT.md §13). Not fire-once, and the
+  // highest-rate call on the bridge — a controller buzzes on nearly every tap — so it
+  // plays right here on the bridge thread instead of queueing behind the UI.
+  @JavascriptInterface
+  fun haptic(primitive: String?, scale: Double) {
+    haptics.play(primitive, scale)
   }
 }

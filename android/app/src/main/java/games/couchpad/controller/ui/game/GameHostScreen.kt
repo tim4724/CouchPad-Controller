@@ -55,6 +55,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -153,9 +154,7 @@ fun GameHostScreen(
   CouchPadTheme(darkTheme = true) {
     // A game-supplied accent flows through `primary`, so every launcher accent over
     // the game (chip, spinner, rename sheet) follows.
-    val scheme = MaterialTheme.colorScheme
-    val accented = pageTheme.accent?.let { scheme.copy(primary = it, onPrimary = contentColorOn(it)) } ?: scheme
-    MaterialTheme(colorScheme = accented) {
+    MaterialTheme(colorScheme = MaterialTheme.colorScheme.withAccent(pageTheme.accent)) {
       GameHostContent(joinUrl, title, allowedHosts, onLeave, onGameEnd, pageTheme, onPageTheme = { pageTheme = it })
     }
   }
@@ -788,23 +787,32 @@ private fun GameHostContent(
   }
 
   if (showProfile) {
-    ProfileSheet(
-      initial = profile,
-      // Use the game's theme-color as the sheet surface, but only when it's dark
-      // enough to keep the sheet's white text legible (white ≥ 4.5:1 needs luminance
-      // < ~0.18); a lighter theme-color falls back to the neutral surface.
-      surfaceTint = pageTheme.bar?.takeIf { it.luminance() < 0.18f },
-      onDismiss = { showProfile = false },
-      onSave = { saved ->
-        ProfileStore.save(context, saved)
-        profile = saved
-        showProfile = false
-        injectName(saved.name)                               // live-update the running controller
-      },
-    )
+    // The game's theme-color is the sheet surface, in whichever palette keeps text
+    // legible on it: dark for a dark color (white ≥ 4.5:1 needs luminance < ~0.18),
+    // light otherwise — so a light game (Tiny Track's cream) gets a light sheet rather
+    // than the launcher's dark grey.
+    val lightSheet = pageTheme.bar?.let { it.luminance() >= 0.18f } ?: false
+    CouchPadTheme(darkTheme = !lightSheet) {
+      MaterialTheme(colorScheme = MaterialTheme.colorScheme.withAccent(pageTheme.accent)) {
+        ProfileSheet(
+          initial = profile,
+          surfaceTint = pageTheme.bar,
+          onDismiss = { showProfile = false },
+          onSave = { saved ->
+            ProfileStore.save(context, saved)
+            profile = saved
+            showProfile = false
+            injectName(saved.name)                               // live-update the running controller
+          },
+        )
+      }
+    }
   }
 
 }
+
+private fun ColorScheme.withAccent(accent: Color?): ColorScheme =
+  accent?.let { copy(primary = it, onPrimary = contentColorOn(it)) } ?: this
 
 /** The LANDSCAPE rail's touch targets (Leave, rename), matching iOS's. Above the 48dp
  * Material floor on purpose: the rail floats in a screen corner the player is holding the

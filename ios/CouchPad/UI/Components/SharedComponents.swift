@@ -456,8 +456,8 @@ struct AppSheetContainer<Content: View>: View {
     @Environment(\.cpPalette) private var palette
     @State private var measuredHeight: CGFloat = 0
     /// A game's theme-color, used as the sheet surface so an in-game sheet reads as
-    /// part of the game. Nil (the default) keeps the neutral surface. Callers gate on
-    /// luminance so the surface stays dark enough for the sheet's light text.
+    /// part of the game. Nil (the default) keeps the neutral surface. Callers pick the
+    /// light or dark palette to match it, so the sheet's text stays legible.
     private let surfaceTint: Color?
     private let content: () -> Content
 

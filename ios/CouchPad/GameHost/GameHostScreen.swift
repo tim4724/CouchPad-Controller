@@ -86,12 +86,16 @@ struct GameHostScreen: View {
 
     /// The game's own theme-color (the page chrome color) becomes the rename sheet's
     /// surface, so the sheet reads as part of the game rather than the neutral app
-    /// grey. Adopted only when it's dark enough to keep the sheet's white text legible
-    /// (white ≥ 4.5:1 needs luminance < ~0.18); a lighter theme-color falls back to
-    /// the neutral surface. Most game chrome is very dark, so this usually applies.
-    private var sheetSurface: Color? {
-        guard let bar = pageTheme.bar, relativeLuminance(bar) < 0.18 else { return nil }
-        return bar
+    /// grey — in whichever palette keeps text legible on it: dark for a dark color
+    /// (white ≥ 4.5:1 needs luminance < ~0.18), light otherwise, so a light game
+    /// (Tiny Track's cream) gets a light sheet.
+    private var lightSheet: Bool {
+        pageTheme.bar.map { relativeLuminance($0) >= 0.18 } ?? false
+    }
+
+    private var sheetPalette: CPPalette {
+        let base = lightSheet ? CPPalette.light : CPPalette.dark
+        return pageTheme.accent.map { base.withAccent($0) } ?? base
     }
 
     /// The window's safe-area inset on each PHYSICAL side — `cutout` is semantic
@@ -204,19 +208,23 @@ struct GameHostScreen: View {
         // home indicator dims when idle, edge swipes need a second confirm.
         .persistentSystemOverlays(.hidden)
         .defersSystemGestures(on: .all)
-        .appSheet(item: $renameRequest, surfaceTint: sheetSurface) { request in
+        .appSheet(item: $renameRequest, surfaceTint: pageTheme.bar) { request in
             ProfileSheet(initial: request.profile, onSave: { saved in
                 ProfileStore.save(saved)
                 profile = saved
                 renameRequest = nil
                 // Live injection happens via GameWebView.playerName → updateUIView.
             })
+            // Overrides the forced-dark host below for the sheet alone.
+            .environment(\.cpPalette, sheetPalette)
+            .environment(\.colorScheme, lightSheet ? .light : .dark)
+            .tint(sheetPalette.primary)
         }
-        // Forced dark for the whole subtree AND the rename sheet. The tint must move
-        // with the palette: cpThemed() sets it once from the SYSTEM scheme, so without
-        // this a system-light device would fill prominent controls over the (dark) game
-        // — e.g. the rename sheet's Save button — with the light palette's near-black
-        // primary under the dark palette's near-black onPrimary label (black-on-black).
+        // Forced dark for the whole subtree (the rename sheet sets its own above). The
+        // tint must move with the palette: cpThemed() sets it once from the SYSTEM
+        // scheme, so without this a system-light device would fill prominent controls
+        // over the (dark) game with the light palette's near-black primary under the
+        // dark palette's near-black onPrimary label (black-on-black).
         .environment(\.cpPalette, hostPalette)
         .environment(\.colorScheme, .dark)
         .tint(hostPalette.primary)

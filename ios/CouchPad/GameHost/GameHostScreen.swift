@@ -94,38 +94,46 @@ struct GameHostScreen: View {
         return bar
     }
 
-    /// The side strip landscape reserves: the display cutout, or the icon rail plus a
-    /// hairline each side, whichever is wider. Published as the safe-zone side (§5) AND
-    /// used to place the rail, which is what makes the rail concentric with the band the
-    /// game is told to leave — measuring the rail and publishing THAT instead can only
-    /// ever produce a strip the rail sits flush against on its inner edge.
+    /// The window's safe-area inset on each PHYSICAL side — `cutout` is semantic
+    /// (leading/trailing), the published safe zone (§5) is left/right. UIKit reports a
+    /// landscape notch on both sides, so those two come out equal — the same value
+    /// Safari gives the page.
+    private var cutoutLeft: CGFloat { layoutDirection == .leftToRight ? cutout.leading : cutout.trailing }
+    private var cutoutRight: CGFloat { layoutDirection == .leftToRight ? cutout.trailing : cutout.leading }
+
+    /// The strip landscape reserves on the rail's (physical right) side: that side's
+    /// cutout, or the icon rail plus a hairline each side, whichever is wider. Published
+    /// as the right safe-zone side (§5) AND used to place the rail, which is what makes
+    /// the rail concentric with the band the game is told to leave — measuring the rail
+    /// and publishing THAT instead can only ever produce a strip the rail sits flush
+    /// against on its inner edge.
     private var landscapeStrip: CGFloat {
-        max(max(cutout.leading, cutout.trailing), chromeButtonSize + 2 * railGap)
+        max(cutoutRight, chromeButtonSize + 2 * railGap)
     }
 
     /// Safe-zone geometry (points, ints). In PORTRAIT the top is the chrome's full
     /// extent (inset + Leave bar) and the sides carry the chip's gutter. In
     /// LANDSCAPE there is no bar — the chrome collapses to the icon rail in the
-    /// leading strip, the top shrinks to the bare cutout (the game gets the full
-    /// height), and the sides carry the rail instead. Both sides always get ONE
-    /// shared value (§5 levelling). Bottom is the bare cutout (no chrome there).
+    /// right strip, the top shrinks to the bare cutout (the game gets the full
+    /// height), and the rail's side carries it instead. Each side is published on its
+    /// own (§5). Bottom is the bare cutout (no chrome there).
     private var computedSafeZone: SafeZone {
-        // Level the two sides to the larger — see the matching note in Android's
-        // GameHostScreen. The chrome is padded/placed inside this same strip, so its
-        // own controls sit on the published box rather than beside it.
-        let sideCutout = max(cutout.leading, cutout.trailing)
+        // Per side (§5). Landscape: the rail's strip on the right, the bare cutout on
+        // the left. Portrait: the chip's own margin (measured off the chrome, which is
+        // padded by the right cutout) on top of each side's cutout, so a top row lines
+        // up with the chip.
         let safeTop = isLandscape ? cutout.top : chromeHeight
-        let side = isLandscape
-            ? landscapeStrip
-            : (chromeWidth > 0 ? max(chromeWidth - chipRight, sideCutout) : sideCutout)
+        let chipMargin = chromeWidth > 0 ? max(chromeWidth - chipRight - cutoutRight, 0) : 0
+        let left = isLandscape ? cutoutLeft : chipMargin + cutoutLeft
+        let right = isLandscape ? landscapeStrip : chipMargin + cutoutRight
         let safeBottom = cutout.bottom
         // Ceil, not round, matching Android: an inset that lands mid-point must cover
         // the obstruction, never stop short — and it keeps --cp-safe-* from losing to
         // the unrounded env() values the synthetic insets publish.
         return SafeZone(
             top: Int(safeTop.rounded(.up)),
-            left: Int(side.rounded(.up)),
-            right: Int(side.rounded(.up)),
+            left: Int(left.rounded(.up)),
+            right: Int(right.rounded(.up)),
             bottom: Int(safeBottom.rounded(.up))
         )
     }
@@ -293,8 +301,8 @@ struct GameHostScreen: View {
     }
 
     /// The floating chrome. Landscape: no bar at all — the game keeps the full
-    /// height, and the two session controls stack in a side strip the levelled
-    /// side inset (§5) reserves anyway.
+    /// height, and the two session controls stack in the strip the right side inset
+    /// (§5) reserves anyway.
     @ViewBuilder
     private var chrome: some View {
         if isLandscape { landscapeChrome } else { portraitChrome }
@@ -363,11 +371,9 @@ struct GameHostScreen: View {
                 onEditName: { renameRequest = RenameRequest(profile: profile) },
                 onChipRight: { chipRight = $0 }
             )
-            .padding(.top, cutout.top)
-            // Symmetric, matching the safe zone we publish (§5): a landscape cutout is on
-            // one side only, but levelling both keeps the chrome's own controls on the
-            // same box the page is told to stay inside.
-            .padding(.horizontal, max(cutout.leading, cutout.trailing))
+            // Per side, matching the safe zone we publish (§5), so the chrome's own
+            // controls sit on the box the page is told to stay inside.
+            .padding(EdgeInsets(top: cutout.top, leading: cutout.leading, bottom: 0, trailing: cutout.trailing))
         }
         .frame(maxWidth: .infinity)
         .background(

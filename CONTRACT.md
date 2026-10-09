@@ -117,16 +117,22 @@ Horizontal insets align with the chrome's *content*, not just the cutout, so a t
 anchored to the safe zone lines up with the launcher's controls — expect a small non-zero
 value even with no notch.
 
-**Left and right are always equal**, on both platforms. A landscape cutout sits on one
-side only, but the launcher levels the pair to the larger, so a layout centered in the
-safe box is centered on the physical screen. Don't try to recover which side the camera
-is on from these — that difference is deliberately not published.
+**Each side is its own value** — what actually covers that edge, so left and right can
+differ (a one-sided cutout, the launcher's landscape controls on one side). Where the OS
+itself reports a cutout on both sides (iOS in landscape), so does the launcher.
 
 Recommended pattern — correct in the shell AND in a plain browser:
 
 ```css
 #hud {
-  padding-top: max(var(--cp-safe-top, 0px), env(safe-area-inset-top, 0px));
+  padding-top:   max(var(--cp-safe-top, 0px),   env(safe-area-inset-top, 0px));
+  padding-left:  max(var(--cp-safe-left, 0px),  env(safe-area-inset-left, 0px));
+  padding-right: max(var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
+}
+/* A layout that must stay centered on the physical screen levels the pair itself. */
+#wheel {
+  padding-inline: max(var(--cp-safe-left, 0px), env(safe-area-inset-left, 0px),
+                      var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
 }
 ```
 
@@ -335,7 +341,7 @@ of going back, and it is the follow-up swipe that lands here. Budget for the occ
 double swipe, not for lost space. A **3-button-nav** player has no back without the bar's
 buttons, so for them arming still brings the bar back for as long as it lasts —
 `--cp-safe-bottom` grows in portrait, and in landscape (where a 3-button bar sits on a
-*side*) it is the (levelled, §5) side insets that grow — shrinking again on disarm. One
+*side*) it is the inset on that side that grows — shrinking again on disarm. One
 more reason to treat the safe zone as live rather than reading it once at startup. iOS is
 unaffected — its back gesture is the launcher's own recognizer, not a system one, and its
 home indicator is always in the safe area.
@@ -381,11 +387,11 @@ bundle.
 **The safe zone changes shape, not just size** (§5). In landscape the launcher's bar
 disappears entirely — the chrome collapses to two floating controls (leave, rename)
 stacked in one side strip — so `--cp-safe-top` typically drops to ~0 and the game gets
-the full height. The (levelled) *side* insets become the large ones, carrying the display
-cutout and the launcher's controls alike; which side the camera — and the controls — sit
-on is still deliberately not published. A layout that hard-codes "the notch is on top"
-breaks here. The vars are re-published on every rotation, so read them live rather than
-at startup.
+the full height. The *side* insets become the large ones: one carries the launcher's
+controls (and any cutout on that side), the other only its own cutout, so the pair is
+usually unequal. A layout that hard-codes "the notch is on top", or reads one side for
+both, breaks here. The vars are re-published on every rotation, so read them live
+rather than at startup.
 
 Inert in a plain browser: `CouchPadHost` doesn't exist, so the optional call is a no-op
 and the page keeps whatever the browser and the user's rotation lock were doing. A game

@@ -89,6 +89,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.Insets
@@ -416,8 +417,8 @@ private fun GameHostContent(
   // top is the chrome's full extent (inset + LEAVE bar) and the sides carry the
   // chip's gutter. In LANDSCAPE there is no bar — the chrome collapses to the two
   // stacked icons in a side strip, the top shrinks to the bare cutout (the
-  // game gets the full height), and the sides carry the icon column instead. Both
-  // sides always get ONE shared value (§5 levelling). Bottom is the cutout, or the
+  // game gets the full height), and the column's side carries it instead. Each side
+  // is published on its own (§5). Bottom is the cutout, or the
   // nav bar when a 3-button player's armed page brings it back — reported as
   // visible insets, so this is 0 again while it is hidden.
   var chromeHeightPx by remember { mutableStateOf(0) }
@@ -430,25 +431,28 @@ private fun GameHostContent(
   val cutoutBottom = cutout.getBottom(density)
   val navBars = WindowInsets.navigationBars
   val navBottom = navBars.getBottom(density)
-  // ONE side inset for the chrome's padding and both published sides: the larger
-  // cutout — plus the nav bar's sides, because in landscape the 3-BUTTON bar sits on
-  // a side, not the bottom, so a §9-armed page bringing it back would otherwise cover
-  // "safe" game UI (and the icon column; the chip, in portrait). Visible insets: all
-  // zero while the bars are hidden,
-  // and the gesture pill lands in navBottom, so nothing changes outside that one case.
-  val sideInsetPx = maxOf(
-    cutout.getLeft(density, layoutDirection),
-    cutout.getRight(density, layoutDirection),
-    navBars.getLeft(density, layoutDirection),
-    navBars.getRight(density, layoutDirection),
-  )
-  // The side strip landscape reserves: the obstruction above, or the icon column plus
-  // a hairline each side, whichever is wider. Published as the side inset AND used to
-  // place the column, which is what makes the column concentric with the band the game
-  // is told to leave — measuring the column and publishing THAT instead can only ever
-  // produce a strip it sits flush against on its inner edge.
-  val landscapeStripPx =
-    maxOf(sideInsetPx, with(density) { (CHROME_BUTTON + CHROME_GAP * 2).roundToPx() })
+  // What covers each side: the cutout on that edge — or the nav bar, because in
+  // landscape the 3-BUTTON bar sits on a side, not the bottom, so a §9-armed page
+  // bringing it back would otherwise cover "safe" game UI (and the icon column).
+  // Visible insets: all zero while the bars are hidden, and the gesture pill lands in
+  // navBottom, so nothing changes outside that one case.
+  val leftObstructionPx =
+    maxOf(cutout.getLeft(density, layoutDirection), navBars.getLeft(density, layoutDirection))
+  val rightObstructionPx =
+    maxOf(cutout.getRight(density, layoutDirection), navBars.getRight(density, layoutDirection))
+  // The strip landscape reserves on the icon column's side: that side's obstruction, or
+  // the column plus a hairline each side, whichever is wider. Published as that side's
+  // inset AND used to place the column, which is what makes the column concentric with
+  // the band the game is told to leave — measuring the column and publishing THAT
+  // instead can only ever produce a strip it sits flush against on its inner edge.
+  val railMinPx = with(density) { (CHROME_BUTTON + CHROME_GAP * 2).roundToPx() }
+  val leftStripPx = maxOf(leftObstructionPx, railMinPx)
+  val rightStripPx = maxOf(rightObstructionPx, railMinPx)
+  // Keyed on orientation too: the cutout rects (and view width) it reads change on
+  // rotation even when both strips come out the same.
+  val (railOnRight, railDodgePx) = remember(view, isLandscapeUi, leftStripPx, rightStripPx) {
+    railPlacement(view, density, leftStripPx, rightStripPx)
+  }
   var safeTopPx by remember { mutableStateOf(0) }
   var safeLeftPx by remember { mutableStateOf(0) }
   var safeRightPx by remember { mutableStateOf(0) }
@@ -481,30 +485,30 @@ private fun GameHostContent(
     chromeHeightPx,
     chromeWidthPx,
     chipRightPx,
-    landscapeStripPx,
-    sideInsetPx,
+    leftObstructionPx,
+    rightObstructionPx,
+    leftStripPx,
+    rightStripPx,
+    railOnRight,
     cutoutTop,
     cutoutBottom,
     navBottom,
     isLandscapeUi,
     webView,
   ) {
-    // ONE horizontal inset for both sides, measured off the chrome's own content —
-    // the chip's gutter in portrait, the icon column's extent in landscape. The
-    // chrome is padded/placed inside the levelled strip, so this already carries the
-    // larger side obstruction — no per-side mirroring left to do.
-    //
-    // Levelling is parity, not preference: UIKit reports the notch inset on BOTH sides
-    // in landscape, so iOS hands the same page a symmetric box. Publishing the lopsided
-    // pair here only offered detail a cross-platform controller has to throw away, at
-    // the cost of the two apps disagreeing about the same page. In portrait the cutout
-    // is on the top edge, so both sides were already equal and this changes nothing.
-    val side =
-      if (isLandscapeUi) landscapeStripPx
-      else if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx).coerceAtLeast(sideInsetPx)
-      else sideInsetPx
-    safeLeftPx = side
-    safeRightPx = side
+    // Per side (§5). Landscape: the icon column's strip on its side, the bare
+    // obstruction on the other. Portrait: the chip's own margin (measured off the
+    // chrome, which is padded by the right obstruction) on top of each side's
+    // obstruction, so a top row lines up with the chip.
+    if (isLandscapeUi) {
+      safeLeftPx = if (railOnRight) leftObstructionPx else leftStripPx
+      safeRightPx = if (railOnRight) rightStripPx else rightObstructionPx
+    } else {
+      val chipMarginPx =
+        if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx - rightObstructionPx).coerceAtLeast(0) else 0
+      safeLeftPx = chipMarginPx + leftObstructionPx
+      safeRightPx = chipMarginPx + rightObstructionPx
+    }
     // Landscape has no bar (the icons live in the side strip), so the game gets the
     // full height back — top is the bare cutout, which is 0 on a mid-edge punch-hole.
     safeTopPx = if (isLandscapeUi) cutoutTop else chromeHeightPx
@@ -705,8 +709,8 @@ private fun GameHostContent(
       }
     }
     // The floating chrome. Landscape: no bar at all — the game keeps the full
-    // height, and the two session controls stack in a side strip the levelled
-    // safe zone reserves anyway (right when the cutout allows, else left).
+    // height, and the two session controls stack in a side strip the safe zone
+    // reserves on their side (right when the cutout allows, else left).
     if (isLandscapeUi) {
       LandscapeChrome(
         playerName = profile.name,
@@ -714,7 +718,9 @@ private fun GameHostContent(
         onEditName = { showProfile = true },
         barColor = barColor,
         contentColor = barContent,
-        stripPx = landscapeStripPx,
+        onRight = railOnRight,
+        dodgePx = railDodgePx,
+        stripPx = if (railOnRight) rightStripPx else leftStripPx,
       )
     } else {
       // Portrait: status-bar strip + LEAVE bar over a scrim. Top + horizontal
@@ -736,18 +742,16 @@ private fun GameHostContent(
               1f to barColor.copy(alpha = 0f),
             ),
           )
-          // Top from the bars; horizontal SYMMETRIC rather than per-side. A landscape
-          // cutout is on one side only, and padding the chrome by the raw per-side inset
-          // put the X and the name chip on a different box than the (levelled) safe zone
-          // we publish to the page — the chip sat nearer the edge than any game UI is
-          // allowed to. Padding both sides by the larger keeps launcher chrome and page
-          // content on the same margin, and makes the gutter measured off the chip below
-          // symmetric by construction.
+          // Top from the bars; horizontal by the same per-side obstructions the
+          // published sides carry, so the X and the chip sit on the page's box.
           .windowInsetsPadding(
             WindowInsets.statusBars.union(WindowInsets.displayCutout)
               .only(WindowInsetsSides.Top),
           )
-          .padding(horizontal = with(density) { sideInsetPx.toDp() }),
+          .absolutePadding(
+            left = with(density) { leftObstructionPx.toDp() },
+            right = with(density) { rightObstructionPx.toDp() },
+          ),
       ) {
         LeaveBar(
           title = displayTitle,
@@ -842,16 +846,10 @@ private fun LeaveBar(
   }
 }
 
-// The landscape chrome: Close and the rename affordance stacked at the top-RIGHT
-// corner, floating in the strip the levelled side inset (§5) reserves anyway — no
-// bar, so the game keeps the full height. Physical sides, not start/end: the
-// choice is driven by where the camera is, not by reading direction. Placement
-// uses the DETAILED cutout geometry (boundingRects, not just the inset): a
-// mid-edge punch-hole sits half way down the side and leaves the corner free, so
-// the column stays top-right; a corner camera on the right flips the column to
-// the left when that corner is free, and only when both corners are occupied
-// does it stay right and drop below the rect. [stripPx] is the levelled side inset
-// the host publishes, and the column is centered in it.
+// The landscape chrome: Close and the rename affordance stacked in a top corner
+// (side picked by [railPlacement]), floating in the strip the host publishes as that
+// side's inset (§5) — no bar, so the game keeps the full height. [stripPx] is that
+// strip, and the column is centered in it; [dodgePx] drops it below a cutout rect.
 @Composable
 private fun BoxScope.LandscapeChrome(
   playerName: String,
@@ -859,37 +857,17 @@ private fun BoxScope.LandscapeChrome(
   onEditName: () -> Unit,
   barColor: Color,
   contentColor: Color?,
+  onRight: Boolean,
+  dodgePx: Float,
   stripPx: Int,
 ) {
-  val view = LocalView.current
   val density = LocalDensity.current
   val buttonPx = with(density) { CHROME_BUTTON.toPx() }
-  val gapPx = with(density) { CHROME_GAP.toPx() }
   // Half the slack outside, half inside: [stripPx] is what the host publishes as the
   // side inset, so this is the same gap on both sides of the buttons. Any asymmetry
   // the player still sees is the page's own margin on top of `--cp-safe-*`, which the
   // launcher can't see and mustn't guess at.
   val edgePadPx = (stripPx - buttonPx) / 2
-  val colEndPx = edgePadPx + buttonPx
-  val colHeightPx = buttonPx * 2 + gapPx * 2
-  // Pick the side, then how far to drop below any cutout rect the column would
-  // overlap (keyed on the inset so it re-reads after a rotation or a 180° flip
-  // re-dispatches the insets). Right is preferred; a corner camera there flips
-  // the column to the left unless the left corner is occupied too.
-  val (onRight, dodgePx) = remember(view, stripPx) {
-    val rects = ViewCompat.getRootWindowInsets(view)?.displayCutout?.boundingRects.orEmpty()
-    fun dodgeFor(right: Boolean): Float {
-      var top = 0f
-      for (r in rects.sortedBy { it.top }) {
-        val overlapsX = if (right) r.right > view.width - colEndPx else r.left < colEndPx
-        if (overlapsX && r.top < top + colHeightPx && r.bottom > top) top = r.bottom + gapPx * 2
-      }
-      return top
-    }
-    val rightDodge = dodgeFor(right = true)
-    if (rightDodge == 0f || dodgeFor(right = false) > 0f) true to rightDodge
-    else false to 0f
-  }
   val content = contentColor ?: MaterialTheme.colorScheme.onSurface
   val edgePad = with(density) { edgePadPx.toDp() }
   Column(
@@ -928,6 +906,33 @@ private fun BoxScope.LandscapeChrome(
       }
     }
   }
+}
+
+// Which side the landscape column goes on, and how far it drops below a cutout rect
+// it would overlap. Physical sides, not start/end: the choice is driven by where the
+// camera is, not by reading direction. Uses the DETAILED cutout geometry
+// (boundingRects, not just the inset): a mid-edge punch-hole sits half way down the
+// side and leaves the corner free, so the column stays top-right; a corner camera on
+// the right flips it to the left when that corner is free, and only when both corners
+// are occupied does it stay right and drop below the rect. The host keys this on the
+// orientation and the per-side strips, so a rotation or a 180° flip re-reads it.
+private fun railPlacement(view: View, density: Density, leftStripPx: Int, rightStripPx: Int): Pair<Boolean, Float> {
+  val buttonPx = with(density) { CHROME_BUTTON.toPx() }
+  val gapPx = with(density) { CHROME_GAP.toPx() }
+  val colHeightPx = buttonPx * 2 + gapPx * 2
+  val rects = ViewCompat.getRootWindowInsets(view)?.displayCutout?.boundingRects.orEmpty()
+  fun dodgeFor(right: Boolean): Float {
+    // The column's inner edge, centered in that side's strip.
+    val colEndPx = ((if (right) rightStripPx else leftStripPx) + buttonPx) / 2
+    var top = 0f
+    for (r in rects.sortedBy { it.top }) {
+      val overlapsX = if (right) r.right > view.width - colEndPx else r.left < colEndPx
+      if (overlapsX && r.top < top + colHeightPx && r.bottom > top) top = r.bottom + gapPx * 2
+    }
+    return top
+  }
+  val rightDodge = dodgeFor(right = true)
+  return if (rightDodge == 0f || dodgeFor(right = false) > 0f) true to rightDodge else false to 0f
 }
 
 /**

@@ -9,4 +9,15 @@
         <item name="android:windowBackground">@color/cp_surface</item>
         <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/cp_surface</item>
     </style>
+
+    <!-- KeyboardSheet's window: transparent, undimmed, and without the platform's dialog
+         animation — the sheet animates itself. Transparent bars: this theme family paints
+         a black status bar behind its windows, which blacked out the host's bar. -->
+    <style name="KeyboardSheetWindow" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
 </resources>

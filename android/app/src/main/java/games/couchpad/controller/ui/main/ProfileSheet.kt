@@ -5,32 +5,39 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import games.couchpad.controller.R
 import games.couchpad.controller.data.FunnyName
 import games.couchpad.controller.data.Profile
-import games.couchpad.controller.ui.components.AppSheet
+import games.couchpad.controller.ui.components.KeyboardSheet
 
 /** Below this screen height the keyboard leaves too little room to stack — see [ProfileSheet]. */
 private const val COMPACT_HEIGHT_BREAKPOINT = 480
@@ -45,8 +52,12 @@ private const val COMPACT_HEIGHT_BREAKPOINT = 480
  * it's the one piece carrying no information: [ProfileStore] never yields a blank name
  * (it mints one on first run), so the field always opens showing the name in force.
  *
- * iOS has no counterpart — its landscape keyboard is far shorter than Android's and its
- * sheet is presented full-screen there, so the stacked layout always clears it.
+ * Opens with the keyboard up in both. Portrait is content-height and rides on top of
+ * the keyboard; landscape fills the screen at the keyboard's width and the keyboard
+ * slides in over its lower part, as on iOS, with a close button in the row since there
+ * is no backdrop left to tap.
+ *
+ * [KeyboardSheet], not Material's: see there for why.
  */
 @Composable
 fun ProfileSheet(
@@ -58,8 +69,9 @@ fun ProfileSheet(
   // In-game: the host passes the game's theme-color to tint the sheet surface.
   surfaceTint: Color? = null,
 ) {
-  var name by remember { mutableStateOf(initial.name) }
-  val save = { if (name.isNotBlank()) onSave(Profile(name.trim())) }
+  // A TextFieldValue so the cursor starts at the end: the sheet focuses the field
+  // itself, and a String field would put it at the start.
+  var name by remember { mutableStateOf(TextFieldValue(initial.name, TextRange(initial.name.length))) }
 
   // Latched at first composition, and that matters: switching layout swaps the field
   // to a different structural parent, which destroys and rebuilds it and takes the
@@ -74,15 +86,30 @@ fun ProfileSheet(
   val screenHeightDp = LocalConfiguration.current.screenHeightDp
   val compact = remember { screenHeightDp < COMPACT_HEIGHT_BREAKPOINT }
 
-  // No auto-focus on purpose: the sheet settles first, the keyboard comes on tap.
-  // Focusing a sheet that is still animating in opens and shuts the keyboard again.
-  // iOS deliberately diverges — it focuses on open, because in a compact height UIKit
-  // presents its sheet full-screen and the keyboard is what fills it (see its
-  // ProfileSheet); this one is content-height in both orientations, so it has no hole.
-  AppSheet(onDismiss = onDismiss, surfaceTint = surfaceTint) {
+  // Set by Save; read once the sheet has slid out, so a save and a dismissal both get
+  // to play the slide-out before the caller tears the sheet down.
+  var saved by remember { mutableStateOf<Profile?>(null) }
+
+  KeyboardSheet(
+    fullHeight = compact,
+    // The same surface as AppSheet (see there).
+    color = surfaceTint ?: MaterialTheme.colorScheme.surfaceContainerHigh,
+    onClosed = {
+      val profile = saved
+      if (profile != null) onSave(profile) else onDismiss()
+    },
+  ) { close ->
+    val save = {
+      if (name.text.isNotBlank()) {
+        saved = Profile(name.text.trim())
+        close()
+      }
+    }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
     Column(
-      Modifier.fillMaxWidth().imePadding().padding(
-        start = 20.dp,
+      Modifier.fillMaxWidth().padding(
+        start = if (compact) 8.dp else 20.dp,
         end = 20.dp,
         top = if (compact) 16.dp else 24.dp,
         bottom = if (compact) 20.dp else 28.dp,
@@ -93,15 +120,18 @@ fun ProfileSheet(
 
       if (compact) {
         Row(
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          NameField(name, { name = it }, save, Modifier.weight(1f))
-          SaveButton(cta, name.isNotBlank(), save)
+          IconButton(onClick = close) {
+            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
+          }
+          NameField(name, { name = it }, save, Modifier.weight(1f).focusRequester(focus))
+          SaveButton(cta, name.text.isNotBlank(), save)
         }
       } else {
-        NameField(name, { name = it }, save, Modifier.fillMaxWidth())
-        SaveButton(cta, name.isNotBlank(), save, Modifier.fillMaxWidth())
+        NameField(name, { name = it }, save, Modifier.fillMaxWidth().focusRequester(focus))
+        SaveButton(cta, name.text.isNotBlank(), save, Modifier.fillMaxWidth())
       }
     }
   }
@@ -109,14 +139,14 @@ fun ProfileSheet(
 
 @Composable
 private fun NameField(
-  name: String,
-  onName: (String) -> Unit,
+  name: TextFieldValue,
+  onName: (TextFieldValue) -> Unit,
   onSave: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   OutlinedTextField(
     value = name,
-    onValueChange = { if (it.length <= 16) onName(it) },
+    onValueChange = { if (it.text.length <= 16) onName(it) },
     singleLine = true,
     // A player name is a proper noun — correcting it is always wrong.
     keyboardOptions = KeyboardOptions(
@@ -126,7 +156,10 @@ private fun NameField(
     ),
     keyboardActions = KeyboardActions(onDone = { onSave() }),
     trailingIcon = {
-      IconButton(onClick = { onName(FunnyName.random()) }) { Text("🎲") }
+      IconButton(onClick = {
+        val random = FunnyName.random()
+        onName(TextFieldValue(random, TextRange(random.length)))
+      }) { Text("🎲") }
     },
     modifier = modifier,
   )

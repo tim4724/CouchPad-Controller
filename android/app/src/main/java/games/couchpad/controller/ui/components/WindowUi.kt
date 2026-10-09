@@ -22,7 +22,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
@@ -40,20 +39,15 @@ import androidx.core.view.WindowInsetsControllerCompat
 @Composable
 fun AppSheet(
   onDismiss: () -> Unit,
-  // A game's theme-color, used as the sheet surface so an in-game sheet reads as part
-  // of the game. Null (the default) keeps the neutral surface. Callers gate on
-  // luminance so the surface stays dark enough for the sheet's light text.
-  surfaceTint: Color? = null,
   content: @Composable ColumnScope.() -> Unit,
 ) {
-  // The default surfaceContainerLow is one step above our darkened dark background —
-  // the sheet edge vanished at night. High keeps it legible.
-  val container = surfaceTint ?: MaterialTheme.colorScheme.surfaceContainerHigh
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     dragHandle = null,
-    containerColor = container,
+    // The default surfaceContainerLow is one step above our darkened dark background —
+    // the sheet edge vanished at night. High keeps it legible.
+    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
   ) {
     MirrorHostSystemBars()
     // Scrolls only when the content outgrows the screen (small displays,
@@ -112,14 +106,7 @@ fun MirrorHostSystemBars() {
   val view = LocalView.current
   val context = LocalContext.current
   SideEffect {
-    val hostDecor = context.findActivity()?.window?.decorView ?: return@SideEffect
-    val insets = ViewCompat.getRootWindowInsets(hostDecor) ?: return@SideEffect
-    // Probe status + nav bars individually. Type.systemBars() also covers the
-    // caption bar, which phones never report visible — the combined isVisible()
-    // was false even over the plain home screen, so every sheet went immersive.
-    var hidden = 0
-    if (!insets.isVisible(WindowInsetsCompat.Type.statusBars())) hidden = hidden or WindowInsetsCompat.Type.statusBars()
-    if (!insets.isVisible(WindowInsetsCompat.Type.navigationBars())) hidden = hidden or WindowInsetsCompat.Type.navigationBars()
+    val hidden = hostHiddenBars(context)
     if (hidden == 0) return@SideEffect
     val window = (view.parent as? DialogWindowProvider)?.window ?: return@SideEffect
     WindowCompat.getInsetsController(window, view).run {
@@ -127,6 +114,19 @@ fun MirrorHostSystemBars() {
       hide(hidden)
     }
   }
+}
+
+/** The bar types (status, nav) the activity's window currently hides; 0 when none. */
+fun hostHiddenBars(context: Context): Int {
+  val hostDecor = context.findActivity()?.window?.decorView ?: return 0
+  val insets = ViewCompat.getRootWindowInsets(hostDecor) ?: return 0
+  // Probe status + nav bars individually. Type.systemBars() also covers the
+  // caption bar, which phones never report visible — the combined isVisible()
+  // was false even over the plain home screen, so every sheet went immersive.
+  var hidden = 0
+  if (!insets.isVisible(WindowInsetsCompat.Type.statusBars())) hidden = hidden or WindowInsetsCompat.Type.statusBars()
+  if (!insets.isVisible(WindowInsetsCompat.Type.navigationBars())) hidden = hidden or WindowInsetsCompat.Type.navigationBars()
+  return hidden
 }
 
 // LocalContext under Compose can be a ContextWrapper, not the Activity directly.

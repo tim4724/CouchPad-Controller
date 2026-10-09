@@ -159,8 +159,7 @@ private struct PlatformTiles: View {
 
 /// A gameplay loop, fetched to cache on demand (TrailerCache) and played from
 /// disk. Cover art fills the slot immediately; the player sits on top and stays
-/// transparent until frames render, so the art shows through while the trailer
-/// downloads and simply disappears behind the first frame.
+/// transparent until its first frame is ready, then fades in over the art.
 ///
 /// Every open starts muted; a clip with an audio track gets a mute toggle. A tap
 /// plays the clip fullscreen (TrailerFullscreenView), pausing this one meanwhile.
@@ -173,14 +172,19 @@ struct GameplayLoopView: View {
     @State private var muted = true
     @State private var progress: Double?
     @State private var fullscreen = false
+    /// Where the fullscreen clip was left — the inline loop picks up there.
+    @State private var resumeAt = CMTime.zero
+    /// Window coordinates — where the fullscreen clip grows from and shrinks back to.
+    @State private var frame: CGRect = .zero
 
     var body: some View {
         ZStack {
             GameArt(game: game)
             if let localURL {
-                LoopingPlayerView(url: localURL, muted: muted, paused: fullscreen)
+                LoopingPlayerView(url: localURL, muted: muted, paused: fullscreen, resumeAt: resumeAt)
                     .contentShape(Rectangle())
-                    .onTapGesture { fullscreen = true }
+                    // No cover animation: TrailerFullscreenView animates itself.
+                    .onTapGesture { withTransaction(\.disablesAnimations, true) { fullscreen = true } }
                     .accessibilityElement()
                     .accessibilityLabel(String(localized: "Play fullscreen"))
                     .accessibilityAddTraits(.isButton)
@@ -224,8 +228,15 @@ struct GameplayLoopView: View {
                 .padding(8)
             }
         }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
         .fullScreenCover(isPresented: $fullscreen) {
-            if let localURL { TrailerFullscreenView(url: localURL) }
+            if let localURL {
+                TrailerFullscreenView(url: localURL, source: frame) { time in
+                    resumeAt = time
+                    withTransaction(\.disablesAnimations, true) { fullscreen = false }
+                }
+                .presentationBackground(.clear)
+            }
         }
         .task {
             guard localURL == nil,
@@ -251,22 +262,106 @@ struct GameplayLoopView: View {
 /// The clip fullscreen in landscape, with sound, played once from the start —
 /// closing itself at the end. Unlike the inline loop it interrupts the user's
 /// audio while it plays (GameAudioSession.beginFullscreenTrailer).
+///
+/// Landscape is drawn, not rotated into: the interface stays portrait and the clip
+/// grows out of the inline loop's `source` frame while turning 90° toward the side
+/// the phone is held, and shrinks back into it on close. Turning the window instead
+/// can only start once the cover is up and undo once it is gone, so opening and
+/// closing each played as a portrait step and then a rotation.
 private struct TrailerFullscreenView: View {
     let url: URL
+    let source: CGRect
+    /// Dismisses the cover without its own animation, once the clip is back in place,
+    /// with where the clip got to — zero once it played to the end.
+    let close: (CMTime) -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
+    @State private var expanded = false
+    /// The session hand-back, started once by whichever way the cover goes.
+    @State private var sessionEnded: Task<Void, Never>?
+    @State private var angle = TrailerFullscreenView.landscapeAngle(keeping: .degrees(90))
+
+    private static let morph = Animation.spring(duration: 0.45, bounce: 0.1)
+
+    /// Clockwise turn that stands the content upright for how the device is held;
+    /// portrait or flat keeps `current`.
+    private static func landscapeAngle(keeping current: Angle) -> Angle {
+        switch UIDevice.current.orientation {
+        case .landscapeLeft: .degrees(90)
+        case .landscapeRight: .degrees(-90)
+        default: current
+        }
+    }
 
     var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Color.black.opacity(expanded ? 1 : 0)
+                video
+                    .frame(width: expanded ? geo.size.height : source.width,
+                           height: expanded ? geo.size.width : source.height)
+                    .clipShape(RoundedRectangle(cornerRadius: expanded ? 0 : 16))
+                    .rotationEffect(expanded ? angle : .zero)
+                    .position(expanded ? CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+                                       : CGPoint(x: source.midX, y: source.midY))
+            }
+        }
+        .ignoresSafeArea()
+        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
+        .onAppear {
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            withAnimation(Self.morph) { expanded = true }
+        }
+        .onDisappear {
+            UIDevice.current.endGeneratingDeviceOrientationNotifications()
+            endSession()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            withAnimation(.easeInOut(duration: 0.3)) { angle = Self.landscapeAngle(keeping: angle) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            if let item = note.object as? AVPlayerItem, item === player?.currentItem { collapse(at: .zero) }
+        }
+        .task {
+            // The player exists from the start of the grow so its first frame is ready
+            // to show; only playback waits for the session, which can queue behind the
+            // previous close's (slow) deactivation.
+            let player = AVPlayer(url: url)
+            self.player = player
+            await GameAudioSession.beginFullscreenTrailer()
+            player.play()
+        }
+    }
+
+    /// The hand-back runs alongside the shrink, and the cover — on whose dismissal
+    /// the inline loop resumes — goes only once it is done.
+    private func collapse(at time: CMTime) {
+        guard expanded else { return }
+        endSession()
+        withAnimation(Self.morph) { expanded = false } completion: {
+            Task {
+                await sessionEnded?.value
+                close(time)
+            }
+        }
+    }
+
+    private func endSession() {
+        guard sessionEnded == nil else { return }
+        player?.pause()
+        sessionEnded = Task { await GameAudioSession.endFullscreenTrailer() }
+    }
+
+    private var video: some View {
         ZStack {
-            Color.black
             if let player {
                 // The X sits on the video's corner rather than the screen's, where it
                 // would straddle the pillarbox edge on a wider screen.
                 PlayerLayerView(player: player)
                     .aspectRatio(16.0 / 9.0, contentMode: .fit)
                     .overlay(alignment: .topLeading) {
-                        Button { dismiss() } label: {
+                        Button { collapse(at: player.currentTime()) } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundStyle(.white)
@@ -277,26 +372,9 @@ private struct TrailerFullscreenView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(String(localized: "Close video"))
                         .padding(12)
+                        .opacity(expanded ? 1 : 0)
                     }
             }
-        }
-        .ignoresSafeArea()
-        .statusBarHidden()
-        .persistentSystemOverlays(.hidden)
-        .onAppear { ChromeState.shared.orientation = .landscape }
-        .onDisappear {
-            player?.pause()
-            GameAudioSession.endFullscreenTrailer()
-            ChromeState.shared.orientation = .portrait
-        }
-        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
-            if let item = note.object as? AVPlayerItem, item === player?.currentItem { dismiss() }
-        }
-        .task {
-            await GameAudioSession.beginFullscreenTrailer()
-            let player = AVPlayer(url: url)
-            self.player = player
-            player.play()
         }
     }
 }
@@ -307,6 +385,7 @@ private struct PlayerLayerView: UIViewRepresentable {
     func makeUIView(context: Context) -> PlayerLayerUIView {
         let view = PlayerLayerUIView()
         view.playerLayer.player = player
+        view.fadeInWhenReady()
         return view
     }
 
@@ -318,6 +397,21 @@ private class PlayerLayerUIView: UIView {
     override static var layerClass: AnyClass { AVPlayerLayer.self }
 
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+
+    private var readyObservation: NSKeyValueObservation?
+
+    /// Hidden until the first frame is ready, then faded in over whatever is beneath:
+    /// the art inline (Android fades the art out at the same moment), the black
+    /// backdrop while the fullscreen clip grows.
+    func fadeInWhenReady() {
+        alpha = 0
+        readyObservation = playerLayer.observe(\.isReadyForDisplay) { layer, _ in
+            guard layer.isReadyForDisplay else { return }
+            Task { @MainActor [weak self] in
+                UIView.animate(withDuration: 0.3) { self?.alpha = 1 }
+            }
+        }
+    }
 }
 
 // MARK: - Looping player (private)
@@ -326,10 +420,12 @@ private struct LoopingPlayerView: UIViewRepresentable {
     let url: URL
     let muted: Bool
     let paused: Bool
+    let resumeAt: CMTime
 
     final class PlayerUIView: PlayerLayerUIView {
         private var player: AVQueuePlayer?
         private var looper: AVPlayerLooper?
+        private var wasPaused = false
 
         func configure(url: URL, muted: Bool) {
             guard player == nil else { return }
@@ -340,12 +436,25 @@ private struct LoopingPlayerView: UIViewRepresentable {
             player = queuePlayer
             playerLayer.player = queuePlayer
             playerLayer.videoGravity = .resizeAspectFill
+            fadeInWhenReady()
             queuePlayer.play()
         }
 
-        func update(muted: Bool, paused: Bool) {
+        /// Coming out of a pause, picks up at the keyframe nearest `resumeAt`: instant,
+        /// where an exact seek first decodes up to seconds of frames (the trailers'
+        /// keyframes are ~4s apart) — and a loop hides the difference.
+        func update(muted: Bool, paused: Bool, resumeAt: CMTime) {
             player?.isMuted = muted
-            if paused { player?.pause() } else { player?.play() }
+            if paused {
+                player?.pause()
+            } else {
+                if wasPaused {
+                    player?.seek(to: resumeAt, toleranceBefore: .positiveInfinity,
+                                 toleranceAfter: .positiveInfinity)
+                }
+                player?.play()
+            }
+            wasPaused = paused
         }
 
         func teardown() {
@@ -364,7 +473,7 @@ private struct LoopingPlayerView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PlayerUIView, context: Context) {
-        uiView.update(muted: muted, paused: paused)
+        uiView.update(muted: muted, paused: paused, resumeAt: resumeAt)
     }
 
     static func dismantleUIView(_ uiView: PlayerUIView, coordinator: ()) {

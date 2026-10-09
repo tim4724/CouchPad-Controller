@@ -1,17 +1,27 @@
 package games.couchpad.controller.ui.main
 
-import android.content.pm.ActivityInfo
+import android.graphics.SurfaceTexture
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Build
+import android.view.OrientationEventListener
+import android.view.Surface
+import android.view.TextureView
 import android.view.WindowManager
 import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -21,8 +31,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
@@ -31,16 +43,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -48,6 +68,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.util.lerp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -62,11 +84,11 @@ import games.couchpad.controller.ui.components.AppSheet
 import games.couchpad.controller.ui.components.GameArt
 import games.couchpad.controller.ui.components.JoinButtons
 import games.couchpad.controller.ui.components.PlaySteps
-import games.couchpad.controller.ui.components.findActivity
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Pure game info — name, media, players. A live game shows its gameplay loop,
@@ -224,6 +246,8 @@ private fun GameplayLoop(game: Game, url: String) {
   var hasAudio by remember { mutableStateOf(false) }
   var muted by remember { mutableStateOf(true) }
   var fullscreen by remember { mutableStateOf(false) }
+  // On screen — where the fullscreen clip grows from and shrinks back to.
+  var bounds by remember { mutableStateOf(Rect.Zero) }
   var progress by remember { mutableStateOf<Float?>(null) }
   // Starts no sooner than 0.6s after the sheet opens, cached or not, so the clip
   // never starts under the sheet's slide-in. Any longer reads as loading.
@@ -236,6 +260,7 @@ private fun GameplayLoop(game: Game, url: String) {
     Modifier
       .fillMaxWidth()
       .aspectRatio(16f / 9f)
+      .onGloballyPositioned { bounds = Rect(it.positionOnScreen(), it.size.toSize()) }
       .clip(MaterialTheme.shapes.large)
       .clickable(enabled = videoRendering, onClickLabel = stringResource(R.string.trailer_fullscreen)) {
         fullscreen = true
@@ -317,8 +342,11 @@ private fun GameplayLoop(game: Game, url: String) {
   }
   val trailer = file
   if (fullscreen && trailer != null) {
-    TrailerFullscreen(trailer) {
+    TrailerFullscreen(trailer, bounds) { position ->
       fullscreen = false
+      // Picks up where the fullscreen clip was left. VideoView may be mid-reopen
+      // (surface recreated), with no player to seek yet.
+      runCatching { player?.seekToNearestKeyframe(position) }
       videoView?.start()
     }
   }
@@ -327,63 +355,186 @@ private fun GameplayLoop(game: Game, url: String) {
 // The clip fullscreen in landscape, with sound, played once from the start —
 // closing itself at the end. Unlike the inline loop it takes transient audio
 // focus: this is the user asking to watch, so their music pauses and resumes on
-// close. Rotating needs no recreation — the activity handles orientation itself
-// (see the manifest).
+// close. `onClose` gets where the clip got to — 0 once it played to the end.
+//
+// Landscape is drawn, not rotated into, as on iOS: the activity stays portrait and
+// the clip grows out of the inline loop's `source` (screen coordinates) while
+// turning 90° toward the side the phone is held, and shrinks back on close.
+// Rotating the activity re-laid out the whole app twice and janked. A TextureView,
+// not VideoView: a SurfaceView can't be rotated. The animation is all graphicsLayer,
+// so no frame of it re-measures anything.
 @Composable
-private fun TrailerFullscreen(file: File, onClose: () -> Unit) {
+private fun TrailerFullscreen(file: File, source: Rect, onClose: (positionMs: Int) -> Unit) {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  val progress = remember { Animatable(0f) }
+  val angle = remember { Animatable(90f) }
+  var player by remember { mutableStateOf<MediaPlayer?>(null) }
+  var rendering by remember { mutableStateOf(false) }
+  val videoAlpha by animateFloatAsState(if (rendering) 1f else 0f, tween(300), label = "video")
+  var closing by remember { mutableStateOf(false) }
+  // Hidden only while the backdrop is fully black: hiding or showing the bars
+  // re-lays out the windows beneath, which would show as a jump mid-transition.
+  var bars by remember { mutableStateOf<WindowInsetsControllerCompat?>(null) }
+  val morph = spring<Float>(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)
+  val close = { positionMs: Int ->
+    if (!closing) {
+      closing = true
+      player?.pause()
+      bars?.show(WindowInsetsCompat.Type.systemBars())
+      scope.launch {
+        progress.animateTo(0f, morph)
+        onClose(positionMs)
+      }
+    }
+  }
+  LaunchedEffect(Unit) {
+    progress.animateTo(1f, morph)
+    if (!closing) bars?.hide(WindowInsetsCompat.Type.systemBars())
+  }
+  // Turns toward the side the phone is held; the first reading only settles it.
+  DisposableEffect(Unit) {
+    var first = true
+    val listener = object : OrientationEventListener(context) {
+      override fun onOrientationChanged(degrees: Int) {
+        if (degrees == ORIENTATION_UNKNOWN) return
+        val target = when (degrees) {
+          in 45..135 -> -90f
+          in 225..315 -> 90f
+          else -> null
+        }
+        val animate = !first
+        first = false
+        if (target == null || target == angle.targetValue) return
+        scope.launch { if (animate) angle.animateTo(target, tween(300)) else angle.snapTo(target) }
+      }
+    }
+    listener.enable()
+    onDispose { listener.disable() }
+  }
+  DisposableEffect(Unit) {
+    val audio = context.getSystemService(AudioManager::class.java)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).build()
+      audio.requestAudioFocus(request)
+      onDispose { audio.abandonAudioFocusRequest(request) }
+    } else {
+      @Suppress("DEPRECATION")
+      audio.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+      @Suppress("DEPRECATION")
+      onDispose { audio.abandonAudioFocus(null) }
+    }
+  }
   Dialog(
-    onDismissRequest = onClose,
+    onDismissRequest = { close(player?.currentPosition ?: 0) },
     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
   ) {
-    val context = LocalContext.current
     val view = LocalView.current
-    DisposableEffect(Unit) {
-      val activity = context.findActivity()
-      activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    LaunchedEffect(Unit) {
       (view.parent as? DialogWindowProvider)?.window?.let { window ->
+        // The transition is drawn below; the window itself neither animates nor dims.
+        window.setWindowAnimations(0)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
           window.attributes = window.attributes.apply {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
           }
         }
-        WindowCompat.getInsetsController(window, view).run {
+        bars = WindowCompat.getInsetsController(window, view).apply {
           systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-          hide(WindowInsetsCompat.Type.systemBars())
         }
       }
-      onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
     }
-    // A 16:9 box as large as the screen allows, like the inline slot — left to size
-    // itself, VideoView stops at the clip's native resolution. The X sits on the
-    // video's corner rather than the screen's, where it would straddle the
-    // pillarbox edge on a wider screen.
-    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-      Box(Modifier.aspectRatio(16f / 9f)) {
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    Box(Modifier.fillMaxSize().graphicsLayer { alpha = progress.value }.background(Color.Black))
+    BoxWithConstraints(
+      Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionOnScreen() },
+      contentAlignment = Alignment.Center,
+    ) {
+      // The 16:9 video as large as the turned screen allows, like the inline slot.
+      // Source and target share the aspect, so the grow is a uniform scale.
+      val screenW = constraints.maxWidth.toFloat()
+      val screenH = constraints.maxHeight.toFloat()
+      val fullW = minOf(screenH, screenW * 16f / 9f)
+      val fullH = fullW * 9f / 16f
+      val density = LocalDensity.current
+      val corner = with(density) { 16.dp.toPx() }
+      Box(
+        Modifier
+          .requiredSize(with(density) { fullW.toDp() }, with(density) { fullH.toDp() })
+          .graphicsLayer {
+            val p = progress.value
+            val scale = lerp(source.width / fullW, 1f, p)
+            scaleX = scale
+            scaleY = scale
+            translationX = lerp(source.center.x - origin.x - screenW / 2, 0f, p)
+            translationY = lerp(source.center.y - origin.y - screenH / 2, 0f, p)
+            rotationZ = angle.value * p
+            shape = RoundedCornerShape(corner * (1 - p) / scale)
+            clip = true
+          },
+      ) {
         AndroidView(
-          modifier = Modifier.fillMaxSize(),
+          modifier = Modifier.fillMaxSize().graphicsLayer { alpha = videoAlpha },
           factory = { ctx ->
-            VideoView(ctx).apply {
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                setAudioFocusRequest(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            TextureView(ctx).apply {
+              surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                private var surface: Surface? = null
+
+                override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
+                  val target = Surface(texture).also { surface = it }
+                  player = MediaPlayer().apply {
+                    setSurface(target)
+                    setDataSource(file.absolutePath)
+                    setOnInfoListener { _, what, _ ->
+                      if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) rendering = true
+                      false
+                    }
+                    setOnPreparedListener { it.start() }
+                    setOnCompletionListener { close(0) }
+                    prepareAsync()
+                  }
+                }
+
+                override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
+                  player?.release()
+                  player = null
+                  surface?.release()
+                  return true
+                }
+
+                override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {}
+
+                override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {}
               }
-              setVideoPath(file.absolutePath)
-              setOnPreparedListener { start() }
-              setOnCompletionListener { onClose() }
             }
           },
-          onRelease = { it.stopPlayback() },
         )
+        // The X sits on the video's corner rather than the screen's, where it would
+        // straddle the pillarbox edge on a wider screen.
         IconButton(
-          onClick = onClose,
+          onClick = { close(player?.currentPosition ?: 0) },
           modifier = Modifier
             .align(Alignment.TopStart)
             .padding(12.dp)
+            .graphicsLayer { alpha = progress.value }
             .background(Color.Black.copy(alpha = 0.35f), CircleShape),
         ) {
           Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.trailer_close), tint = Color.White)
         }
       }
     }
+  }
+}
+
+// The nearest keyframe rather than the default previous one: the trailers' keyframes
+// are ~4s apart, and an exact seek first decodes up to that much — a loop hides the
+// difference. The mode needs API 26; below it, the previous keyframe.
+private fun MediaPlayer.seekToNearestKeyframe(positionMs: Int) {
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    seekTo(positionMs.toLong(), MediaPlayer.SEEK_CLOSEST_SYNC)
+  } else {
+    seekTo(positionMs)
   }
 }
 

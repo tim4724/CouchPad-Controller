@@ -69,8 +69,9 @@ enum GameAudioSession {
 
     /// Hands the user's audio back — deactivating with notifyOthersOnDeactivation is
     /// what lets their music resume — and restores the category that was in force.
-    static func endFullscreenTrailer() {
-        queue.async {
+    /// Deactivating stops every player still running, so await it before resuming one.
+    static func endFullscreenTrailer() async {
+        await onQueue {
             let session = AVAudioSession.sharedInstance()
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
             if gameConfigured {

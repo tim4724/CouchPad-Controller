@@ -168,7 +168,6 @@ struct MainScreen: View {
             .allowsHitTesting(false)
 
             JoinCard(
-                host: joinHost,
                 onScan: { requireName(.scan) },
                 onEnterCode: { requireName(.enterCode) }
             )
@@ -400,10 +399,6 @@ struct MainScreen: View {
         if nearby.permissionDenied { return .denied }
         if !lan.hasLan { return .noWifi }
         return nearbySearchSettled ? .none : .searching
-    }
-
-    private var joinHost: String {
-        games.first(where: { $0.isLive })?.displayHost ?? CP.launcherHost
     }
 
     private var profileDisplayName: String {
@@ -904,19 +899,10 @@ private struct GameCard: View {
 // MARK: - JoinCard (floating, material blur over the poster list)
 
 private struct JoinCard: View {
-    let host: String
     let onScan: () -> Void
     let onEnterCode: () -> Void
 
     @Environment(\.cpPalette) private var palette
-
-    private var openHostText: Text {
-        let template = String(localized: "Open %@ on your TV or laptop.")
-        let parts = template.components(separatedBy: "%@")
-        return Text(parts.first ?? "")
-            + Text(host).fontWeight(.semibold)
-            + Text(parts.count > 1 ? parts[1] : "")
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -925,9 +911,8 @@ private struct JoinCard: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(palette.onSurface)
 
-                // The localized template positions the host; the host itself gets
-                // the semibold run wherever the language puts it.
-                openHostText
+                // Path-free: on a TV the game is an app, on a laptop a website.
+                Text("Start a game on your TV or laptop.")
                     .font(.cpBodyMedium)
                     .foregroundStyle(.secondary)
             }

@@ -21,7 +21,7 @@
     <string name="trailer_close">关闭视频</string>
 
     <string name="join_title">开始游戏</string>
-    <string name="join_open_host">在电视或电脑上打开 %1$s。</string>
+    <string name="join_start_game">在电视或电脑上启动游戏。</string>
     <string name="scan_code">扫描二维码</string>
     <string name="enter_code_manually">手动输入代码</string>
 

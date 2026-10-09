@@ -104,7 +104,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import games.couchpad.controller.data.Game
 import games.couchpad.controller.data.ManifestStore
 import games.couchpad.controller.data.JoinOutcome
-import games.couchpad.controller.data.LAUNCHER_HOST
 import games.couchpad.controller.data.AdvertLinger
 import games.couchpad.controller.data.NearbyAdvert
 import games.couchpad.controller.data.NearbyRoom
@@ -140,7 +139,6 @@ import games.couchpad.controller.ui.components.deviceName
 import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.JoinButtons
 import games.couchpad.controller.ui.components.JoiningCover
-import games.couchpad.controller.ui.components.annotatedHostLine
 import games.couchpad.controller.ui.components.MirrorHostSystemBars
 import games.couchpad.controller.ui.components.PlayerChip
 import games.couchpad.controller.ui.components.PosterStatusChip
@@ -526,7 +524,6 @@ fun MainScreen(
           .background(Brush.verticalGradient(0f to fadeBase.copy(alpha = 0f), 1f to fadeBase)),
       )
       JoinCard(
-        host = games.firstOrNull { it.isLive }?.displayHost ?: LAUNCHER_HOST,
         onScan = { requireName(AfterName.Scan) },
         onEnterCode = { requireName(AfterName.EnterCode) },
         modifier = Modifier
@@ -1013,7 +1010,6 @@ private fun GameCard(game: Game, onOpen: (Game) -> Unit) {
 // the thumb. Order and copy per design.
 @Composable
 private fun JoinCard(
-  host: String,
   onScan: () -> Unit,
   onEnterCode: () -> Unit,
   modifier: Modifier = Modifier,
@@ -1032,10 +1028,8 @@ private fun JoinCard(
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Text(stringResource(R.string.join_title), style = MaterialTheme.typography.titleLarge)
-      Text(
-        annotatedHostLine(stringResource(R.string.join_open_host), host, MaterialTheme.colorScheme.primary),
-        style = MaterialTheme.typography.bodyLarge,
-      )
+      // Path-free: on a TV the game is an app, on a laptop a website.
+      Text(stringResource(R.string.join_start_game), style = MaterialTheme.typography.bodyLarge)
       JoinButtons(onScan = onScan, onEnterCode = onEnterCode)
     }
   }

@@ -134,6 +134,70 @@
         }
       }
     },
+    "Start a game on your TV or laptop." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starte ein Spiel auf deinem Fernseher oder Laptop."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicia un juego en tu TV o portátil."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lance un jeu sur ta TV ou ton ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avvia un gioco sulla tua TV o sul laptop."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テレビまたはパソコンでゲームを始めてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV나 노트북에서 게임을 시작하세요."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicie um jogo na sua TV ou computador."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Запусти игру на телевизоре или ноутбуке."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV'nde veya bilgisayarında bir oyun başlat."
+          }
+        },
+        "zh" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在电视或电脑上启动游戏。"
+          }
+        }
+      }
+    },
     "🎲" : {
       "shouldTranslate" : false
     },
@@ -1810,71 +1874,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未找到房间"
-          }
-        }
-      }
-    },
-    "Open %@ on your TV or laptop." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Öffne %@ auf deinem Fernseher oder Laptop."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abre %@ en tu TV o portátil."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ouvre %@ sur ta TV ou ton ordinateur."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apri %@ sulla tua TV o sul laptop."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テレビまたはパソコンで %@ を開いてください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TV나 노트북에서 %@에 접속하세요."
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abra %@ na sua TV ou computador."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Открой %@ на телевизоре или ноутбуке."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TV'nde veya bilgisayarında %@ adresini aç."
-          }
-        },
-        "zh" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在电视或电脑上打开 %@。"
           }
         }
       }

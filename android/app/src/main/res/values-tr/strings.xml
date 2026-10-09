@@ -21,7 +21,7 @@
     <string name="trailer_close">Videoyu kapat</string>
 
     <string name="join_title">Oyna</string>
-    <string name="join_open_host">TV\'nde veya bilgisayarında %1$s adresini aç.</string>
+    <string name="join_start_game">TV\'nde veya bilgisayarında bir oyun başlat.</string>
     <string name="scan_code">Kodu tara</string>
     <string name="enter_code_manually">Kodu elle gir</string>
 

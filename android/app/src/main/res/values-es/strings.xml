@@ -21,7 +21,7 @@
     <string name="trailer_close">Cerrar vídeo</string>
 
     <string name="join_title">Jugar</string>
-    <string name="join_open_host">Abre %1$s en tu TV o portátil.</string>
+    <string name="join_start_game">Inicia un juego en tu TV o portátil.</string>
     <string name="scan_code">Escanear código</string>
     <string name="enter_code_manually">Introducir el código manualmente</string>
 

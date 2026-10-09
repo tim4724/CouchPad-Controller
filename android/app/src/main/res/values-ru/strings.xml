@@ -21,7 +21,7 @@
     <string name="trailer_close">Закрыть видео</string>
 
     <string name="join_title">Играть</string>
-    <string name="join_open_host">Открой %1$s на телевизоре или ноутбуке.</string>
+    <string name="join_start_game">Запусти игру на телевизоре или ноутбуке.</string>
     <string name="scan_code">Сканировать код</string>
     <string name="enter_code_manually">Ввести код вручную</string>
 

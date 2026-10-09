@@ -22,7 +22,7 @@
     <string name="trailer_close">動画を閉じる</string>
 
     <string name="join_title">プレイ</string>
-    <string name="join_open_host">テレビまたはパソコンで %1$s を開いてください。</string>
+    <string name="join_start_game">テレビまたはパソコンでゲームを始めてください。</string>
     <string name="scan_code">コードをスキャン</string>
     <string name="enter_code_manually">コードを手動で入力</string>
 

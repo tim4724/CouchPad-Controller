@@ -22,7 +22,7 @@
     <string name="trailer_close">동영상 닫기</string>
 
     <string name="join_title">플레이</string>
-    <string name="join_open_host">TV나 노트북에서 %1$s에 접속하세요.</string>
+    <string name="join_start_game">TV나 노트북에서 게임을 시작하세요.</string>
     <string name="scan_code">코드 스캔</string>
     <string name="enter_code_manually">코드 직접 입력</string>
 

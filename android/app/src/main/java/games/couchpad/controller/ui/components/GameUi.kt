@@ -44,11 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import games.couchpad.controller.R
 import games.couchpad.controller.data.ArtworkCache
@@ -251,20 +247,6 @@ fun GameIcon(game: Game, tint: Color, modifier: Modifier = Modifier) {
     }
   }
 }
-
-/**
- * The "Open <host> on your TV…" line: the localized template positions the host,
- * and the host gets a semibold accent span wherever the language puts it.
- */
-fun annotatedHostLine(template: String, host: String, hostColor: Color): AnnotatedString =
-  buildAnnotatedString {
-    // A translation missing the placeholder degrades to template-then-host rather
-    // than crashing — the same shape iOS falls back to.
-    val at = template.indexOf("%1\$s")
-    append(if (at >= 0) template.substring(0, at) else template)
-    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = hostColor)) { append(host) }
-    if (at >= 0) append(template.substring(at + 4))
-  }
 
 /** Numbered instruction row. */
 @Composable

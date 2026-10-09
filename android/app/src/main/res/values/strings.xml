@@ -23,8 +23,7 @@
 
     <!-- Join card -->
     <string name="join_title">Play</string>
-    <!-- %1$s is the game host, rendered bold in-app. -->
-    <string name="join_open_host">Open %1$s on your TV or laptop.</string>
+    <string name="join_start_game">Start a game on your TV or laptop.</string>
     <string name="scan_code">Scan code</string>
     <string name="enter_code_manually">Enter code manually</string>
 

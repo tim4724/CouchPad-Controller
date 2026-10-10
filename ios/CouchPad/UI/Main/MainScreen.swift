@@ -410,6 +410,9 @@ struct MainScreen: View {
 
     private func chipButton() -> some View {
         Button {
+            // A second tap can land before the sheet covers the chip; a fresh request
+            // id would make SwiftUI dismiss and re-present the sheet.
+            guard profileRequest == nil else { return }
             profileRequest = ProfileSheetRequest(gated: false, profile: profile)
         } label: {
             HStack(spacing: 6) {
@@ -462,6 +465,7 @@ struct MainScreen: View {
     @MainActor
     private func requireName(_ action: AfterName) {
         if !profile.isSet {
+            guard profileRequest == nil else { return }  // same double-tap guard as the chip
             afterName = action
             profileRequest = ProfileSheetRequest(gated: true, profile: profile)
         } else {

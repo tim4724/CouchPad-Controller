@@ -20,11 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -32,8 +29,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * House-style modal sheet: opens fully expanded, no drag handle (its tap ripple
- * reads as broken), and mirrors the host window's bar state so a sheet over
- * the in-game host never brings the hidden nav bar back.
+ * reads as broken).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,7 +45,6 @@ fun AppSheet(
     // the sheet edge vanished at night. High keeps it legible.
     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
   ) {
-    MirrorHostSystemBars()
     // Scrolls only when the content outgrows the screen (small displays,
     // large font scale) — ModalBottomSheet clips a plain Column otherwise.
     Column(Modifier.verticalScroll(rememberScrollState()), content = content)
@@ -90,30 +85,6 @@ fun gestureNavEnabled(context: Context): Boolean {
   val res = context.resources
   val id = res.getIdentifier("config_navBarInteractionMode", "integer", "android")
   return id != 0 && res.getInteger(id) == 2
-}
-
-/**
- * A sheet/dialog is its OWN window: opened over a host with hidden bars, it would
- * bring them back. Mirror the host's state per bar type — in-game the hidden set is
- * the nav bar (unless a 3-button player's page armed system back) plus, in
- * landscape, the status bar,
- * so an all-or-nothing probe would rarely match. Probes the live insets on every call,
- * so it tracks both mid-game. No-op when the host shows its bars normally, so every
- * overlay can call this unconditionally.
- */
-@Composable
-fun MirrorHostSystemBars() {
-  val view = LocalView.current
-  val context = LocalContext.current
-  SideEffect {
-    val hidden = hostHiddenBars(context)
-    if (hidden == 0) return@SideEffect
-    val window = (view.parent as? DialogWindowProvider)?.window ?: return@SideEffect
-    WindowCompat.getInsetsController(window, view).run {
-      systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-      hide(hidden)
-    }
-  }
 }
 
 /** The bar types (status, nav) the activity's window currently hides; 0 when none. */

@@ -137,10 +137,9 @@ final class StoreScreenshotTests: XCTestCase {
         if landscape { XCUIDevice.shared.orientation = .landscapeLeft }
         app.launchArguments = arguments
         app.launch()
-        // The game host's Leave control, in its portrait bar or landscape rail. The cover
-        // may already have faded by the time launch() returns, so only require its
-        // absence, not its appearance.
-        XCTAssertTrue(app.buttons["Leave game"].firstMatch.waitForExistence(timeout: 15))
+        // The game host's web view. The cover may already have faded by the time launch()
+        // returns, so only require its absence, not its appearance.
+        XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 15))
         if landscape {
             let window = app.windows.firstMatch
             let turned = NSPredicate { _, _ in window.frame.width > window.frame.height }

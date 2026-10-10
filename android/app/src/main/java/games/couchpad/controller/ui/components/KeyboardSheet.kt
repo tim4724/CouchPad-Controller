@@ -157,8 +157,6 @@ fun KeyboardSheet(
           },
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         color = color,
-        // Explicit: contentColorFor() only knows scheme colors, and on a game's tint
-        // would fall back to the caller's — the dark game host's light text.
         contentColor = MaterialTheme.colorScheme.onSurface,
       ) {
         // Ignoring visibility: the bar a game hides is hidden on this window too, but a

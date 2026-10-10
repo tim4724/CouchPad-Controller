@@ -2,11 +2,10 @@ package games.couchpad.controller.data
 
 import android.content.Context
 import androidx.core.content.edit
-import androidx.core.net.toUri
 
 /**
- * The player's shared identity — just a name, entered once and handed to every game.
- * Color is deliberately NOT part of the native identity: each game owns its own color
+ * The player's shared identity — just a name, entered once and handed to every game
+ * (CONTRACT.md §1). Color is deliberately NOT part of the native identity: each game owns its own color
  * (it resolves slot-conflicts), so the launcher stays out of it.
  */
 data class Profile(val name: String = "") {
@@ -19,7 +18,7 @@ data class Profile(val name: String = "") {
  * game instead of hitting a name wall — they can still rename or reroll (the 🎲 in
  * ProfileSheet). English-only by design (v1): gamer tags read as English across all
  * our locales, and it sidesteps a per-culture review of 500+ combos. Every word is
- * ≤7 chars so "Adjective Noun" always fits Contract v1's 16-char cpName. Keep this
+ * ≤7 chars so "Adjective Noun" always fits the 16-char name limit. Keep this
  * list in sync with the iOS FunnyName in Models.swift.
  */
 object FunnyName {
@@ -61,19 +60,4 @@ object ProfileStore {
       putString(KEY_NAME, profile.name)
     }
   }
-}
-
-/**
- * Launcher→game identity contract (§1): append the player's name to the join URL so the
- * game can prefill it and skip its own name screen. `cpName` is also the shell gate —
- * nothing else sends it — so a no-name profile lands the game in its plain-browser
- * behavior, which is the right answer when the launcher has no identity to lend it.
- * Live changes are pushed separately via the window.CouchPad.setName() JS bridge (see
- * GameHostScreen). Preserves any existing ?claim and #instance.
- */
-fun withProfile(joinUrl: String, profile: Profile): String {
-  if (!profile.isSet) return joinUrl
-  return joinUrl.toUri().buildUpon()
-    .appendQueryParameter("cpName", profile.name)
-    .build().toString()
 }

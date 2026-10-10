@@ -118,8 +118,8 @@ final class RootHostingController: UIHostingController<RootView> {
 
 // MARK: - Chrome state
 
-/// Status-bar style and interface orientation for the game host (its chrome can be
-/// game-colored, and its page can ask for landscape). Home indicator and edge-gesture
+/// Status-bar style and interface orientation for the game host (the page's color scheme
+/// sets the one, the page's request the other). Home indicator and edge-gesture
 /// deferral are NOT here — those use SwiftUI's view-scoped persistentSystemOverlays/
 /// defersSystemGestures on GameHostScreen, which cannot leak past that view's lifetime.
 /// Orientation can't work that way: it is a window-scene property, and the reset must

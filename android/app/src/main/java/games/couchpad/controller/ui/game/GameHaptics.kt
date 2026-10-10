@@ -14,7 +14,7 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 /**
- * Plays the named primitives the page hands to `CouchPadHost.haptic()` (CONTRACT.md §13).
+ * Plays the named primitives the page hands to `CouchPadHost.haptic()` (CONTRACT.md §12).
  * Android 12+ plays each as the device's own composition primitive; an older phone, or
  * one that lacks that primitive, gets a plain pulse instead, so a game never checks
  * support. Android 11 has the composition API too, but its support check answers yes

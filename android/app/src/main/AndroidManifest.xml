@@ -42,8 +42,8 @@
                 LocalConfiguration; bar icon contrast is re-applied in onConfigurationChanged.
               - orientation + screenSize/screenLayout/smallestScreenSize: the §10 rotation
                 itself. These travel together — a rotation reports all four, so handling
-                only `orientation` still recreates. Compose re-lays out and the game host
-                re-publishes the safe zone off the new insets. -->
+                only `orientation` still recreates. Compose re-lays out and the WebView
+                receives the new insets. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

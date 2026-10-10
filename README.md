@@ -5,12 +5,12 @@ TV/computer is the display; phones are the controllers: scan the room code the
 display shows and your phone becomes the gamepad.
 
 The launcher (home screen) is fully native per platform. Each game's
-controller is a **remote web page** loaded in a hardened top-level web view
-under launcher-owned chrome — games ship controller changes without an app
-update.
+controller is a **remote web page** loaded full-screen in a hardened top-level
+web view with no launcher chrome over it — games ship controller changes without
+an app update.
 
-[CONTRACT.md](CONTRACT.md) is the launcher⇄game contract: join-URL identity
-params, live rename, session end, theming hints, the safe zone, and the
+[CONTRACT.md](CONTRACT.md) is the launcher⇄game contract: the player name
+and its rename sheet, leaving, the status-bar color scheme, the safe area, and the
 `_couchpad._tcp` room advertisement that puts a one-tap join card on home with no
 scan at all: a **native** display app (tvOS / Android TV) announces its room code,
 and a controller already in a room relays it so browser-hosted rooms are findable

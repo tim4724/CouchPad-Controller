@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two native **launcher** apps (Android/Kotlin+Compose, iOS/Swift+SwiftUI) that are the shell
 for the CouchPad party-game suite. Each game's controller is a remote web page loaded in a
-hardened top-level web view under launcher chrome. Read `README.md` for layout and
+hardened top-level web view, full-screen with no launcher chrome over it. Read `README.md` for layout and
 `CONTRACT.md` for the launcher⇄game interface — don't restate them here.
 
 ## Build & run
@@ -57,7 +57,7 @@ always needs the mirrored change on the other. Both implement `CONTRACT.md` iden
 
 `CONTRACT.md` carries no wire version — every touchpoint is feature-detected, and the
 same deployed controller must keep working in a plain browser, so all shell behavior is
-gated on the presence of `cpName`. The relay-declared join target (`url`) is UNTRUSTED and
+gated on the presence of `window.CouchPadHost`. The relay-declared join target (`url`) is UNTRUSTED and
 re-validated against the manifest host allow-list before loading, and it is the only thing
 that resolves an origin-less input — the launcher never guesses an owner for a code the
 directory can't place. A §8 mDNS advertisement carries only a room code, resolved through

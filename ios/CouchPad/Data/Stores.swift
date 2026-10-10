@@ -95,9 +95,8 @@ enum ProfileStore {
 // MARK: - RecentRoom
 
 /// The room this phone is in or just left, with everything the home rejoin card needs.
-/// `joinUrl` omits cpName — re-wrapped with the current name at rejoin. `title` is
-/// captured from the controller page mid-session, so it's nil until then; the card's
-/// glyph comes from the manifest `icon`, not the page. `platform` is which box the room
+/// `title` is captured from the controller page mid-session, so it's nil until then; the
+/// card's glyph comes from the manifest `icon`, not the page. `platform` is which box the room
 /// is on, off the first URL that declared it — the join URL at `RecentRoomStore.remember`,
 /// else the relay's template at `RecentRoomStore.putPlatform`.
 struct RecentRoom {
@@ -154,20 +153,16 @@ enum RecentRoomStore {
         platform = templateUrl.flatMap { devicePlatform(fromUrl: $0) }
     }
 
-    /// Sanitizes `raw` (trim, collapse whitespace, cap length), stores it as the
-    /// active room's title, and returns the cleaned value so callers can display the
-    /// same text. Nil when there's no active room or nothing survives cleaning.
-    @discardableResult
-    static func putTitle(_ raw: String) -> String? {
+    /// Sanitizes `raw` (trim, collapse whitespace, cap length) and stores it as the
+    /// active room's title — unless there's no active room or nothing survives cleaning.
+    static func putTitle(_ raw: String) {
         let clean = raw
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .prefix(maxTitleLength)
         lock.lock(); defer { lock.unlock() }
-        guard game != nil, !clean.isEmpty else { return nil }
-        let cleaned = String(clean)
-        title = cleaned
-        return cleaned
+        guard game != nil, !clean.isEmpty else { return }
+        title = String(clean)
     }
 
     /// Called by the game host for as long as it is on screen (see `inRoom`).
@@ -208,28 +203,4 @@ enum RecentRoomStore {
         platform = nil
         savedAt = .distantPast
     }
-}
-
-// MARK: - Profile URL wrapping (contract §1)
-
-/// If the profile is set, append cpName=<androidUriEncode(name)> to the query, preserving
-/// any existing query (append with & or ?) and keeping the #fragment at the end. Otherwise
-/// the joinUrl is returned unchanged — cpName is also the shell gate, so a no-name profile
-/// deliberately lands the game in its plain-browser behavior. Pure string manipulation —
-/// no URL round-tripping.
-func withProfile(_ joinUrl: String, _ profile: Profile) -> String {
-    guard profile.isSet else { return joinUrl }
-
-    let base: String
-    let fragment: String
-    if let hashIndex = joinUrl.firstIndex(of: "#") {
-        base = String(joinUrl[..<hashIndex])
-        fragment = String(joinUrl[hashIndex...])
-    } else {
-        base = joinUrl
-        fragment = ""
-    }
-
-    let separator = base.contains("?") ? "&" : "?"
-    return base + separator + "cpName=" + androidUriEncode(profile.name) + fragment
 }

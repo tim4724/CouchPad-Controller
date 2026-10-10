@@ -43,10 +43,25 @@ struct PlayerChip: View {
     }
 }
 
+// MARK: - ProminentGlassButton
+
+/// A prominent action on tinted glass where the OS has it (iOS 26), matching ChromeGlass
+/// controls beside it; the filled button before. A modifier rather than an inline
+/// `if #available` so the SDK-17 build compiles.
+struct ProminentGlassButton: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.buttonStyle(.glassProminent)
+        } else {
+            content.buttonStyle(.borderedProminent)
+        }
+    }
+}
+
 // MARK: - ChromeGlass
 
-/// Liquid Glass behind the in-game bar's controls on iOS 26, matching the home toolbar's
-/// glass pills. Earlier releases have no glass in their toolbars, so they get `fallback`.
+/// Liquid Glass behind chrome controls on iOS 26, matching the home toolbar's glass pills.
+/// Earlier releases have no glass in their toolbars, so they get `fallback`.
 struct ChromeGlass<S: Shape>: ViewModifier {
     let shape: S
     var fallback: Color = .clear
@@ -83,9 +98,14 @@ struct RetryCover: View {
                     .foregroundStyle(foreground)
                     .multilineTextAlignment(.center)
                 Button(action: onRetry) {
-                    Text(String(localized: "Try again")).font(.cpTitleMedium)
+                    // The label must pair with the fill: the system's default white is
+                    // invisible on the dark palette's near-white primary.
+                    Text(String(localized: "Try again"))
+                        .font(.cpTitleMedium)
+                        .foregroundStyle(palette.onPrimary)
                 }
-                .buttonStyle(.borderedProminent)
+                .modifier(ProminentGlassButton())
+                .controlSize(.large)
                 .tint(palette.primary)
             }
             .padding(.horizontal, 32)
@@ -104,9 +124,6 @@ struct JoiningCover: View {
     let message: String
     let background: Color
     let foreground: Color
-    /// The game's accent, once the page has sent its §4 theme metas. Nil on home, which
-    /// has no game yet.
-    var tint: Color? = nil
 
     var body: some View {
         background
@@ -114,7 +131,6 @@ struct JoiningCover: View {
             .overlay {
                 VStack(spacing: 16) {
                     ProgressView()
-                        .tint(tint)
                     Text(message)
                         .font(.cpBodyMedium)
                         .foregroundStyle(foreground)

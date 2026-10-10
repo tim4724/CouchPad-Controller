@@ -1,14 +1,14 @@
 import CoreHaptics
 
-/// CONTRACT.md §13's named primitives — Android's composition primitives, under their
+/// CONTRACT.md §12's named primitives — Android's composition primitives, under their
 /// constant names.
 enum HapticPrimitive: String {
     case click, tick, thud, spin
     case lowTick = "low_tick", quickRise = "quick_rise", slowRise = "slow_rise", quickFall = "quick_fall"
 }
 
-/// Plays the patterns the page hands to `navigator.vibrate()` (CONTRACT.md §12) and
-/// the primitives it hands to `CouchPadHost.haptic()` (§13). WebKit implements no
+/// Plays the patterns the page hands to `navigator.vibrate()` (CONTRACT.md §11) and
+/// the primitives it hands to `CouchPadHost.haptic()` (§12). WebKit implements no
 /// Vibration API, so the bridge shim polyfills it and forwards the pattern here; Core
 /// Haptics is the only iOS API that takes an arbitrary duration or shape rather than a
 /// fixed system feel.

@@ -1,12 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// Hosts a game's remote controller under a launcher-owned "Leave" bar. In-game
-/// chrome is always dark, like a video player — the games are dark and a bright
-/// bar above them would be jarring. The game surface spans the full physical
-/// screen; the chrome floats above it and the page is told where the safe zone
-/// is (CSS vars + synthetic safe-area). Leaving is explicit: Leave is the only exit
-/// unless the page arms the system back gesture (CONTRACT.md §9).
+/// Hosts a game's remote controller in a web view spanning the full physical screen,
+/// with no launcher chrome over it: the page draws its own close (§3), and only its rename
+/// button opens the launcher's name sheet (CONTRACT.md §2). The page reads the real safe
+/// area through env(safe-area-inset-*). The launcher's own surfaces here (join cover,
+/// retry, the blank page behind them) follow the system's light/dark mode, like home: the
+/// launcher can't know a game's colors before its page has loaded, and not every game is
+/// in the manifest. Leaving is explicit: the page's close is the only exit — iOS has no
+/// system back (CONTRACT.md §9).
 struct GameHostScreen: View {
     let joinUrl: String
     let title: String
@@ -24,11 +26,14 @@ struct GameHostScreen: View {
         self.onGameEnd = onGameEnd
     }
 
-    @State private var profile: Profile = ProfileStore.load()
-    // Item-based so the sheet always receives the CURRENT profile: @State read
-    // inside a sheet content closure is not dependency-tracked and can be stale.
-    @State private var renameRequest: RenameRequest? = nil
     @State private var loading = true
+    // The page has painted its first frame. The join cover lifts on that — unless the
+    // page asked for landscape and the window hasn't turned yet: the turn takes a few
+    // hundred ms, and lifting earlier shows the page portrait-shaped mid-turn (a
+    // landscape-only game's "turn your phone" overlay, say).
+    @State private var painted = false
+    @State private var wantsLandscape = false
+    @State private var isLandscape = false
     // First-join local network gate: games open a direct WebRTC path to their display
     // ("fastlane"), and iOS blocks LAN traffic until Local Network is granted. The
     // prompt fires here, with the page load held until a verdict — a grant landing
@@ -41,116 +46,45 @@ struct GameHostScreen: View {
     // in-place retry overlay. Retry bumps the token GameWebView observes to reload.
     @State private var failed = false
     @State private var reloadToken = 0
-    @State private var pageTheme = PageTheme()
-    // The page's own <title> supersedes the manifest name in the Leave bar once the
-    // controller reports one, so games not (yet) in the bundled manifest still show a
-    // real name instead of the generic "CouchPad" fallback. Nil until the page
-    // reports; the manifest name covers the join cover and any title-less page.
-    @State private var pageTitle: String? = nil
-    @State private var chromeHeight: CGFloat = 0
-    @State private var chromeWidth: CGFloat = 0
-    @State private var chipRight: CGFloat = 0
-    @State private var cutout = EdgeInsets()
-    // Safe-area-bounded size from cutoutReader — orientation truth for the chrome.
-    @State private var hostSize: CGSize = .zero
+    // Is the page dark, per its color-scheme meta (CONTRACT.md §4)? Nil until the
+    // launcher's observer reports.
+    @State private var pageDark: Bool? = nil
+    // The join has been loading longer than a normal one takes (see the cover's close).
+    @State private var slowLoad = false
+    @State private var profile = ProfileStore.load()
+    // Item-based so the sheet always receives the CURRENT profile: @State read inside a
+    // sheet content closure is not dependency-tracked and can be stale.
+    @State private var renameRequest: RenameRequest? = nil
+    // The request whose sheet is on screen, from presenting until it has fully gone. The
+    // page can't be tapped while a sheet is up, so a new request arrives only while one
+    // is sliding out — it waits in queuedRenames and opens once the old sheet is gone.
+    @State private var shownRename: RenameRequest? = nil
+    @State private var queuedRenames: [RenameRequest] = []
+    // The last request whose editName() Promise was answered, so each is answered once
+    // (Save answers it before the dismissal does). Answers go out in request order —
+    // the page matches them to its Promises by that order.
+    @State private var settledRename: UUID? = nil
+    @State private var nameResult: NameResult? = nil
 
-    @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.colorScheme) private var systemScheme
+    private var palette: CPPalette { systemScheme == .dark ? .dark : .light }
 
-    private var isLandscape: Bool { hostSize.width > hostSize.height }
-
-    // MARK: - Derived
+    private func sheetPalette(_ colors: SheetColors) -> CPPalette {
+        let base: CPPalette = pageDark == false ? .light : .dark
+        return colors.accent.map { base.withAccent($0) } ?? base
+    }
 
     private var allowed: [String] {
         (allowedHosts + [CP.launcherHost]).map { $0.lowercased() }
     }
 
-    /// The page's own title once reported, else the manifest name.
-    private var displayTitle: String { pageTitle ?? title }
-
-    /// A game-supplied accent flows through `primary`, so every launcher accent
-    /// over the game (chip, spinner, rename sheet) follows.
-    private var hostPalette: CPPalette {
-        pageTheme.accent.map { CPPalette.dark.withAccent($0) } ?? CPPalette.dark
-    }
-
-    /// A game-supplied theme-color becomes the chrome's scrim tint.
-    private var barTarget: Color {
-        pageTheme.bar ?? hostPalette.surfaceContainer
-    }
-
-    /// Non-nil only when the game supplied its own theme-color; its content color
-    /// is luminance-picked since the page sends no pair.
-    private var barContent: Color? {
-        pageTheme.bar.map { contentColorOn($0) }
-    }
-
-    /// The game's own theme-color (the page chrome color) becomes the rename sheet's
-    /// surface, so the sheet reads as part of the game rather than the neutral app
-    /// grey — in whichever palette keeps text legible on it: dark for a dark color
-    /// (white ≥ 4.5:1 needs luminance < ~0.18), light otherwise, so a light game
-    /// (Tiny Track's cream) gets a light sheet.
-    private var lightSheet: Bool {
-        pageTheme.bar.map { relativeLuminance($0) >= 0.18 } ?? false
-    }
-
-    private var sheetPalette: CPPalette {
-        let base = lightSheet ? CPPalette.light : CPPalette.dark
-        return pageTheme.accent.map { base.withAccent($0) } ?? base
-    }
-
-    /// The window's safe-area inset on each PHYSICAL side — `cutout` is semantic
-    /// (leading/trailing), the published safe zone (§5) is left/right. UIKit reports a
-    /// landscape notch on both sides, so those two come out equal — the same value
-    /// Safari gives the page.
-    private var cutoutLeft: CGFloat { layoutDirection == .leftToRight ? cutout.leading : cutout.trailing }
-    private var cutoutRight: CGFloat { layoutDirection == .leftToRight ? cutout.trailing : cutout.leading }
-
-    /// The strip landscape reserves on the rail's (physical right) side: that side's
-    /// cutout, or the icon rail plus a hairline each side, whichever is wider. Published
-    /// as the right safe-zone side (§5) AND used to place the rail, which is what makes
-    /// the rail concentric with the band the game is told to leave — measuring the rail
-    /// and publishing THAT instead can only ever produce a strip the rail sits flush
-    /// against on its inner edge.
-    private var landscapeStrip: CGFloat {
-        max(cutoutRight, chromeButtonSize + 2 * railGap)
-    }
-
-    /// Safe-zone geometry (points, ints). In PORTRAIT the top is the chrome's full
-    /// extent (inset + Leave bar) and the sides carry the chip's gutter. In
-    /// LANDSCAPE there is no bar — the chrome collapses to the icon rail in the
-    /// right strip, the top shrinks to the bare cutout (the game gets the full
-    /// height), and the rail's side carries it instead. Each side is published on its
-    /// own (§5). Bottom is the bare cutout (no chrome there).
-    private var computedSafeZone: SafeZone {
-        // Per side (§5). Landscape: the rail's strip on the right, the bare cutout on
-        // the left. Portrait: the chip's own margin (measured off the chrome, which is
-        // padded by the right cutout) on top of each side's cutout, so a top row lines
-        // up with the chip.
-        let safeTop = isLandscape ? cutout.top : chromeHeight
-        let chipMargin = chromeWidth > 0 ? max(chromeWidth - chipRight - cutoutRight, 0) : 0
-        let left = isLandscape ? cutoutLeft : chipMargin + cutoutLeft
-        let right = isLandscape ? landscapeStrip : chipMargin + cutoutRight
-        let safeBottom = cutout.bottom
-        // Ceil, not round, matching Android: an inset that lands mid-point must cover
-        // the obstruction, never stop short — and it keeps --cp-safe-* from losing to
-        // the unrounded env() values the synthetic insets publish.
-        return SafeZone(
-            top: Int(safeTop.rounded(.up)),
-            left: Int(left.rounded(.up)),
-            right: Int(right.rounded(.up)),
-            bottom: Int(safeBottom.rounded(.up))
-        )
-    }
-
     // MARK: - Body
 
     var body: some View {
-        ZStack(alignment: .top) {
-            hostPalette.surface
+        ZStack(alignment: .topLeading) {
+            palette.surface
                 .ignoresSafeArea()
 
-            // The game surface spans the FULL physical screen — the chrome floats
-            // above it, and the page keeps its interactive UI in the safe zone.
             // While the gate holds, the join cover is the whole screen — the web view
             // (and with it the load) only comes into existence once the dialog is
             // answered.
@@ -158,20 +92,24 @@ struct GameHostScreen: View {
                 GameWebView(
                     joinUrl: joinUrl,
                     allowedDomains: allowed,
-                    playerName: profile.name,
-                    safeZone: computedSafeZone,
-                    onLoaded: { withAnimation(.easeOut(duration: 0.3)) { loading = false } },
+                    onLoaded: { painted = true },
                     onGameEnd: onGameEnd,
                     onLeave: onLeave,
+                    onEditName: { requestRename(RenameRequest(profile: profile, colors: $0)) },
+                    playerName: profile.name,
+                    nameResult: nameResult,
                     // The page's requested orientation (CONTRACT.md §10). Goes straight to
                     // ChromeState — it drives the window scene, not this view's layout, and
                     // the route-driven reset there is what guarantees home is portrait again.
-                    onLandscape: { ChromeState.shared.orientation = $0 ? .landscape : .portrait },
+                    onLandscape: {
+                        wantsLandscape = $0
+                        ChromeState.shared.orientation = $0 ? .landscape : .portrait
+                    },
                     onRendererGone: reload,
                     failed: $failed,
                     reloadToken: reloadToken,
-                    onThemeChanged: { pageTheme = $0 },
-                    onTitleChanged: { pageTitle = $0 }
+                    onSchemeChanged: { pageDark = $0 },
+                    onNavigationStart: { pageDark = nil }
                 )
                 .ignoresSafeArea()
             }
@@ -180,61 +118,97 @@ struct GameHostScreen: View {
             // (Not while failed — the retry cover replaces it, like Android's
             // loading=false on failure.)
             if loading && !failed {
-                loadingCover
-                    .zIndex(1)
-                    .transition(.opacity)
+                JoiningCover(
+                    message: String(localized: "Joining \(title)…"),
+                    background: palette.surface,
+                    foreground: palette.onSurfaceVariant
+                )
+                .zIndex(1)
+                .transition(.opacity)
             }
 
             // Load failed: opaque cover offering retry-in-place (so a transient blip
-            // doesn't cost a re-scan) or Leave. Above the join cover, below the chrome.
+            // doesn't cost a re-scan).
             if failed {
-                retryCover
+                RetryCover(background: palette.surface, foreground: palette.onSurface, onRetry: reload)
                     .zIndex(1)
             }
 
-            chrome
+            // Until a page is up there is no page close to tap, so the launcher offers
+            // its own: a stalled join or a failed load must never trap the player. A normal
+            // join is over in a second or two, so on the join cover it only fades in once
+            // loading runs long; the retry cover has it at once.
+            if failed || (loading && slowLoad) {
+                Button(action: onLeave) {
+                    // Glyph and glass as the name sheet's close.
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(palette.onSurface)
+                        .frame(width: 44, height: 44)
+                        .modifier(ChromeGlass(shape: Circle(), fallback: Color(uiColor: .tertiarySystemFill)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Leave game")
+                .padding(.leading, 16)
                 .zIndex(2)
+                .transition(.opacity)
+            }
         }
-        .background(cutoutReader)
         // The game surface never resizes for the keyboard (the page sees its own
         // field's only through visualViewport).
         .ignoresSafeArea(.keyboard)
         // No back button and no interactive pop: the only way out of a live match is
-        // the Leave bar, or the §9 back gesture the page armed — both routed
-        // explicitly, never through NavigationStack's own history.
+        // the page's close, routed explicitly, never through NavigationStack's history.
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         // Immersive chrome, scoped to THIS view so it cannot leak onto home:
         // home indicator dims when idle, edge swipes need a second confirm.
         .persistentSystemOverlays(.hidden)
         .defersSystemGestures(on: .all)
-        .appSheet(item: $renameRequest, surfaceTint: pageTheme.bar) { request in
+        // The launcher's own name sheet (CONTRACT.md §2), in the page's scheme,
+        // theme-color and accent-color so it reads as part of the game; it overrides the
+        // host's system-mode palette below for itself alone.
+        .appSheet(item: $renameRequest, onDismiss: {
+            if let shown = shownRename { settleRename(shown, name: nil) }
+            shownRename = nil
+            if !queuedRenames.isEmpty {
+                requestRename(queuedRenames.removeFirst())
+            }
+        }, surfaceTint: renameRequest?.colors.surface) { request in
             ProfileSheet(initial: request.profile, onSave: { saved in
                 ProfileStore.save(saved)
                 profile = saved
+                settleRename(request, name: saved.name)
                 renameRequest = nil
-                // Live injection happens via GameWebView.playerName → updateUIView.
             })
-            // Overrides the forced-dark host below for the sheet alone.
-            .environment(\.cpPalette, sheetPalette)
-            .environment(\.colorScheme, lightSheet ? .light : .dark)
-            .tint(sheetPalette.primary)
+            .environment(\.cpPalette, sheetPalette(request.colors))
+            .environment(\.colorScheme, pageDark == false ? .light : .dark)
+            .tint(sheetPalette(request.colors).primary)
         }
-        // Forced dark for the whole subtree (the rename sheet sets its own above). The
-        // tint must move with the palette: cpThemed() sets it once from the SYSTEM
-        // scheme, so without this a system-light device would fill prominent controls
-        // over the (dark) game with the light palette's near-black primary under the
-        // dark palette's near-black onPrimary label (black-on-black).
-        .environment(\.cpPalette, hostPalette)
-        .environment(\.colorScheme, .dark)
-        .tint(hostPalette.primary)
-        // Status-bar icons contrast against the (possibly game-colored) bar strip.
-        // Entering/leaving game chrome (indicator, gestures, idle timer) is driven
-        // by the ROUTER, not view lifecycle — onAppear/onDisappear proved unreliable
-        // across NavigationStack push/pop, leaking hidden-chrome state onto home.
-        .onChange(of: barTarget, initial: true) { _, target in
-            ChromeState.shared.statusBarStyle =
-                relativeLuminance(target) > 0.5 ? .darkContent : .lightContent
+        .environment(\.cpPalette, palette)
+        .tint(palette.primary)
+        .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isLandscape = $0 }
+        .onChange(of: loading && painted && (!wantsLandscape || isLandscape)) { _, ready in
+            if ready { withAnimation(.easeOut(duration: 0.3)) { loading = false } }
+        }
+        .task(id: loading) {
+            slowLoad = false
+            guard loading else { return }
+            // Past a normal join (a second or two), well short of the web view's own
+            // timeout (a minute).
+            try? await Task.sleep(for: .seconds(3))
+            if !Task.isCancelled { withAnimation { slowLoad = true } }
+        }
+        // Status-bar icons contrast against the page, or against the join or retry cover
+        // while one is up — those follow the system mode, and a server's error page under
+        // the retry cover declares no color-scheme of its own. The page decides once it
+        // shows. Entering/leaving game chrome (indicator, gestures, idle timer) is driven by
+        // the ROUTER, not view lifecycle — onAppear/onDisappear proved unreliable across
+        // NavigationStack push/pop, leaking hidden-chrome state onto home.
+        .onChange(of: (loading || failed) ? systemScheme == .dark : (pageDark ?? (systemScheme == .dark)),
+                  initial: true) { _, dark in
+            ChromeState.shared.statusBarStyle = dark ? .lightContent : .darkContent
         }
         .task {
             guard !lanGateOpen else { return }
@@ -269,35 +243,20 @@ struct GameHostScreen: View {
         }
     }
 
-    // MARK: - Pieces
-
-    /// Captures the window's real safe-area insets (cutout/home indicator) —
-    /// attached where the safe area is still intact.
-    private var cutoutReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear {
-                    cutout = proxy.safeAreaInsets
-                    hostSize = proxy.size
-                }
-                .onChange(of: proxy.safeAreaInsets) { _, newValue in cutout = newValue }
-                .onChange(of: proxy.size) { _, newValue in hostSize = newValue }
+    private func requestRename(_ request: RenameRequest) {
+        if shownRename == nil {
+            shownRename = request
+            renameRequest = request
+        } else {
+            queuedRenames.append(request)
         }
     }
 
-    private var loadingCover: some View {
-        JoiningCover(
-            message: String(localized: "Joining \(displayTitle)…"),
-            background: hostPalette.surface,
-            foreground: hostPalette.onSurfaceVariant,
-            // Adopts the accent if the theme beat page-finish.
-            tint: hostPalette.primary
-        )
-    }
-
-    // No Leave button here — the Leave bar's X already exits.
-    private var retryCover: some View {
-        RetryCover(background: hostPalette.surface, foreground: hostPalette.onSurface, onRetry: reload)
+    /// Answers the page's editName() for `request`: the saved name, or nil when dismissed.
+    private func settleRename(_ request: RenameRequest, name: String?) {
+        guard settledRename != request.id else { return }
+        settledRename = request.id
+        nameResult = NameResult(name: name)
     }
 
     /// Load the controller again in place (no re-scan): clear the error, bring the
@@ -305,184 +264,19 @@ struct GameHostScreen: View {
     private func reload() {
         failed = false
         loading = true
+        painted = false
         reloadToken += 1
-    }
-
-    /// The floating chrome. Landscape: no bar at all — the game keeps the full
-    /// height, and the two session controls stack in the strip the right side inset
-    /// (§5) reserves anyway.
-    @ViewBuilder
-    private var chrome: some View {
-        if isLandscape { landscapeChrome } else { portraitChrome }
-    }
-
-    /// Landscape chrome: Close and the rename affordance at the top-RIGHT corner —
-    /// physical right, matching Android's camera-driven side pick rather than the
-    /// reading direction. The iPhone's landscape cutout (notch/island) sits
-    /// mid-edge, so that corner is always free — none of Android's dodge-or-flip
-    /// geometry for corner cameras is needed here.
-    private var landscapeChrome: some View {
-        VStack(spacing: railGap) {
-            railButton("xmark", label: "Leave game", action: onLeave)
-            railButton(
-                "person.fill",
-                // Icon-only rename affordance; announces the name it edits, like the chip.
-                label: profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? String(localized: "Set name") : profile.name,
-                action: { renameRequest = RenameRequest(profile: profile) }
-            )
-        }
-        // Half the slack outside, half inside: the strip is published as the safe-zone
-        // side, so this is the same gap on both sides of the buttons. Any asymmetry the
-        // player still sees is the page's own margin on top of `--cp-safe-*`, which the
-        // launcher can't see and mustn't guess at.
-        // The layoutDirection ternary here and on the alignment below KEEPS the rail
-        // physically right: SwiftUI mirrors `.trailing`/`.topTrailing` under RTL, so
-        // asking for the physical side means asking for the opposite semantic one.
-        .padding(
-            layoutDirection == .leftToRight ? .trailing : .leading,
-            (landscapeStrip - chromeButtonSize) / 2
-        )
-        .padding(.top, cutout.top + railGap)
-        .frame(
-            maxWidth: .infinity, maxHeight: .infinity,
-            alignment: layoutDirection == .leftToRight ? .topTrailing : .topLeading
-        )
-        // Our explicit padding is the only inset — matching the portrait chrome.
-        .ignoresSafeArea()
-    }
-
-    private func railButton(_ systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: chromeIconSize, weight: .medium))
-                .foregroundStyle(barContent ?? hostPalette.onSurfaceVariant)
-                .frame(width: chromeButtonSize, height: chromeButtonSize)
-                .background(barTarget.opacity(0.55), in: Circle())
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
-
-    /// Portrait chrome: status-bar strip + Leave bar over a fading scrim of the
-    /// bar color. Padded INSIDE the gradient by the top inset + horizontal cutouts
-    /// only, so the gradient paints under the status bar and never moves for the
-    /// keyboard.
-    private var portraitChrome: some View {
-        VStack(spacing: 0) {
-            LeaveBar(
-                title: displayTitle,
-                playerName: profile.name,
-                barContent: barContent,
-                onLeave: onLeave,
-                onEditName: { renameRequest = RenameRequest(profile: profile) },
-                onChipRight: { chipRight = $0 }
-            )
-            // Per side, matching the safe zone we publish (§5), so the chrome's own
-            // controls sit on the box the page is told to stay inside.
-            .padding(EdgeInsets(top: cutout.top, leading: cutout.leading, bottom: 0, trailing: cutout.trailing))
-        }
-        .frame(maxWidth: .infinity)
-        .background(
-            LinearGradient(
-                stops: [
-                    .init(color: barTarget.opacity(0.90), location: 0.0),
-                    .init(color: barTarget.opacity(0.50), location: 0.65),
-                    .init(color: barTarget.opacity(0.0), location: 1.0),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .animation(.easeInOut(duration: 0.3), value: barTarget)
-        .onGeometryChange(for: CGSize.self) { proxy in
-            proxy.frame(in: .global).size
-        } action: { size in
-            chromeHeight = size.height
-            chromeWidth = size.width
-        }
-        // Horizontal too, not just top: SwiftUI would otherwise inset this view by the
-        // safe area AND we add `cutout` padding above it, double-counting the notch —
-        // invisible in portrait (0 there), but in landscape it pushed the X and the name
-        // chip twice the cutout off each edge. Our explicit padding is the only inset.
-        .ignoresSafeArea(edges: [.top, .horizontal])
     }
 }
 
-/// The LANDSCAPE rail's touch targets (Leave, rename), matching Android's. Above the 44pt
-/// HIG floor on purpose: the rail floats in a screen corner the player is holding the
-/// phone by, reached one-handed mid-match, so the floor is not enough — a missed Leave
-/// means fumbling at the edge of the screen while the game runs on. The portrait Leave bar
-/// keeps toolbar-sized 44pt controls inside its fixed 56pt height; sizing them up would
-/// grow the chrome — and the safe top it publishes — past a toolbar's.
-private let chromeButtonSize: CGFloat = 56
-
-/// The rail's breathing room against the screen edge when the cutout leaves it none.
-private let railGap: CGFloat = 4
-
-/// The glyph inside `chromeButtonSize`, scaled with it. Growing the puck alone leaves a
-/// button that still READS small, which is the half of "too small to hit" a touch target
-/// can't fix. Android's CHROME_ICON is its counterpart, at the value ITS icon convention
-/// asks for (Material's 24-in-48 ratio) — the two are deliberately not the same number.
-private let chromeIconSize: CGFloat = 24
+/// One answer to the page's editName(): the saved name, or nil for a dismissal.
+struct NameResult: Equatable {
+    let id = UUID()
+    let name: String?
+}
 
 private struct RenameRequest: Identifiable {
     let id = UUID()
     let profile: Profile
+    let colors: SheetColors
 }
-
-/// The launcher-owned chrome floating over the game: Close (leaving a live game
-/// ends the session — it isn't navigation), the game's name, and the tappable name
-/// chip (the in-game rename affordance). `barContent` is non-nil only when the game
-/// supplied its own theme-color — then the X and title flip together; the chip keeps
-/// the game accent, matching Android.
-private struct LeaveBar: View {
-    let title: String
-    let playerName: String
-    let barContent: Color?
-    let onLeave: () -> Void
-    let onEditName: () -> Void
-    let onChipRight: (CGFloat) -> Void
-
-    @Environment(\.cpPalette) private var palette
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Button(action: onLeave) {
-                // Glyph at the toolbar's symbol size (home's About).
-                Image(systemName: "xmark")
-                    .font(.title2)
-                    .foregroundStyle(barContent ?? palette.onSurfaceVariant)
-                    .frame(width: 44, height: 44)
-                    .modifier(ChromeGlass(shape: Circle()))
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Leave game")
-            // Mirrors the chip's trailing inset.
-            .padding(.leading, 12)
-
-            Text(title)
-                .font(.cpTitleMedium)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundStyle(barContent ?? palette.onSurface)
-                .padding(.leading, 12)
-
-            Spacer(minLength: 12)
-
-            // Report the chip's trailing edge (global coords) so the host can align
-            // the page's horizontal safe zone with it.
-            PlayerChip(name: playerName, action: onEditName)
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.frame(in: .global).maxX
-                } action: { maxX in
-                    onChipRight(maxX)
-                }
-                .padding(.trailing, 12)
-        }
-        .frame(height: 56)
-    }
-}
-

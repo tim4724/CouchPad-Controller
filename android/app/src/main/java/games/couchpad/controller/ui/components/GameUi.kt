@@ -59,11 +59,9 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-// The tappable player identity — home header and in-game bar. [accented]: name,
-// icon, and outline take `primary`, which the game host has already remapped to
-// the game's cp-accent-color.
+// The tappable player identity in the home header.
 @Composable
-fun PlayerChip(name: String, onClick: () -> Unit, accented: Boolean = false) {
+fun PlayerChip(name: String, onClick: () -> Unit) {
   AssistChip(
     onClick = onClick,
     modifier = Modifier.height(40.dp),
@@ -78,21 +76,7 @@ fun PlayerChip(name: String, onClick: () -> Unit, accented: Boolean = false) {
     leadingIcon = {
       Icon(Icons.Filled.Person, contentDescription = null, Modifier.size(20.dp))
     },
-    colors =
-      if (accented) {
-        AssistChipDefaults.assistChipColors(
-          labelColor = MaterialTheme.colorScheme.primary,
-          leadingIconContentColor = MaterialTheme.colorScheme.primary,
-        )
-      } else {
-        AssistChipDefaults.assistChipColors()
-      },
-    border =
-      if (accented) {
-        AssistChipDefaults.assistChipBorder(enabled = true, borderColor = MaterialTheme.colorScheme.primary)
-      } else {
-        AssistChipDefaults.assistChipBorder(enabled = true)
-      },
+    border = AssistChipDefaults.assistChipBorder(enabled = true),
   )
 }
 

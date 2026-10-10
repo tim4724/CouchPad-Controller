@@ -4,14 +4,6 @@ import androidx.compose.ui.graphics.Color
 import org.json.JSONObject
 
 /**
- * Optional theming hints from the controller page's `<head>` (CONTRACT.md §4):
- * `theme-color` tints the launcher's top chrome, `cp-accent-color` tints launcher
- * accents shown over the game. Purely cosmetic — absent or unparseable metas fall
- * back to the stock dark chrome.
- */
-internal data class PageTheme(val bar: Color? = null, val accent: Color? = null)
-
-/**
  * Evaluated when the hosting activity STOPs — home, app switch, lock (CONTRACT.md §7).
  *
  * A synthetic persisted `pagehide` tells the game to close its relay socket NOW,
@@ -38,50 +30,61 @@ internal const val DELIVER_BACK_JS =
     " window.CouchPad.back() === true; } catch (e) { return false; } })()"
 
 /**
- * The launcher-injected observer, evaluated after each page load. Pushes the
- * metas' state through `CouchPadHost.themeChanged` immediately and on every
- * change — head mutations via MutationObserver, plus scheme flips (a `media`
- * attribute can start/stop matching). Pushes are deduped.
- *
- * Reads honor `media` (first match wins) and let the browser normalize any CSS
- * color to rgb()/rgba() via computed style — CSS.supports() first, because an
- * invalid color would fall back to the inherited computed color and read as a
- * false positive. The probe div hangs off documentElement, outside the observed
- * `<head>`, so probing can't self-trigger. Re-running on a document that already
- * has the observer just re-pushes. evaluateJavascript is exempt from the page's
- * CSP, so `script-src 'self'` game origins keep working.
+ * The launcher-injected observer for the page's `color-scheme` meta (CONTRACT.md §4),
+ * evaluated after each page load. Pushes whether the page is dark through the
+ * launcher-internal `__cpScheme` interface (see SchemeBridge) immediately and on every
+ * change — head mutations via MutationObserver, plus system scheme flips (`light dark`
+ * follows the system). Pushes are deduped. No meta reads as light, the web's own
+ * default. Re-running on a document that already has the observer just re-pushes.
+ * evaluateJavascript is exempt from the page's CSP, so `script-src 'self'` game origins
+ * keep working.
  */
-internal val WATCH_PAGE_THEME_JS = """
+internal val WATCH_PAGE_SCHEME_JS = """
   (() => {
-    if (window.__cgThemePush) { window.__cgThemePush(); return; }
-    const read = (name) => {
-      const metas = [...document.querySelectorAll('meta[name="' + name + '"]')];
-      // getAttribute, not the .media IDL property — the property only exists on
-      // Chromium builds with media-aware theme-color, and an old WebView without it
-      // would read every meta as media-less and take the first regardless of query.
-      const q = (x) => x.getAttribute('media');
-      const m = metas.find((x) => !q(x) || matchMedia(q(x)).matches) ?? metas[0];
-      if (!m || !m.content || !CSS.supports('color', m.content)) return null;
-      const el = document.createElement('div');
-      el.style.color = m.content;
-      document.documentElement.appendChild(el);
-      const c = getComputedStyle(el).color;
-      el.remove();
-      return c;
-    };
+    if (window.__cpSchemePush) { window.__cpSchemePush(); return; }
+    const systemDark = matchMedia('(prefers-color-scheme: dark)');
     let last;
     const push = () => {
-      const t = JSON.stringify({ bar: read('theme-color'), accent: read('cp-accent-color') });
-      if (t === last) return;
-      last = t;
-      if (window.CouchPadHost && window.CouchPadHost.themeChanged) window.CouchPadHost.themeChanged(t);
+      const meta = document.querySelector('meta[name="color-scheme"]');
+      const schemes = (meta?.getAttribute('content') ?? '').toLowerCase().split(/\s+/);
+      const dark = schemes.includes('dark') && (!schemes.includes('light') || systemDark.matches);
+      if (dark === last) return;
+      last = dark;
+      window.__cpScheme?.changed(dark);
     };
-    window.__cgThemePush = push;
+    window.__cpSchemePush = push;
     new MutationObserver(push).observe(document.head, {
-      childList: true, subtree: true, attributes: true, attributeFilter: ['content', 'media', 'name'],
+      childList: true, subtree: true, attributes: true, attributeFilter: ['content', 'name'],
     });
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', push);
+    systemDark.addEventListener('change', push);
     push();
+  })()
+""".trimIndent()
+
+/** The page's own colors for the launcher's name sheet (CONTRACT.md §2). */
+internal data class SheetColors(val surface: Color? = null, val accent: Color? = null)
+
+/**
+ * Read once, when the page opens the name sheet: `<meta name="theme-color">` (first one
+ * whose `media` matches) for the surface, and the CSS `accent-color` of `<html>` for the
+ * accent — `auto` (unset) reads as none. Both normalized to rgb() by computed style;
+ * CSS.supports() first, because an invalid color would fall back to the inherited one.
+ */
+internal val READ_SHEET_COLORS_JS = """
+  (() => {
+    const rgb = (value) => {
+      if (!value || !CSS.supports('color', value)) return null;
+      const probe = document.createElement('div');
+      probe.style.color = value;
+      document.documentElement.appendChild(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const meta = [...document.querySelectorAll('meta[name="theme-color"]')]
+      .find((m) => !m.getAttribute('media') || matchMedia(m.getAttribute('media')).matches);
+    const accent = getComputedStyle(document.documentElement).accentColor;
+    return { surface: rgb(meta?.getAttribute('content')), accent: accent === 'auto' ? null : rgb(accent) };
   })()
 """.trimIndent()
 
@@ -89,19 +92,51 @@ internal val WATCH_PAGE_THEME_JS = """
 // Wide-gamut serializations (color(display-p3 …), lab(…)) deliberately fail.
 private val CSS_RGB = Regex("""rgba?\((\d{1,3}), (\d{1,3}), (\d{1,3})(?:, [0-9.]+)?\)""")
 
-/** Bridge input is untrusted page data: strict shape, hard length cap, fallback on anything odd. */
-internal fun parsePageTheme(json: String?): PageTheme {
-  if (json == null || json.length > 256) return PageTheme()
-  return runCatching {
-    val obj = JSONObject(json)
-    PageTheme(bar = parseCssRgb(obj.optString("bar")), accent = parseCssRgb(obj.optString("accent")))
-  }.getOrDefault(PageTheme())
-}
+/** The script's result is untrusted page data: strict shape, fallback on anything odd. */
+internal fun parseSheetColors(json: String?): SheetColors = runCatching {
+  val obj = JSONObject(json.orEmpty())
+  SheetColors(parseCssRgb(obj.optString("surface")), parseCssRgb(obj.optString("accent")))
+}.getOrDefault(SheetColors())
 
 private fun parseCssRgb(value: String): Color? {
   val match = CSS_RGB.matchEntire(value.trim()) ?: return null
   val (r, g, b) = match.destructured.toList().map { it.toInt() }
   if (r > 255 || g > 255 || b > 255) return null
-  // Alpha is deliberately dropped: the chrome behind the status bar must be opaque.
+  // Alpha is deliberately dropped: the sheet surface must be opaque.
   return Color(r, g, b)
 }
+
+/**
+ * Document-start script: defines `window.CouchPadHost` (CONTRACT.md) over the raw
+ * `__cpHost` and `__cpName` Java interfaces, for the two members a Java interface can't
+ * express — a `name` property and an `editName()` that returns a Promise. Everything else
+ * passes straight through, so the Java bridge's own argument conversions still apply. Every
+ * `editName()` reaches the launcher and gets its own Promise; the launcher answers them in
+ * order through `__cpNameResult(name | null)`.
+ */
+internal val HOST_SHIM_JS = """
+  (() => {
+    const host = window.__cpHost;
+    const names = window.__cpName;
+    if (!host || !names || window.CouchPadHost) return;
+    const waiting = [];
+    window.__cpNameResult = (name) => {
+      const done = waiting.shift();
+      if (done) done(typeof name === 'string' ? name : null);
+    };
+    window.CouchPadHost = {
+      get name() { return names.getName(); },
+      editName() {
+        return new Promise((resolve) => {
+          waiting.push(resolve);
+          names.editName();
+        });
+      },
+      gameEnded: (reason) => host.gameEnded(reason),
+      leave: () => host.leave(),
+      enableSystemBack: (on) => host.enableSystemBack(on),
+      setOrientation: (mode) => host.setOrientation(mode),
+      haptic: (primitive, scale) => host.haptic(primitive, scale),
+    };
+  })();
+""".trimIndent()

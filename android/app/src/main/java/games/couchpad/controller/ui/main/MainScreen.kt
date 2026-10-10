@@ -127,7 +127,6 @@ import games.couchpad.controller.data.ROOM_POLL_MS
 import games.couchpad.controller.data.RoomLookup
 import games.couchpad.controller.data.probeRoom
 import games.couchpad.controller.data.resolveJoin
-import games.couchpad.controller.data.withProfile
 import androidx.compose.ui.tooling.preview.Preview
 import games.couchpad.controller.theme.CouchPadTheme
 import games.couchpad.controller.ui.preview.CardSamples
@@ -139,7 +138,6 @@ import games.couchpad.controller.ui.components.deviceName
 import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.JoinButtons
 import games.couchpad.controller.ui.components.JoiningCover
-import games.couchpad.controller.ui.components.MirrorHostSystemBars
 import games.couchpad.controller.ui.components.PlayerChip
 import games.couchpad.controller.ui.components.PosterStatusChip
 import games.couchpad.controller.ui.components.stableScreenInsets
@@ -268,11 +266,11 @@ fun MainScreen(
   // Every successful join funnels through here: remember the room for one-tap
   // rejoin and open the game host. Closes the scanner too, so leaving the game
   // lands back on home, not on a live camera.
-  fun launchJoin(target: JoinOutcome.Success, p: Profile) {
+  fun launchJoin(target: JoinOutcome.Success) {
     haptics.performHapticFeedback(HapticFeedbackType.Confirm)
     showScanner = false
     RecentRoomStore.remember(target.game, target.joinUrl, target.roomCode)
-    onJoin(withProfile(target.joinUrl, p), target.game.name, target.game.hosts)
+    onJoin(target.joinUrl, target.game.name, target.game.hosts)
   }
 
   // Every failure surface — a bad link, a dead room — pairs the toast with a
@@ -282,11 +280,11 @@ fun MainScreen(
     Toast.makeText(context, resources.getString(messageRes), Toast.LENGTH_SHORT).show()
   }
 
-  fun perform(action: AfterName, p: Profile) {
+  fun perform(action: AfterName) {
     when (action) {
       AfterName.Scan -> showScanner = true
       AfterName.EnterCode -> { codeError = null; showCodeEntry = true }
-      is AfterName.Join -> launchJoin(action.target, p)
+      is AfterName.Join -> launchJoin(action.target)
     }
   }
 
@@ -296,7 +294,7 @@ fun MainScreen(
       afterName = action
       showProfile = true
     } else {
-      perform(action, profile)
+      perform(action)
     }
   }
 
@@ -422,8 +420,7 @@ fun MainScreen(
         // Clears the status bar so the header starts below it, but scrolls away with
         // the content — posters slide under the transparent bar, not into a hard cut.
         Spacer(Modifier.windowInsetsTopHeight(stableScreenInsets))
-        // Sits OUTSIDE the 16dp content margin (owns its own padding, like the
-        // in-game LeaveBar) so the title and name chip align across screens.
+        // Sits OUTSIDE the 16dp content margin: it owns its own padding.
         HomeTopBar(profile = profile, onEditProfile = { showProfile = true }, onOpenAbout = onOpenAbout)
         // One rhythm for the whole stack: the banner, every room card and every poster
         // are cards in a single list, so they all sit 12dp apart. The one real break is
@@ -592,7 +589,7 @@ fun MainScreen(
         showProfile = false
         val a = afterName
         afterName = null
-        if (a != null) perform(a, saved)
+        if (a != null) perform(a)
       },
     )
   }
@@ -616,7 +613,7 @@ fun MainScreen(
           when (outcome) {
             is JoinOutcome.Success -> {
               showCodeEntry = false
-              launchJoin(outcome, profile)
+              launchJoin(outcome)
             }
             is JoinOutcome.Failure -> {
               haptics.performHapticFeedback(HapticFeedbackType.Reject)
@@ -645,8 +642,7 @@ private sealed interface AfterName {
   data class Join(val target: JoinOutcome.Success) : AfterName
 }
 
-// Home chrome, structurally identical to the in-game LeaveBar so the title and
-// name chip land in the same place across screens (GameHostScreen.kt).
+// Home chrome: the title, the name chip and About.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeTopBar(profile: Profile, onEditProfile: () -> Unit, onOpenAbout: () -> Unit) {
@@ -1049,7 +1045,6 @@ private fun CodeEntryDialog(
     onDismissRequest = onDismiss,
     title = { Text(stringResource(R.string.enter_room_code)) },
     text = {
-      MirrorHostSystemBars()
       OutlinedTextField(
         value = code,
         onValueChange = { if (it.length <= 16) code = it },

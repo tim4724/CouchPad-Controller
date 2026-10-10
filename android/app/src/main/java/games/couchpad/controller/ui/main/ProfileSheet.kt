@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -123,7 +125,9 @@ fun ProfileSheet(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          IconButton(onClick = close) {
+          // A filled circle at the Save button's height, so the row's two controls read
+          // as a pair — a bare glyph looked a size smaller than the pill beside it.
+          FilledTonalIconButton(onClick = close, modifier = Modifier.size(52.dp)) {
             Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
           }
           NameField(name, { name = it }, save, Modifier.weight(1f).focusRequester(focus))

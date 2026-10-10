@@ -120,7 +120,7 @@ fun MainNavigation(deepLink: String? = null, onDeepLinkConsumed: () -> Unit = {}
           title = key.title,
           allowedHosts = key.allowedHosts,
           onLeave = { backStack.removeLastOrNull() },
-          // Back home like LEAVE, plus a banner in the rejoin slot — the player didn't
+          // Back home like leave(), plus a banner in the rejoin slot — the player didn't
           // choose to leave, so silence would read as a crash. (A load failure isn't a
           // session end: the host shows a retry overlay in place, not a pop.)
           onGameEnd = { reason ->

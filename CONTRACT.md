@@ -1,574 +1,292 @@
 # CouchPad Controller Contract — v1
 
-The interface between the **CouchPad launcher** — the native **Android app** (WebView)
-and **iOS app** (WKWebView), which behave identically here — and a **game's controller
-page**. A game that implements these touchpoints plugs in with zero launcher-side
-changes; new games only declare themselves in `games-manifest.json`.
+The interface between the **CouchPad launcher** — the Android app (WebView) and iOS app
+(WKWebView), identical unless a section says otherwise — and a **game's controller page**.
+A game that implements it plugs in with no launcher change beyond its entry in
+`games-manifest.json`.
 
-The launcher owns *identity* (player name) and *session chrome* (joining, leaving).
-The game owns everything else: colors, avatars, sound, gameplay, match flow.
+The launcher handles joining and the player's name, and draws nothing over a running game
+unless the game asks (§2). The page spans the whole screen and owns everything on it,
+including its close button. The launcher's own screens come only before the page shows
+or when it fails to load: a join cover and a retry cover, each with its own close.
 
-## 1. Launcher → game, at load: URL parameters
+**Rules for every section:**
 
-Appended to the join URL, preserving any existing `?claim=` and `#instance`:
+- **Feature-detect.** Shell behavior is gated on `window.CouchPadHost`, which only the
+  launcher defines; the same deployed controller must keep working in a plain browser.
+- **Bundle your contract code.** Game origins typically ship `script-src 'self'`; inline
+  scripts never run. The launcher's own injections are exempt.
+- **`cp*` is reserved** for query params. Don't mint your own; ignore ones you don't know.
+- Everything a page sends is untrusted; the launcher validates it.
 
-```
-https://<game-host>/<ROOMCODE>?cpName=<name>[#<instance>]
-```
-
-| Param    | Meaning |
-|----------|---------|
-| `cpName` | The player's name. Guaranteed non-blank and ≤ 16 characters; sanitize defensively anyway. Its **presence is the shell gate** — the launcher is the only thing that sends it. Gate ALL shell behavior on it: the same deployed controller must keep working in a plain browser. |
-
-The `cp`-prefix is **reserved** across this contract — query params (`cpName`, `cpp`) and
-metas (`cp-accent-color`). A game must not mint its own `cp*` params, and must ignore any
-it doesn't recognize: they may be addressed to the launcher, not to it, and more can be
-added in a later revision.
-
-When `cpName` is present, the game must:
-
-- **Skip the name screen.** Use `cpName` and never offer a path back to name entry —
-  the launcher is the identity authority.
-- **Not persist the injected name.** It arrives fresh on every launch/rename;
-  persisting it would leak into the standalone-browser experience.
-- **Neutralize its own back/leave handling.** The shell shows its own LEAVE bar and
-  swallows system back by default; modals relying on `history.back()` need a direct
-  close instead — or opt into the gesture explicitly (§9).
-
-## 2. Launcher → game, live rename: `window.CouchPad.setName(name)`
-
-The game *implements*, the launcher *calls* — on rename, and again on every page load
-(belt-and-suspenders with `cpName`).
+## 1. Launcher → game: `CouchPadHost.name`
 
 ```js
-window.CouchPad = {
-  setName(name) {
-    // Apply live: update local UI AND broadcast to the display,
-    // exactly like an in-game rename would.
-  },
+const name = window.CouchPadHost?.name ?? myBrowserName;
+```
+
+The player's name, shared across games: a non-blank string of at most 16 characters.
+It is there before the page's first script runs and always current. On first run the
+launcher makes one up, so there is no need to ask for one. An Android WebView too old
+for document-start scripts has neither `name` nor `editName` — the fallback above covers
+it.
+
+## 2. Rename: `CouchPadHost.editName()`
+
+Optional. The launcher owns the name and its rules, so a game that offers a rename opens
+the launcher's name sheet instead of its own field:
+
+```js
+renameButton.onclick = async () => {
+  if (!window.CouchPadHost?.editName) return openOwnNameField();   // browser
+  const name = await CouchPadHost.editName();   // null when the player dismisses it
+  if (name) applyAndTellTheDisplay(name);
 };
 ```
 
-The launcher's call is guarded, so not implementing it is a harmless no-op — the URL
-param still prefills the name on the next load.
+The resolved name already meets the launcher's rules and is from then on
+`CouchPadHost.name`, here and in every later game. Every call gets its own sheet and
+answer: one made while a sheet is still closing opens a new sheet once it has gone.
+Android back while the sheet is up dismisses it (resolving `null`) and never reaches the
+page's `back()` (§9).
 
-## 3. Game → launcher, session end: `window.CouchPadHost.gameEnded(reason)`
+The sheet takes its look from standard page styling, read when `editName` is called:
 
-The launcher *implements* (Android `addJavascriptInterface`, iOS `WKScriptMessageHandler`
-behind an injected shim), the game *calls* — **only on terminal session end**: room
-closed, display gone for good, join rejected. Match-over / "Play again" screens are game
-flow and stay in-game.
+| Source | Sheet |
+|---|---|
+| `<meta name="color-scheme">` (§4) | light or dark text and controls |
+| `<meta name="theme-color">` | surface — keep it readable in that scheme |
+| CSS `accent-color` on `:root` | Save button and field accent |
 
-```js
-if (window.CouchPadHost?.gameEnded) {
-  window.CouchPadHost.gameEnded(reason);
-} else {
-  // plain-browser fallback: whatever the game normally does
-}
-```
+Anything absent falls back to the launcher's own palette.
 
-The launcher tears down the web view and returns home with a message. The call is
-fire-once (extras ignored); the game must **not** also navigate itself.
+## 3. Game → launcher: `CouchPadHost.leave()` and `gameEnded(reason)`
 
-| `reason`         | Message shown |
-|------------------|---------------|
-| `game_ended`     | "The party ended" |
+Both close the web view and return home; the first call wins. Don't also navigate.
+Closing the web view destroys the page and with it its connections, relay socket
+included, so there is nothing to clean up first. (§7's lingering socket is a page that
+stays alive in the background, not one that is closed.)
+
+- **`leave()`** — the player's own exit. Draw a visible close button that calls it: it is
+  the only way out (iOS has no system back; Android's is off by default, §9). Whether to
+  confirm first is the game's call. Never call `leave` when it doesn't exist; in a
+  browser the button is yours to repurpose or hide.
+- **`gameEnded(reason)`** — a terminal end the player didn't choose: room closed, display
+  gone, join rejected. Not for match-over or "play again". Home shows a message:
+
+| `reason` | Message |
+|---|---|
+| `game_ended` | "The party ended" |
 | `room_not_found` | "Room not found" |
-| `game_full`      | "Room is full" |
-| `replaced`       | "You joined from another device" |
-| *anything else*  | "The party ended" (unknown values tolerated) |
+| `game_full` | "Room is full" |
+| `replaced` | "You joined from another device" |
+| anything else | "The party ended" |
 
-## 4. Game → launcher, optional theming hints: `<head>` metas
+## 4. Game → launcher: `<meta name="color-scheme">`
 
-The launcher tints its floating chrome to match, at load and live — an injected observer
-watches the metas, so mutating `content` retints mid-session. Pure cosmetics, ignored in
-a plain browser.
+The status bar stays visible in portrait, drawn over the page; its icon color follows the
+page's `color-scheme` meta, watched live.
 
-```html
-<meta name="theme-color" content="#0b1020">      <!-- web standard -->
-<meta name="cp-accent-color" content="#ffcc00">  <!-- CouchPad custom -->
-```
+| `content` | Icons |
+|---|---|
+| `dark` | light |
+| `light`, or no meta | dark |
+| `light dark` | follow the system |
 
-| Meta | Launcher effect |
-|------|-----------------|
-| `theme-color`     | Tints the top chrome (scrim behind the status bar + LEAVE bar). Text/icons flip black/white by luminance. |
-| `cp-accent-color` | Colors launcher accents shown over the game: name chip, joining spinner, rename sheet controls. |
+Keep the band under the status bar (`env(safe-area-inset-top)`) calm and in that scheme.
 
-Any sRGB CSS color; alpha ignored (the chrome is opaque); absent or unparseable falls
-back to the launcher's dark graphite. `media` attributes are honored (first matching meta
-wins) and re-evaluated on system scheme flips. Metas must live in `<head>`.
+## 5. Layout: full screen and the safe area
 
-## 5. Launcher → game, layout: edge-to-edge hosting and the safe zone
+The page covers the whole physical screen. Let visuals bleed to the edges; keep
+interactive UI inside `env(safe-area-inset-*)`, which requires `viewport-fit=cover`.
 
-The page spans the **full physical screen** with the chrome floating on top. Visuals may
-(and should) bleed behind it — **interactive UI must stay out from under it**. The safe
-zone is published two ways:
-
-1. **Standard CSS**: with `viewport-fit=cover`, the launcher folds its chrome and the
-   display cutout/gutter into `env(safe-area-inset-*)`, so the standard notch machinery
-   works where the engine cooperates.
-2. **Launcher vars** (authoritative): `--cp-safe-top/-left/-right/-bottom` on
-   `document.documentElement` — CSS px, live-updated, re-set on every navigation. These
-   don't rely on the engine's cutout plumbing, which bails in more cases than you'd
-   hope — Android's WebView can read all-zero `env()` even full-screen. The vars, not
-   `env()`, are the values to trust; the `max()` pattern below folds both in.
-
-Horizontal insets align with the chrome's *content*, not just the cutout, so a top row
-anchored to the safe zone lines up with the launcher's controls — expect a small non-zero
-value even with no notch.
-
-**The keyboard** never resizes the page's layout viewport. A field the page itself
-focuses gets the platform's own browser behaviour: `visualViewport` shrinks by the
-keyboard and the engine scrolls the field into view. The launcher's own keyboard (its
-rename sheet) reaches neither `visualViewport` nor the safe zone.
-
-**Each side is its own value** — what actually covers that edge, so left and right can
-differ (a one-sided cutout, the launcher's landscape controls on one side). Where the OS
-itself reports a cutout on both sides (iOS in landscape), so does the launcher.
-
-Recommended pattern — correct in the shell AND in a plain browser:
+- The insets are the platform's own: status bar, display cutout, iOS home indicator, and
+  the Android navigation bar while it is shown (§9). Each side is its own value.
+- They change with rotation (§10) and §9 — read them live.
+- The keyboard never resizes the layout viewport or moves the insets; a focused field
+  shrinks `visualViewport` as in a browser.
+- On an Android WebView older than Chromium 136, which can't report system bars, the
+  launcher keeps the page below the bars instead and the insets read 0.
 
 ```css
-#hud {
-  padding-top:   max(var(--cp-safe-top, 0px),   env(safe-area-inset-top, 0px));
-  padding-left:  max(var(--cp-safe-left, 0px),  env(safe-area-inset-left, 0px));
-  padding-right: max(var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
-}
-/* A layout that must stay centered on the physical screen levels the pair itself. */
-#wheel {
-  padding-inline: max(var(--cp-safe-left, 0px), env(safe-area-inset-left, 0px),
-                      var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
-}
+#hud { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0
+                env(safe-area-inset-left, 0px); }
+/* Centered on the physical screen: level the pair yourself. */
+#wheel { padding-inline: max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)); }
 ```
 
-## 6. Game display → relay, at room create: controller-URL template
+## 6. Display → relay: controller-URL template
 
-A scanned QR carries the full controller URL; a **typed room code** carries nothing. So
-the display registers a *controller-URL template* with the shared relay at room create,
-and the relay tells the launcher where the code lives.
+A typed room code carries no origin, so the display registers where its controller lives
+when it creates the room:
 
 ```
 Client → relay:  create { clientId, maxClients, url? }
 ```
 
-- `url` is an absolute **https** template of the join-URL shape with `{room}` and
-  `{instance}` placeholders — e.g. `https://play.example.com/{room}#{instance}`. It must
-  match what a scanned QR produces: room code as the first path segment, instance in the
-  fragment (kept out of request logs).
-- It must name the **controller's own origin**. A template on the launcher domain
-  (`couchpad.games/{room}`) declares nothing — that link is the launcher asking this same
-  directory who owns the code — so the launcher ignores it. Register the host that
-  actually serves your controller.
-- The relay **rejects the whole create** on an invalid template, so plain-http origins
-  (local dev, E2E) must pass no `url` — and their rooms are then joinable only by
-  scanning the controller URL itself.
-- The template may carry a `cpp` query arg naming the display: `tvos`, `androidtv`, or
-  `web` (a browser-based display, which by definition can't advertise over mDNS but can
-  register a template). A join URL is the only place a display declares itself, and the
-  **template** is the only URL guaranteed to carry it — a display may deliberately keep
-  its QR clean, on the grounds that whoever scans it is already looking at the box. So a
-  typed code and a §8 nearby tap see `cpp` whenever the relay answers with a template; a
-  scan may not, and the URL remembered from one won't either. The launcher therefore takes
-  `cpp` from wherever it first appears — including the template returned by the liveness
-  probe below — and keeps it for as long as it offers the room, rather than re-reading it
-  off a URL that may never have carried it.
-- The value is machine-readable and fixed-vocabulary; there is no free-text field for a
-  model or browser name. The launcher renders the wording ("Apple TV") itself, localized,
-  so it stays consistent and translatable without a display update, and no display can
-  put arbitrary text on a launcher card. An unknown or absent value degrades to no name
-  at all. `cpp` is `cp`-prefixed to stay clear of a game's own query params, and is inert
-  in a browser.
+- `url` is an https template of the join-URL shape — room code as the first path
+  segment, instance in the fragment: `https://play.example.com/{room}#{instance}`.
+- It must name the controller's own origin; a template on the launcher domain is ignored.
+- An invalid template rejects the whole create, so plain-http dev setups pass none — their
+  rooms are then joinable only by scanning.
+- It may carry `cpp=tvos|androidtv|web` naming the display. Put it in the template: the
+  launcher reads it wherever it first appears and renders the device name itself.
 
-The launcher resolves every **origin-less** input through `GET {relayBase}/room/{code}` —
-a typed code, a §8 nearby tap, and a canonical `couchpad.games/<code>` link however it
-arrives (scanned, tapped as a link). Only a URL that already names a controller origin
-skips the directory and loads as-is. So a display's registered template decides where the
-player lands no matter which way they joined:
+The launcher resolves every origin-less input — typed code, §8 nearby tap, a
+`couchpad.games/<code>` link — through `GET {relayBase}/room/{code}`:
 
 ```
 200 → { url?, origin?, clients, maxClients }   404 → not found
 ```
 
-- `url` — the stored template with `{room}`/`{instance}` **already substituted** (the
-  launcher never sees raw placeholders). It is **host-declared and UNTRUSTED**: the
-  launcher re-validates the host against the `games-manifest.json` allow-list before
-  loading, so a relay entry can't redirect a code to an arbitrary origin.
-- The response also carries the room's `origin`; the launcher ignores it.
+`url` arrives with placeholders filled in. It is untrusted: its host must be in the
+manifest allow-list. Without a registered template, a code can't be joined that way.
 
-The registered `url` is the ONLY thing that resolves an origin-less input, so registering
-one is what makes a room joinable by typed code, canonical link or §8 nearby tap at all.
-The launcher never guesses an owner for a code the directory can't place — it says so and
-refuses the join.
+## 7. Launcher → game: synthetic `pagehide` on background
 
-## 7. Launcher → game, app lifecycle: synthetic `pagehide` on background
+When the app goes to the background, the launcher dispatches
+`new PageTransitionEvent('pagehide', { persisted: true })` on `window`. Close the relay
+socket there, or the display keeps a zombie player (iOS never drops the socket on its own).
+Reconnect on the standard `visibilitychange` → `visible`. Both are ordinary web events,
+so the same code is right in a browser.
 
-When the player leaves the launcher (home, app switch, lock), the shell dispatches a
-synthetic persisted `pagehide` on `window` — the same event a browser fires when freezing
-a page into the back/forward cache:
+## 8. Native display → LAN: room advertisement
 
-```js
-window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
-```
+A native display (tvOS, Android TV) may advertise its room over DNS-SD as
+`_couchpad._tcp.local`, for one-tap join. The instance name is the display's label
+("Living Room"), shown verbatim.
 
-Close the relay socket in the `pagehide` handler so the display sees the player leave
-*immediately*. Without it, disconnect timing is platform luck: Android drops the socket
-only when the OS freezes the cached process (OEM-dependent), and iOS never drops it —
-WKWebView's out-of-process network stack keeps answering pings while suspended, leaving a
-zombie player on the display.
+| TXT key | Value |
+|---|---|
+| `c` | Required. The room code as shown on screen. |
+| `cpr` | Launcher-only: marks a controller relaying a room it is in. Displays never set it. |
 
-There is no synthetic counterpart on return: the engine fires the standard
-`visibilitychange` → `visible`, and the controller should reconnect there. Both events are
-ordinary web behavior, so the same code is correct in a plain browser. Additive in v1 — a
-game without a `pagehide` handler keeps today's behavior. The exception is a return through
-a join link (a re-scan): the backgrounded page is torn down without becoming visible again,
-so the incoming page's join is the only one the display sees.
+- The code is the whole payload: the launcher resolves it through §6, so the record
+  carries no URL and can't point anywhere. The SRV port is never dialed.
+- Advertise at create, send a goodbye at close. Withdrawing while full is optional.
+- New TXT keys are fine; a shape old launchers must not read needs a new service type.
+- Discovery is optional: it needs the Local Network permission and fails on isolated
+  networks, so keep showing the QR and code. The launcher asks for that permission before
+  loading the page on a first join; a deny still loads it, so treat the LAN as unreliable.
 
-## 8. Native display app → local network: room advertisement
+## 9. System back: `enableSystemBack` + `back()`
 
-A **native** display app (tvOS, Android TV) advertises the room it is hosting over
-DNS-SD/mDNS, so the launcher can offer one-tap join with no QR scan and no typed code.
-A browser-based display can't do this — browsers cannot advertise mDNS — so §6 remains
-the universal path.
+Call it on both platforms; only Android acts on it. iOS has no system back, so there
+`enableSystemBack` does nothing and `back()` is never called.
 
-Service type `_couchpad._tcp` in the `.local` domain. The **instance name is the
-display's human label** ("Living Room"); the launcher shows it verbatim so a player with
-two TVs can tell them apart.
-
-| TXT key | Required | Value |
-|---------|----------|-------|
-| `c`   | yes | The room code, exactly as shown on screen. Nothing else. |
-| `cpr` | never (launcher-only) | Marks a record published by a **controller relaying a room it is in**, rather than by the display. A display must never set it. Launchers relay so that a browser-based display — which cannot advertise at all — still becomes discoverable, and so a room survives a native display whose own record is missing. A relaying phone may never have learned the room's label, so `cpr=1` tells the launcher its instance name is not one. Launcher↔launcher only; no game or display work involved. |
-
-- The code is the **whole payload**. The launcher resolves it through
-  `GET {relayBase}/room/{code}` (§6) — the same probe a typed code takes — and that
-  response supplies the join URL, the display's `cpp`, whether the room still exists, and
-  its occupancy. A display therefore declares itself in exactly one place, the template it
-  registered at create, regardless of how a player arrives.
-- Nothing on the LAN is trusted beyond the code. An advertisement can name a room but
-  **cannot propose an origin**, so there is no host to re-validate and no way to point the
-  launcher at an arbitrary page. That is the reason the record carries no URL.
-- Discovery therefore needs the internet, like joining does: a code no relay can resolve
-  produces no card.
-- The SRV port is never dialed. The launcher reads the TXT record and nothing else.
-  Advertise any listening port your responder needs; it stays unused.
-- Advertise at room create, withdraw at room close (an mDNS goodbye — records at TTL 0).
-  Withdrawing when the room **fills**, and re-publishing when a slot frees, is good
-  citizenship but never the launcher's source of truth: it re-resolves every room it is
-  listing on a poll, so a room that fills or closes leaves the list on the relay's answer
-  either way. A withdrawal is therefore not a removal — the launcher holds a record that
-  stops appearing for a short while, because a record can go quiet for reasons that have
-  nothing to do with the room (a relaying phone put down, a lost goodbye, a flapping
-  browse), and only the relay can tell those from a room that ended.
-- A record that outlives its room is harmless — resolution 404s and no card appears.
-- Two displays hosting two rooms produce two records; the launcher lists both. One room
-  announced by its display *and* by every controller in it also produces several records;
-  the launcher collapses them on `c` before resolving, so a room costs one probe however
-  many devices announce it.
-- The record carries no version field: `_couchpad._tcp` plus a code some relay knows *is*
-  the gate, and a record without a usable `c` is ignored. Later revisions add keys, which
-  old launchers skip; a shape old launchers must not read at all takes a new service type.
-
-Discovery is an accelerator, never the only route — mDNS is blocked on AP-isolated and
-guest networks, and both platforms gate it behind a permission the player must grant
-(iOS Local Network, Android `ACCESS_LOCAL_NETWORK`). That permission governs ALL of a
-game's LAN traffic, including any direct peer connection a game negotiates on its own
-beside the relay — so the launcher asks at the player's first join, holding the
-controller page load until the dialog is answered: the verdict is then in force before
-the page's first connection attempt instead of racing it. A deny loads the page anyway,
-which must treat the LAN as hostile exactly as on an AP-isolated network. The launcher
-also asks when the player asks for discovery; never at launch. A display that
-advertises must still show its QR and room code.
-
-The card is branded from the manifest, not from the advertisement: the resolved game's
-`icon` (a square brand mark, distinct from the 16:9 `art`) sits on the leading tile, and
-carries the branding alone — the card itself is neutral chrome. A game with no `icon`
-falls back to a generic glyph.
-
-## 9. Game ⇄ launcher, system back: `enableSystemBack` + `back()`
-
-By default the shell owns the screen edges: the whole controller surface is opted out of
-the system back gesture, so edge swipes are gameplay input and a stray one can't drop a
-player out of a live match. A game that wants back — to close a dialog, or because the
-player is somewhere leaving is harmless — asks for it, moment by moment.
+By default the controller surface is opted out of the back gesture, so edge swipes are
+gameplay. Ask for back when it is welcome, and give it up the moment it isn't:
 
 ```js
-window.CouchPadHost?.enableSystemBack?.(true);   // dialog opened / entered the lobby
-window.CouchPadHost?.enableSystemBack?.(false);  // dialog closed / match resumed
+window.CouchPadHost?.enableSystemBack?.(true);    // dialog opened / in the lobby
+window.CouchPadHost?.enableSystemBack?.(false);   // dialog closed / match resumed
 ```
 
-The launcher *implements* `enableSystemBack`, the game *calls* it. **Default false**,
-including before the first call and after every page load — arming never outlives the page
-that meant it. Only a literal `true` arms; every other value disarms.
-
-| State | Screen edges | A back gesture |
-|-------|--------------|----------------|
-| `false` *(default)* | opted out — edge swipes reach the game | can't start; LEAVE is the only exit |
-| `true` | yielded to the system, with its own back affordance | goes to `back()` below |
-
-**Arming costs the game its screen edges** — that is the trade, not a side effect. A game
-that arms for a dialog and forgets to disarm when it closes plays the rest of the match
-without edge swipes, with nothing on screen to explain why. Disarm is not optional.
-
-The game *implements* `back()`, the launcher *calls* it — once per gesture, only while
-armed:
+Only a literal `true` arms; it resets on every page load. Armed, the edges belong to the
+system (no drag-from-the-edge controls), and each back — gesture or 3-button — calls:
 
 ```js
 window.CouchPad = window.CouchPad || {};
 window.CouchPad.back = () => {
-  if (!dialogOpen) return false;   // not ours → the launcher leaves the game
+  if (!dialogOpen) return false;   // not consumed → the launcher leaves the game
   closeDialog();
   return true;                     // consumed → the player stays
 };
 ```
 
-- Returning a literal `true` consumes the gesture. **Anything else** — a falsy return, no
-  return, no `back` at all, or a throw — leaves the game, through the same exit as the
-  LEAVE bar.
-- **Decide synchronously.** A Promise is not awaited and counts as unconsumed; start async
-  work if you need to, but return the boolean now.
-- So a lobby or results screen that just wants back to leave arms and implements nothing.
+Only a synchronous literal `true` consumes; anything else (no handler, a Promise, a
+throw) leaves like `leave()`. While armed, the navigation bar comes back — in portrait,
+and in landscape too for 3-button navigation — and grows that edge's inset.
 
-Both halves are inert in a plain browser: `CouchPadHost` doesn't exist, so the optional
-call is a no-op, and nothing ever calls `back()`. The browser's own back button keeps
-doing whatever it did.
+## 10. Game → launcher: `CouchPadHost.setOrientation(mode)`
 
-Platform notes, for behavior a game can observe: how much of the screen edge is yielded
-differs. iOS yields only the *leading* edge — the right one under RTL. Android hands the
-whole surface back to the system, so back can start from either edge, as it does everywhere
-else on the platform. Budget for both: don't put a drag-from-the-very-edge control anywhere
-while armed. Android draws its system back arrow during the gesture and
-also routes the hardware/3-button back here; iOS has no equivalent system affordance
-during the swipe, so a game arming for a non-obvious reason should say so in its own UI.
+The launcher is portrait. `setOrientation('landscape')` turns to landscape and follows the
+sensor between its two sides; anything else means portrait. It resets to portrait on any
+page that finishes loading without asking — a reload of a landscape page holds landscape
+if it asks again from an external `<head>` script. Asked that early, the launcher keeps
+its join cover up until the turn is done, so the page is never seen portrait-shaped.
 
-Arming does **not** move the safe zone for a gesture-navigation player: the launcher
-keeps the navigation bar hidden, and the transient bars Android shows over a hidden-bar
-app are an overlay, not an inset. The cost sits in the gesture itself — after a few quiet
-seconds the system spends the first edge swipe *revealing* those transient bars instead
-of going back, and it is the follow-up swipe that lands here. Budget for the occasional
-double swipe, not for lost space. A **3-button-nav** player has no back without the bar's
-buttons, so for them arming still brings the bar back for as long as it lasts —
-`--cp-safe-bottom` grows in portrait, and in landscape (where a 3-button bar sits on a
-*side*) it is the inset on that side that grows — shrinking again on disarm. One
-more reason to treat the safe zone as live rather than reading it once at startup. iOS is
-unaffected — its back gesture is the launcher's own recognizer, not a system one, and its
-home indicator is always in the safe area.
+A rotation keeps the page and its socket running; the game sees `resize`, the orientation
+media query, and new insets. In landscape the status bar is hidden, so the top inset
+usually drops to 0 and the side insets carry the cutout and any navigation bar.
 
-## 10. Game → launcher, screen orientation: `setOrientation(mode)`
+## 11. Game → device: `navigator.vibrate(pattern)`
 
-The launcher is portrait. A controller whose layout wants the long edge across — a
-steering wheel, a wide track pad, a landscape mini-map — asks for landscape, moment by
-moment.
+The standard Vibration API. Android's WebView has it; the iOS launcher defines it (WebKit
+doesn't), so the usual `if (navigator.vibrate)` guard works in both apps. Keep haptics
+decorative — mobile Safari still has none.
 
-```js
-window.CouchPadHost?.setOrientation?.('landscape');   // match started
-window.CouchPadHost?.setOrientation?.('portrait');    // back to the lobby
-```
+The motors differ (Android coasts through short gaps, iPhone starts and stops dead), so
+stay within patterns that feel alike on both:
 
-The launcher *implements* `setOrientation`, the game *calls* it. **Default `'portrait'`** —
-before the first call, and again on any page that loads without asking, so a document
-never keeps an orientation it didn't ask for. Only the literal `'landscape'` rotates;
-every other value, including a non-string, means portrait.
+- **Tap:** one pulse of 10–40 ms.
+- **Rhythm:** pauses of 50 ms or more, e.g. `[10, 50, 10]`.
+- **Held buzz:** a pulse of 100 ms or more, re-issued before it ends, stopped with
+  `vibrate(0)`.
+- **Lighter** means shorter or sparser pulses — never pauses under 50 ms.
 
-That default lands when the incoming page is **loaded**, not when it starts loading:
-across a navigation the device holds the orientation it has until the new document has
-had its say, and falls back to portrait only if that document finishes (or fails) without
-asking. So a landscape page that reloads itself never flaps through portrait and back —
-provided its call is in a `<head>` script, per the note below.
+Patterns are capped at 128 entries and 5 s.
 
-| Mode | The device |
-|------|-----------|
-| `'portrait'` *(default)* | locked portrait — a controller that never asks can't be rotated out from under the player |
-| `'landscape'` | turns to landscape and follows the sensor **between the two landscape orientations**, so either hand works; it will not fall back to portrait |
+## 12. Game → launcher: `CouchPadHost.haptic(primitive, scale)`
 
-**Call it as early as you can.** The bridge exists before your first script runs, so a
-landscape-only controller that calls from a `<head>` script rotates while the launcher's
-own "Joining…" cover is still up — the player never sees the turn. Deciding later (after
-the socket connects, say) is fine and supported; it just rotates in view.
-
-Make that an **external** `<head>` script (`<script src="…">`, not deferred), not an
-inline one. Game origins typically ship `script-src 'self'`, which blocks inline script
-outright — an inline early call silently never runs, and the page comes up portrait with
-nothing to say why. Same reason the checklist tells you to keep contract code in your own
-bundle.
-
-**The safe zone changes shape, not just size** (§5). In landscape the launcher's bar
-disappears entirely — the chrome collapses to two floating controls (leave, rename)
-stacked in one side strip — so `--cp-safe-top` typically drops to ~0 and the game gets
-the full height. The *side* insets become the large ones: one carries the launcher's
-controls (and any cutout on that side), the other only its own cutout, so the pair is
-usually unequal. A layout that hard-codes "the notch is on top", or reads one side for
-both, breaks here. The vars are re-published on every rotation, so read them live
-rather than at startup.
-
-Inert in a plain browser: `CouchPadHost` doesn't exist, so the optional call is a no-op
-and the page keeps whatever the browser and the user's rotation lock were doing. A game
-that needs landscape in the browser too should keep its own CSS/`screen.orientation`
-handling — this bridge does not replace it.
-
-Platform notes, for behavior a game can observe: a rotation does **not** reload the page
-or drop the relay socket on either platform — the same document keeps running, so state
-in JS survives. What the game does see is a `resize`, a changed
-`window.matchMedia('(orientation: landscape)')`, and re-published `--cp-safe-*` vars.
-Android additionally rotates on the sensor even with the system's own rotation lock on —
-the launcher's request outranks it. On either platform, a player holding the phone flat
-may see the turn settle a beat later, since there is no gravity vector to pick a side
-from. In Android split-screen the system ignores orientation
-requests entirely — the page keeps the shape it has, and the request takes effect when
-the app is full-screen again.
-
-## 11. Game → device, tilt controls: `DeviceOrientationEvent.requestPermission()`
-
-Motion and orientation are the web platform's, not a launcher bridge — a controller reads
-them exactly as it does in a browser. The launcher's only part is answering the gate iOS
-puts in front of them: a `WKWebView` asks its **host app** whether the page may have the
-sensors, and CouchPad grants it for any origin already on the navigation allow-list. So
-there is no permission dialog inside the launcher on either platform, and no
-launcher-specific code to write.
-
-What does not change is the web API's own rule: on iOS the request must come from a user
-gesture. Ask from the tap that turns tilt on — a probe at startup, or one behind a
-`setTimeout`, rejects with `NotAllowedError`, and a game that reads that as "this phone
-has no sensor" will report tilt unavailable on hardware that has it.
+A weaker or shaped tap than §11 can make: one of Android's composition primitives at a
+strength — the vocabulary AirConsole's composition vibrate takes.
 
 ```js
-// In the click/touch handler that enables tilt steering — not at load.
-if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
-  const verdict = await DeviceOrientationEvent.requestPermission();   // iOS/WebKit
-  if (verdict !== 'granted') return showTiltUnavailable();
-}
-addEventListener('deviceorientation', onTilt);
-```
-
-Feature-detect on `requestPermission` being a *function*, not on its verdict: its presence
-means "this engine gates the sensors", never "the sensors are missing". Where it doesn't
-exist — Android's WebView and Chrome — attach the listener directly; there is no gate.
-
-Unchanged in a plain browser: mobile Safari runs the same code and shows its own dialog,
-which is the whole point of asking from a gesture.
-
-## 12. Game → device, haptics: `navigator.vibrate(pattern)`
-
-Like §11 this is the web platform's API, not a launcher bridge — but only one of the two
-engines implements it. Android's WebView has the Vibration API natively (the launcher's
-part is holding the `VIBRATE` permission); WebKit has never shipped it, so on iOS
-`navigator.vibrate` is absent in Safari and in a plain `WKWebView` alike, and the usual
-`if (navigator.vibrate)` guard silently skips every buzz.
-
-The iOS launcher closes that gap: it defines `navigator.vibrate` before the document
-runs and plays the pattern through Core Haptics. A controller therefore writes the
-standard call once and feels the same on both platforms:
-
-```js
-navigator.vibrate(15);          // one short tick
-navigator.vibrate([8, 8, 8]);   // alternating vibrate/pause, in milliseconds
-navigator.vibrate(0);           // cancel whatever is still running
-```
-
-Feature-detect as always — the polyfill is what makes the guard true inside the launcher,
-and in mobile Safari it stays false, so keep haptics decorative and never gate game state
-on them.
-
-The API only switches a motor on and off; what that feels like is the motor's physics,
-and the two platforms' motors differ. Android's spins up slowly and coasts through short
-gaps; the iPhone's starts and stops dead, and Core Haptics plays every pulse at full
-strength with only its length varying. Patterns within these rules feel alike on both:
-
-- **A tap** is one pulse of 10–40 ms. Longer feels heavier.
-- **A rhythm** keeps every pause at 50 ms or more, e.g. `[10, 50, 10]` — each pulse is
-  felt on its own.
-- **A held buzz** is one pulse of 100 ms or more, re-issued before it ends and stopped
-  with `vibrate(0)`. It is full strength; the API has no lighter variant (§13 has lighter ones).
-- **Lighter** means shorter or sparser pulses, never rapid on/off: pauses under 50 ms
-  blur into a hum on Android but play as harsh bursts on iOS.
-
-The pattern is also capped — 128 entries, as in Chromium, and five seconds total —
-because it arrives as untrusted page input.
-
-Unchanged in a plain browser: Android Chrome runs the same code against the real API,
-and iOS Safari does nothing, exactly as it does today.
-
-## 13. Game → launcher, haptic primitives: `haptic(primitive, scale)`
-
-§12 can only switch the motor on and off, so lighter can only mean shorter. A controller
-that wants a weaker or shaped tap instead names one of Android's composition primitives
-and a strength — the vocabulary AirConsole's `vibrate({type: 'composition', …})` takes,
-so one effect table serves both shells.
-
-```js
-var host = window.CouchPadHost;
-if (host && typeof host.haptic === 'function') host.haptic('click', 0.7);
-else if (navigator.vibrate) navigator.vibrate(14);   // §12, also the plain-browser path
+if (window.CouchPadHost?.haptic) CouchPadHost.haptic('click', 0.7);
+else navigator.vibrate?.(14);
 ```
 
 | `primitive` | Feel |
 |---|---|
 | `click` | strong, crisp tap |
-| `tick` | light, sharp tap, made for rapid repeats |
-| `low_tick` | soft, low tap, made for rapid repeats |
-| `thud` | low, percussive knock that rings out (~300 ms) |
-| `spin` | spinning wobble (~150 ms); best played two or three times in a row |
-| `quick_rise`, `slow_rise` | builds up to a peak (~150 / ~500 ms) |
-| `quick_fall` | drops away from a peak (~100 ms) |
+| `tick` | light, sharp tap, for rapid repeats |
+| `low_tick` | soft, low tap, for rapid repeats |
+| `thud` | low knock that rings out (~300 ms) |
+| `spin` | wobble (~150 ms); best two or three in a row |
+| `quick_rise`, `slow_rise` | builds to a peak (~150 / ~500 ms) |
+| `quick_fall` | drops from a peak (~100 ms) |
 
-- **`scale`** is a number from 0 to 1, clamped. As on Android, 0 is the faintest buzz the
-  device can make, not silence — to stay quiet, don't call.
-- **One primitive per call.** A call replaces whatever haptic is still playing, §12's
-  included; a sequence is the game's own timers.
-- **It always plays something:** the device's own primitive where it has one, the
-  closest the launcher can build where it hasn't. A game never checks support.
-- **Untrusted input:** a name the launcher doesn't know, or a `scale` of `NaN` or
-  ±`Infinity`, plays nothing. Any other non-number counts as 0.
+- `scale` is clamped to 0–1; 0 is the faintest buzz, not silence.
+- One primitive per call; each call replaces whatever is playing.
+- Always plays something — the closest available effect where the device lacks one.
+- An unknown name, or a `NaN`/infinite scale, plays nothing.
+- On Android these follow the media-vibration setting, not touch feedback.
 
-The launcher files these as a game's vibrations, so on Android they follow the system's
-media-vibration setting, not touch feedback — which §12's WebView buzzes, untagged, do
-follow. The player's real switch is still the game's own haptics setting, and haptics
-stay decorative as in §12.
+## Platform note: tilt controls
 
-Unchanged in a plain browser: there is no `CouchPadHost`, so the §12 path runs.
+Motion and orientation events are plain web APIs; the launcher grants iOS's sensor gate
+for allow-listed origins, so no dialog appears in either app. iOS still requires the
+request to come from a user gesture:
+
+```js
+// In the tap that enables tilt — not at load.
+if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+  if (await DeviceOrientationEvent.requestPermission() !== 'granted') return showTiltUnavailable();
+}
+addEventListener('deviceorientation', onTilt);
+```
+
+A missing `requestPermission` means no gate (Android), not a missing sensor.
 
 ## Checklist for a new game
 
-1. Read `cpName`; when it's there: skip name entry, don't persist the name, suppress own
-   back/leave affordances.
-2. Implement `window.CouchPad.setName(name)`: apply locally + broadcast.
-3. Call `window.CouchPadHost.gameEnded(reason)` at the terminal-session-end chokepoint
-   when available, else fall back to normal web behavior.
-4. Keep interactive UI inside the safe zone (§5).
-5. Close the relay socket on `pagehide`; reconnect on `visibilitychange` → `visible` (§7).
-6. *(Optional)* Declare `theme-color` / `cp-accent-color` metas (§4).
-7. Register the controller-URL template on room create — it is the only thing that
-   resolves a typed code, a canonical link or a §8 nearby tap (§6).
-8. Declare the game in `games-manifest.json` (hosts, controllerBaseUrl, room-code format).
-9. *(Optional)* Arm the system back gesture with `enableSystemBack(true)` where back is
-   welcome, disarm the moment it isn't, and implement `window.CouchPad.back()` if there's
-   something to close (§9).
-10. *(Optional)* Ask for landscape with `setOrientation('landscape')` if the controller
-    wants it — as early as possible — and handle the side-moving safe zone (§10).
-11. *(Native display apps only)* Advertise the room over `_couchpad._tcp` so the launcher
-    can offer one-tap join (§8).
-12. *(Optional)* Play haptics through `CouchPadHost.haptic` where it exists, else
-    `navigator.vibrate` within §12's rules (§12–13).
+1. Use `CouchPadHost.name` as the player's name (§1); offer a rename through
+   `editName()` (§2).
+2. A close button calling `leave()`; `gameEnded(reason)` on terminal end (§3).
+3. A `color-scheme` meta (§4).
+4. `viewport-fit=cover`, interactive UI inside `env(safe-area-inset-*)` (§5).
+5. Close the socket on `pagehide`, reconnect on `visibilitychange` (§7).
+6. A controller-URL template on room create (§6) and an entry in `games-manifest.json`.
+7. *Optional:* Android back (§9), landscape (§10), haptics (§11–12), mDNS for native
+   displays (§8).
 
-Every touchpoint above has a live reference implementation — a stand-in controller
-that arms and disarms system back, answers `back()` three different ways, swaps its
-theme metas and draws its safe zone. Open <https://test.couchpad.games/CPTEST> from
-the launcher to watch each one behave; the source is `controller-test.html` in the
-couchpad.games site repo, and it is updated in the same change as this document.
-
-Keep all contract code in the game's own bundle — game origins typically ship
-`script-src 'self'`, and what the launcher injects is only ever glue: the guarded
-`setName` call, a self-contained meta observer, and the guarded `back()` call (both
-platforms inject via their `evaluateJavaScript` equivalent, which is exempt from the
-page's CSP).
+<https://test.couchpad.games/CPTEST> is a reference controller exercising every
+touchpoint; its source, `controller-test.html` in the couchpad.games site repo, changes
+together with this document.
 
 ## Versioning
 
-There is no version number on the wire. Every touchpoint is feature-detected — a param
-that is there or isn't, a bridge object that exists or doesn't — so a game implements
-what it recognizes and ignores the rest, and the launcher can add capabilities without a
-coordinated release.
-
-That makes additions free and breaks expensive by construction: a change old games cannot
-survive can't be signalled by a version bump, so it ships as a **new param or bridge
-name** that only updated games look for, leaving everyone else on today's behavior. The
-`— v1` in this document's title names the document, not a handshake.
+There is no version on the wire: every touchpoint is feature-detected, so additions need
+no coordinated release. A change old games can't survive ships under a **new** param or
+bridge name, never as a redefinition. "v1" names this document, not a handshake.

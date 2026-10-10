@@ -135,7 +135,7 @@ struct ProfileSheet: View {
                 .foregroundStyle(palette.onPrimary)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
-        .buttonStyle(.borderedProminent)
+        .modifier(ProminentGlassButton())
         .buttonBorderShape(.roundedRectangle(radius: 14))
         .controlSize(.large)
         .disabled(trimmedName.isEmpty)

@@ -256,7 +256,7 @@ struct MainScreen: View {
         .onChange(of: isTopVisible, initial: true) { _, visible in
             if visible {
                 // Re-read the profile on pop-back: a rename inside the game host writes
-                // the store, and home's chip — and the next join's cpName — must follow.
+                // the store, and home's chip — and the next game's name — must follow.
                 // (Android gets this for free: its Main entry is disposed under the game
                 // host, so the remembered load re-runs on return.)
                 profile = ProfileStore.load()
@@ -371,7 +371,7 @@ struct MainScreen: View {
                     afterName = nil
                     profileRequest = nil
                     if let pending {
-                        perform(pending, p)
+                        perform(pending)
                     }
                 }
             )
@@ -437,23 +437,23 @@ struct MainScreen: View {
     // MARK: Join funnel
 
     @MainActor
-    private func launchJoin(_ target: JoinOutcome, _ p: Profile) {
+    private func launchJoin(_ target: JoinOutcome) {
         guard case .success(let game, let roomCode, let joinUrl) = target else { return }
         successTick += 1
         RecentRoomStore.remember(game: game, joinUrl: joinUrl, roomCode: roomCode)
-        onJoin(withProfile(joinUrl, p), game.name, game.hosts)
+        onJoin(joinUrl, game.name, game.hosts)
     }
 
     @MainActor
-    private func perform(_ action: AfterName, _ p: Profile) {
+    private func perform(_ action: AfterName) {
         switch action {
         case .scan:
-            scanRequest = ScanRequest(games: games, profile: p)
+            scanRequest = ScanRequest(games: games)
         case .enterCode:
             codeError = nil
             showCodeEntry = true
         case .join(let target):
-            launchJoin(target, p)
+            launchJoin(target)
         }
     }
 
@@ -463,7 +463,7 @@ struct MainScreen: View {
             afterName = action
             profileRequest = ProfileSheetRequest(gated: true, profile: profile)
         } else {
-            perform(action, profile)
+            perform(action)
         }
     }
 
@@ -498,7 +498,7 @@ struct MainScreen: View {
             switch outcome {
             case .success:
                 codeText = ""
-                launchJoin(outcome, profile)
+                launchJoin(outcome)
             case .failure(let message):
                 // Alerts auto-dismiss on any action; re-present with the error
                 // as the message so the player can correct the code.
@@ -593,7 +593,6 @@ private struct ProfileSheetRequest: Identifiable {
 private struct ScanRequest: Identifiable {
     let id = UUID()
     let games: [Game]
-    let profile: Profile
 }
 
 // MARK: - GameEndBanner

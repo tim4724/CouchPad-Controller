@@ -335,7 +335,7 @@ struct Profile: Equatable {
 /// game instead of hitting a name wall — they can still rename or reroll (the 🎲 in
 /// ProfileSheet). English-only by design (v1): gamer tags read as English across all
 /// our locales, and it sidesteps a per-culture review of 500+ combos. Every word is
-/// ≤7 chars so "Adjective Noun" always fits Contract v1's 16-char cpName. Keep this
+/// ≤7 chars so "Adjective Noun" always fits the 16-char name limit. Keep this
 /// list in sync with the Android FunnyName in Profile.kt.
 enum FunnyName {
     private static let adjectives = [

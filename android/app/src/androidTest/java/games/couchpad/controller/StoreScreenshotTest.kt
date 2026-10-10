@@ -8,6 +8,9 @@ import android.os.Build
 import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -17,7 +20,6 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -191,14 +193,15 @@ class StoreScreenshotTest {
   private fun captureInGame(url: String, name: String, landscape: Boolean = false) {
     val intent = Intent(Intent.ACTION_VIEW, url.toUri(), appContext, MainActivity::class.java)
     ActivityScenario.launch<MainActivity>(intent).use { scenario ->
-      // "Joining %1$s…" localized prefix, title-independent (the page <title>
-      // replaces the manifest name while the cover is still up).
+      // "Joining %1$s…" localized prefix, title-independent.
       val joiningPrefix = str(R.string.joining_game, MARKER).substringBefore(MARKER)
-      // Wait for the game host (its Leave control), then for the cover to be gone. Only
-      // its absence, never its appearance: a page the WebView has cached can paint
-      // before the first check, and the cover is already gone.
+      // Wait for the game host (its WebView), then for the cover to be gone. Only its
+      // absence, never its appearance: a page the WebView has cached can paint before
+      // the first check, and the cover is already gone.
       compose.waitUntil(timeoutMillis = 15_000) {
-        compose.onAllNodesWithContentDescription(str(R.string.leave_game)).fetchSemanticsNodes().isNotEmpty()
+        var hosting = false
+        scenario.onActivity { hosting = it.window.decorView.hasWebView() }
+        hosting
       }
       compose.waitUntil(timeoutMillis = 30_000) {
         compose.onAllNodes(hasText(joiningPrefix, substring = true)).fetchSemanticsNodes().isEmpty()
@@ -282,3 +285,6 @@ class StoreScreenshotTest {
       "https://tinytrack.couchpad.games/$ROOM_CODE?scenario=lobby-host&color=0"
   }
 }
+
+private fun View.hasWebView(): Boolean =
+  this is WebView || (this is ViewGroup && (0 until childCount).any { getChildAt(it).hasWebView() })

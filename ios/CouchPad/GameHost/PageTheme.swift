@@ -1,24 +1,18 @@
 import SwiftUI
 import Foundation
 
-/// Optional theming hints from the controller page's `<head>` (CONTRACT.md §4):
-/// `theme-color` tints the launcher's top chrome, `cp-accent-color` tints launcher
-/// accents shown over the game. Purely cosmetic — absent or unparseable metas fall
-/// back to the stock dark chrome.
-struct PageTheme: Equatable {
-    var bar: Color? = nil
+/// The page's own colors for the launcher's name sheet (CONTRACT.md §2).
+struct SheetColors {
+    var surface: Color? = nil
     var accent: Color? = nil
 }
 
-/// Bridge input is untrusted page data: strict shape, hard length cap, fallback on anything odd.
-func parsePageTheme(_ json: String?) -> PageTheme {
-    guard let json, json.utf16.count <= 256 else { return PageTheme() }
-    guard let data = json.data(using: .utf8),
-          let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    else { return PageTheme() }
-    return PageTheme(
-        bar: parseCssRgb(object["bar"] as? String),
-        accent: parseCssRgb(object["accent"] as? String)
+/// The readSheetColors result is untrusted page data: strict shape, nil on anything odd.
+func parseSheetColors(_ result: Any?) -> SheetColors {
+    let object = result as? [String: Any]
+    return SheetColors(
+        surface: parseCssRgb(object?["surface"] as? String),
+        accent: parseCssRgb(object?["accent"] as? String)
     )
 }
 
@@ -30,7 +24,7 @@ private let cssRgbRegex = try! NSRegularExpression(
 
 /// The ENTIRE trimmed string must match the computed-style rgb()/rgba() format
 /// (single space after commas). Components > 255 → nil. Alpha is deliberately
-/// dropped: the chrome behind the status bar must be opaque.
+/// dropped: the sheet surface must be opaque.
 func parseCssRgb(_ value: String?) -> Color? {
     guard let value else { return nil }
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -84,7 +78,7 @@ func parseVibrationPattern(_ csv: String?) -> [Int] {
 
 /// `CouchPadHost.haptic(primitive, scale)` as the shim posts it: `<primitive>,<scale>`.
 /// Untrusted like the rest: an unknown primitive or a NaN/infinite scale plays nothing,
-/// and the scale is clamped to 0–1 (CONTRACT.md §13).
+/// and the scale is clamped to 0–1 (CONTRACT.md §12).
 func parseHaptic(_ value: String?) -> (primitive: HapticPrimitive, scale: Double)? {
     guard let value, value.utf16.count <= 64 else { return nil }
     let fields = value.split(separator: ",", omittingEmptySubsequences: false)
@@ -96,21 +90,35 @@ func parseHaptic(_ value: String?) -> (primitive: HapticPrimitive, scale: Double
 
 enum GameHostJS {
     /// Document-start user script (all frames): defines
-    /// `window.CouchPadHost.{gameEnded,themeChanged,enableSystemBack,setOrientation,haptic}`
+    /// `window.CouchPadHost.{name,editName,gameEnded,leave,enableSystemBack,setOrientation,haptic}`
     /// posting `{type, value}` to `window.webkit.messageHandlers.cpHost`, and polyfills
-    /// `navigator.vibrate` over the same channel (CONTRACT.md §12) — WebKit ships no
+    /// `navigator.vibrate` over the same channel (CONTRACT.md §11) — WebKit ships no
     /// Vibration API, which is why a game's haptics are silent on iOS but not on
     /// Android. Idempotent — the shim must exist on every page load/navigation, but
     /// never redefine an already-installed bridge.
     ///
-    /// `enableSystemBack` and `setOrientation` narrow to a boolean / the two legal
+    /// `enableSystemBack` is an empty function: iOS has no system back (CONTRACT.md §9),
+    /// but games call the same API on both platforms. `setOrientation` narrows to the two legal
     /// keywords here, so the native side sees the contract's strict comparison (Android
     /// gets the same for free from its typed JS bridge) rather than JS truthiness.
     /// `vibrate` likewise normalizes to the spec's millisecond array and returns the
     /// spec's boolean, so a page sees the same shape and return type as the real API.
-    static let bridgeShim = """
+    ///
+    /// `name` is baked in — WebKit has no synchronous page→app call — so the host
+    /// rebuilds this script after a rename. Every `editName()` reaches the launcher and
+    /// gets its own Promise; the launcher answers them in order through
+    /// `__cpNameResult(name | null)`, which also updates `name` in place.
+    static func bridgeShim(name: String) -> String {
+        """
     (function () {
       if (window.CouchPadHost) { return; }
+      var name = \(jsString(name));
+      var waiting = [];
+      window.__cpNameResult = function (result) {
+        var done = waiting.shift();
+        if (typeof result === 'string') { name = result; }
+        if (done) { done(typeof result === 'string' ? result : null); }
+      };
       function post(type, value) {
         try {
           window.webkit.messageHandlers.cpHost.postMessage({
@@ -120,9 +128,18 @@ enum GameHostJS {
         } catch (e) {}
       }
       window.CouchPadHost = {
+        get name() { return name; },
+        editName: function () {
+          return new Promise(function (resolve) {
+            waiting.push(resolve);
+            post('editName', null);
+          });
+        },
         gameEnded: function (reason) { post('gameEnded', reason); },
-        themeChanged: function (json) { post('themeChanged', json); },
-        enableSystemBack: function (on) { post('enableSystemBack', on === true); },
+        leave: function () { post('leave', null); },
+        // A hint that back is welcome (CONTRACT.md §9). iOS has no system back to
+        // hand it to, so it does nothing here — but it exists, so games call one API.
+        enableSystemBack: function () {},
         setOrientation: function (mode) {
           post('setOrientation', mode === 'landscape' ? 'landscape' : 'portrait');
         },
@@ -137,7 +154,7 @@ enum GameHostJS {
           var list = Array.isArray(pattern) ? pattern : [pattern];
           var out = [];
           // Entry count and per-entry milliseconds mirror parseVibrationPattern's caps
-          // (CONTRACT.md §12). Two languages, no shared constant: the native side is
+          // (CONTRACT.md §11). Two languages, no shared constant: the native side is
           // authoritative and re-checks everything — keep these in step with it.
           for (var i = 0; i < list.length && i < 128; i++) {
             var ms = Math.round(Number(list[i]));
@@ -150,23 +167,7 @@ enum GameHostJS {
       } catch (e) {}
     })();
     """
-
-    /// Delivers a system back gesture to the page (CONTRACT.md §9), evaluated only
-    /// while the page has armed system back.
-    ///
-    /// Resolves to `true` — the ONLY result that keeps the player in the game — when
-    /// the game both implements `back()` and returns a literal `true` from it. A
-    /// missing handler, a falsy/absent return (including a Promise, which is why §9
-    /// requires a synchronous decision) or a throw all resolve to `false`, and the
-    /// launcher leaves.
-    static let deliverBack = """
-    (function () {
-      try {
-        return window.CouchPad && typeof window.CouchPad.back === 'function' &&
-          window.CouchPad.back() === true;
-      } catch (e) { return false; }
-    })();
-    """
+    }
 
     /// Document-start user script (main frame only): posts one `__firstFrame` after
     /// DOMContentLoaded plus two rAF turns — i.e. once the compositor has actually
@@ -209,69 +210,71 @@ enum GameHostJS {
     static let dispatchPageHide =
         "window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));"
 
-    /// The theme-meta observer, evaluated after each page load. Pushes the metas'
-    /// state through `CouchPadHost.themeChanged` immediately and on every change —
-    /// head mutations via MutationObserver, plus scheme flips (a `media` attribute
-    /// can start/stop matching). Pushes are deduped. Idempotent: re-running on a
-    /// document that already has the observer just re-pushes.
-    static let watchPageTheme = """
+    /// Settles the page's pending `editName()` Promise (CONTRACT.md §2): the saved name, or
+    /// null when the sheet was dismissed.
+    static func nameResult(_ name: String?) -> String {
+        "window.__cpNameResult && window.__cpNameResult(\(name.map(jsString) ?? "null"));"
+    }
+
+    /// A Swift string as a JS string literal (JSON-encoded, so quotes and escapes are safe).
+    private static func jsString(_ value: String) -> String {
+        String(data: (try? JSONEncoder().encode(value)) ?? Data(), encoding: .utf8) ?? "\"\""
+    }
+
+    /// Read once, when the page opens the name sheet (CONTRACT.md §2):
+    /// `<meta name="theme-color">` (first one whose `media` matches) for the surface, and
+    /// the CSS `accent-color` of `<html>` for the accent — `auto` (unset) reads as none.
+    /// Both normalized to rgb() by computed style; CSS.supports() first, because an
+    /// invalid color would fall back to the inherited one.
+    static let readSheetColors = """
     (function () {
-      if (window.__cgThemePush) { window.__cgThemePush(); return; }
-      var last = null;
-      function read(name) {
-        var metas = document.querySelectorAll('meta[name="' + name + '"]');
-        if (!metas.length) return null;
-        var chosen = null;
-        for (var i = 0; i < metas.length; i++) {
-          var m = metas[i].getAttribute('media');
-          if (!m || (window.matchMedia && window.matchMedia(m).matches)) { chosen = metas[i]; break; }
-        }
-        if (!chosen) chosen = metas[0];
-        var content = chosen.getAttribute('content');
-        if (!content) return null;
-        if (!(window.CSS && CSS.supports && CSS.supports('color', content))) return null;
+      function rgb(value) {
+        if (!value || !CSS.supports('color', value)) return null;
         var probe = document.createElement('div');
-        probe.style.color = content;
+        probe.style.color = value;
         document.documentElement.appendChild(probe);
-        var rgb = getComputedStyle(probe).color;
+        var color = getComputedStyle(probe).color;
         probe.remove();
-        return rgb || null;
+        return color;
       }
-      function push() {
-        var t = JSON.stringify({ bar: read('theme-color'), accent: read('cp-accent-color') });
-        if (t === last) return;
-        last = t;
-        if (window.CouchPadHost && window.CouchPadHost.themeChanged) window.CouchPadHost.themeChanged(t);
+      var metas = document.querySelectorAll('meta[name="theme-color"]');
+      var meta = null;
+      for (var i = 0; i < metas.length && !meta; i++) {
+        var media = metas[i].getAttribute('media');
+        if (!media || matchMedia(media).matches) meta = metas[i];
       }
-      window.__cgThemePush = push;
-      if (document.head) new MutationObserver(push).observe(document.head,
-        { childList: true, subtree: true, attributes: true, attributeFilter: ['content', 'media', 'name'] });
-      if (window.matchMedia) {
-        var mq = window.matchMedia('(prefers-color-scheme: dark)');
-        if (mq.addEventListener) mq.addEventListener('change', push); else if (mq.addListener) mq.addListener(push);
-      }
-      push();
+      var accent = getComputedStyle(document.documentElement).accentColor;
+      return { surface: rgb(meta && meta.getAttribute('content')),
+               accent: accent === 'auto' ? null : rgb(accent) };
     })();
     """
 
-    /// Push the current name into the running controller (CONTRACT.md §2). Guarded,
-    /// so a game that hasn't implemented setName is a harmless no-op. nil when the
-    /// name is blank — a blank name is never injected.
-    static func nameInjection(name: String) -> String? {
-        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        guard let data = try? JSONEncoder().encode([name]),
-              let array = String(data: data, encoding: .utf8)
-        else { return nil }
-        let quoted = String(array.dropFirst().dropLast())  // "[\"…\"]" → "\"…\""
-        return "window.CouchPad && typeof window.CouchPad.setName === 'function' && window.CouchPad.setName(\(quoted));"
-    }
-
-    /// Publish the safe zone to the page as CSS vars on <html> (CONTRACT.md §5), in CSS px.
-    static func safeZonePush(_ zone: SafeZone) -> String {
-        "(function () { var s = document.documentElement.style;"
-            + " s.setProperty('--cp-safe-top', '\(zone.top)px');"
-            + " s.setProperty('--cp-safe-left', '\(zone.left)px');"
-            + " s.setProperty('--cp-safe-right', '\(zone.right)px');"
-            + " s.setProperty('--cp-safe-bottom', '\(zone.bottom)px'); })();"
-    }
+    /// The color-scheme meta observer (CONTRACT.md §4), evaluated after each page load.
+    /// Posts whether the page is dark straight to the `cpHost` handler — not through
+    /// `CouchPadHost`, which is the games' API — immediately
+    /// and on every change — head mutations via MutationObserver, plus system scheme
+    /// flips (`light dark` follows the system). Pushes are deduped. No meta reads as
+    /// light, the web's own default. Idempotent: re-running on a document that already
+    /// has the observer just re-pushes.
+    static let watchPageScheme = """
+    (function () {
+      if (window.__cpSchemePush) { window.__cpSchemePush(); return; }
+      var handler = window.webkit.messageHandlers.cpHost;
+      var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+      var last = null;
+      function push() {
+        var meta = document.querySelector('meta[name="color-scheme"]');
+        var schemes = ((meta && meta.getAttribute('content')) || '').toLowerCase().split(/\\s+/);
+        var dark = schemes.indexOf('dark') >= 0 && (schemes.indexOf('light') < 0 || systemDark.matches);
+        if (dark === last) return;
+        last = dark;
+        handler.postMessage({ type: '__scheme', value: String(dark) });
+      }
+      window.__cpSchemePush = push;
+      if (document.head) new MutationObserver(push).observe(document.head,
+        { childList: true, subtree: true, attributes: true, attributeFilter: ['content', 'name'] });
+      systemDark.addEventListener('change', push);
+      push();
+    })();
+    """
 }

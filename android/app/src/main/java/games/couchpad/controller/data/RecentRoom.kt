@@ -2,9 +2,8 @@ package games.couchpad.controller.data
 
 /**
  * The room this phone is in or just left, with everything the home rejoin card needs.
- * [joinUrl] omits cpName — re-wrapped with the current name at rejoin. [title] is captured
- * from the controller page mid-session, so it's null until then; the card's glyph comes
- * from the manifest `icon`, not the page. [platform] is which box the room is on, off the
+ * [title] is captured from the controller page mid-session, so it's null until then; the
+ * card's glyph comes from the manifest `icon`, not the page. [platform] is which box the room is on, off the
  * first URL that declared it — the join URL at [RecentRoomStore.remember], else the
  * relay's template at [RecentRoomStore.putPlatform].
  */
@@ -66,16 +65,13 @@ object RecentRoomStore {
     platform = templateUrl?.let(::devicePlatform)
   }
 
-  /** Sanitizes [raw] (trim, collapse whitespace, cap length), stores it as the
-   *  active room's title, and returns the cleaned value so callers can display the
-   *  same text. Null when there's no active room or nothing survives cleaning. */
+  /** Sanitizes [raw] (trim, collapse whitespace, cap length) and stores it as the
+   *  active room's title — unless there's no active room or nothing survives cleaning. */
   @Synchronized
-  fun putTitle(raw: String): String? {
-    if (game == null) return null
+  fun putTitle(raw: String) {
+    if (game == null) return
     val clean = raw.trim().replace(Regex("\\s+"), " ").take(MAX_TITLE_LEN)
-    if (clean.isEmpty()) return null
-    title = clean
-    return clean
+    if (clean.isNotEmpty()) title = clean
   }
 
   /** Called by the game host for as long as it is on screen (see [inRoom]). */

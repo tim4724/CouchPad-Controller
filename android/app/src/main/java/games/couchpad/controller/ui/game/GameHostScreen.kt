@@ -22,91 +22,67 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.AbsoluteAlignment
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.Insets
 import androidx.core.util.Consumer
-import androidx.core.view.DisplayCutoutCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import kotlinx.coroutines.delay
+import org.json.JSONObject
 import games.couchpad.controller.R
 import games.couchpad.controller.BuildConfig
 import games.couchpad.controller.data.LAUNCHER_HOST
-import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
 import games.couchpad.controller.data.NearbyAdvertiser
 import games.couchpad.controller.data.RecentRoomStore
@@ -116,27 +92,25 @@ import games.couchpad.controller.data.localNetworkPermissionGranted
 import games.couchpad.controller.data.markLocalNetworkAsked
 import games.couchpad.controller.data.hostInDomain
 import games.couchpad.controller.data.isPrivateHost
-import games.couchpad.controller.theme.contentColorOn
 import games.couchpad.controller.theme.CouchPadTheme
+import games.couchpad.controller.theme.contentColorOn
 import games.couchpad.controller.ui.components.JoiningCover
-import games.couchpad.controller.ui.components.PlayerChip
+import games.couchpad.controller.ui.main.ProfileSheet
 import games.couchpad.controller.ui.components.ServerUnreachableRetry
 import games.couchpad.controller.ui.components.denyLocalFileAccess
 import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.gestureNavEnabled
 import games.couchpad.controller.ui.components.hideNavigationBar
 import games.couchpad.controller.ui.components.themeLightBarIcons
-import games.couchpad.controller.ui.main.ProfileSheet
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.ceil
-import kotlin.math.roundToInt
-import org.json.JSONObject
 
 /**
- * Hosts a game's remote controller in a native WebView under a launcher-owned
- * "Leave" bar. As a TOP-LEVEL WebView (not an iframe), the game's `frame-ancestors`
- * CSP doesn't apply. [allowedHosts] is the navigation allow-list — the client-side
- * trust boundary, since the join URL can originate from an untrusted relay lookup.
+ * Hosts a game's remote controller in a native WebView spanning the whole screen,
+ * with no launcher chrome over it: the page draws its own close (§3), and only its
+ * rename button opens the launcher's name sheet (CONTRACT.md §2). As a TOP-LEVEL
+ * WebView (not an iframe), the game's `frame-ancestors` CSP doesn't apply.
+ * [allowedHosts] is the navigation allow-list — the client-side trust boundary, since
+ * the join URL can originate from an untrusted relay lookup.
  */
 @Composable
 fun GameHostScreen(
@@ -146,17 +120,11 @@ fun GameHostScreen(
   onLeave: () -> Unit,
   onGameEnd: (reason: String?) -> Unit,
 ) {
-  // Optional theming hints from the page's <head> (CONTRACT.md §4), pushed by the
-  // launcher-injected observer at load and on every runtime change.
-  var pageTheme by remember { mutableStateOf(PageTheme()) }
-  // In-game chrome is always dark, like a video player — the games are dark and a
-  // bright bar above them would be jarring.
-  CouchPadTheme(darkTheme = true) {
-    // A game-supplied accent flows through `primary`, so every launcher accent over
-    // the game (chip, spinner, rename sheet) follows.
-    MaterialTheme(colorScheme = MaterialTheme.colorScheme.withAccent(pageTheme.accent)) {
-      GameHostContent(joinUrl, title, allowedHosts, onLeave, onGameEnd, pageTheme, onPageTheme = { pageTheme = it })
-    }
+  // The launcher's own surfaces here (join cover, retry, the blank page behind them)
+  // follow the system's light/dark mode, like home: the launcher can't know a game's
+  // colors before its page has loaded, and not every game is in the manifest.
+  CouchPadTheme {
+    GameHostContent(joinUrl, title, allowedHosts, onLeave, onGameEnd)
   }
 }
 
@@ -172,31 +140,38 @@ private fun GameHostContent(
   allowedHosts: List<String>,
   onLeave: () -> Unit,
   onGameEnd: (reason: String?) -> Unit,
-  pageTheme: PageTheme,
-  onPageTheme: (PageTheme) -> Unit,
 ) {
   val context = LocalContext.current
   val view = LocalView.current
-  val density = LocalDensity.current
-  val layoutDirection = LocalLayoutDirection.current
   var webView by remember { mutableStateOf<WebView?>(null) }
   // Bumped when the renderer dies — a WebView can't be reused after that, so the
   // key() below swaps in a fresh one that re-issues the join.
   var webViewKey by remember { mutableStateOf(0) }
   val allowed = remember(allowedHosts) { (allowedHosts + LAUNCHER_HOST).map { it.lowercase() } }
-  var profile by remember { mutableStateOf(ProfileStore.load(context)) }
-  var showProfile by remember { mutableStateOf(false) }
   var loading by remember { mutableStateOf(true) }
   // The main document failed to load (no connection / host unreachable) — shows the
   // in-place retry overlay instead of a dead join spinner.
   var failed by remember { mutableStateOf(false) }
-  // The page's own <title> supersedes the manifest name in the LEAVE bar once the
-  // controller reports one, so games not (yet) in the bundled manifest still show a
-  // real name instead of the generic "CouchPad" fallback. Null until the page
-  // reports; the manifest name covers the join cover and any title-less page.
-  var pageTitle by remember { mutableStateOf<String?>(null) }
+  // Is the page dark, per its color-scheme meta (CONTRACT.md §4)? Null until the
+  // launcher's observer reports.
+  var pageDark by remember { mutableStateOf<Boolean?>(null) }
+  // The page's editName() requests (CONTRACT.md §2), oldest first: the head's sheet is
+  // open, and it is answered when that sheet has slid out. A request made meanwhile —
+  // the page is only tappable while a sheet slides out — opens the next sheet then, and
+  // the page matches answers to its Promises by that order.
+  val nameRequests = remember { mutableStateListOf<NameRequest>() }
+  // The join has been loading longer than a normal one takes (see the cover's close).
+  var slowLoad by remember { mutableStateOf(false) }
+  LaunchedEffect(loading) {
+    slowLoad = false
+    if (loading) {
+      delay(SLOW_LOAD_MS)
+      slowLoad = true
+    }
+  }
   // Has the page armed the system back gesture (CONTRACT.md §9)? Default false —
-  // the safe state: edges excluded, LEAVE the only exit. Reset on every navigation.
+  // the safe state: edges excluded, the page's own close the only exit. Reset on
+  // every navigation.
   var systemBackEnabled by remember { mutableStateOf(false) }
   // Has the page asked for landscape (CONTRACT.md §10)? Default false — the launcher's
   // portrait.
@@ -205,24 +180,34 @@ private fun GameHostContent(
   // it is what lets the launcher HOLD the orientation across that navigation instead of
   // snapping back to portrait while the next page is still on its way.
   var orientationAsked by remember { mutableStateOf(false) }
-  val displayTitle = pageTitle ?: title
+  // The page has painted its first frame. The join cover lifts on that — unless the page
+  // asked for landscape and the window hasn't turned yet: the turn takes a few hundred
+  // ms, and lifting earlier shows the page portrait-shaped mid-turn (a landscape-only
+  // game's "turn your phone" overlay, say).
+  var painted by remember { mutableStateOf(false) }
+  val isLandscapeUi = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+  LaunchedEffect(loading, painted, landscape, isLandscapeUi) {
+    // Split-screen ignores orientation requests, so waiting there would never end.
+    val turned = !landscape || isLandscapeUi || context.findActivity()?.isInMultiWindowMode == true
+    if (loading && painted && turned) loading = false
+  }
   val surfaceArgb = MaterialTheme.colorScheme.surface.toArgb()
   // The bridge/WebView client outlive recompositions but must call the CURRENT
   // callbacks — hence rememberUpdatedState.
   val currentOnLeave by rememberUpdatedState(onLeave)
   val currentOnGameEnd by rememberUpdatedState(onGameEnd)
-  val currentOnPageTheme by rememberUpdatedState(onPageTheme)
-  // One-shot guard for the two TERMINAL exits — user LEAVE and a game-reported end.
+  // One-shot guard for the two TERMINAL exits — a leave and a game-reported end.
   // Whoever fires first wins; the loser (incl. a stray gameEnded during teardown)
   // no-ops, so we never pop the back stack twice. A load failure is NOT terminal: it
-  // shows the retry overlay in place, and only Leave from there trips this.
+  // shows the retry overlay in place, and only its close trips this.
   val exited = remember { AtomicBoolean(false) }
   val leave = { if (exited.compareAndSet(false, true)) currentOnLeave() }
   // Retry the controller load in place (no re-scan): clear the error, bring the join
-  // cover back, reload.
+  // cover back, reload. A dead renderer lands here too, before its WebView is swapped.
   val retry = {
     failed = false
     loading = true
+    painted = false
     webView?.reload()
     Unit
   }
@@ -258,7 +243,7 @@ private fun GameHostContent(
   val hostBridge = remember {
     CouchPadHostBridge(
       onGameEnded = { if (exited.compareAndSet(false, true)) currentOnGameEnd(it) },
-      onThemeChanged = { currentOnPageTheme(it) },
+      onLeave = leave,
       onSystemBackEnabled = { systemBackEnabled = it },
       onLandscape = {
         orientationAsked = true
@@ -267,6 +252,15 @@ private fun GameHostContent(
       haptics = GameHaptics(context),
     )
   }
+  val nameBridge = remember {
+    NameBridge(
+      currentName = { ProfileStore.load(context).name },
+      onEditName = {
+        webView?.evaluateJavascript(READ_SHEET_COLORS_JS) { nameRequests.add(NameRequest(parseSheetColors(it))) }
+      },
+    )
+  }
+  val schemeBridge = remember { SchemeBridge { pageDark = it } }
 
   // The page's requested orientation (CONTRACT.md §10). SENSOR_LANDSCAPE, not a fixed
   // one: a controller held either way round must land right side up, and the launcher
@@ -305,14 +299,14 @@ private fun GameHostContent(
   // cap on gesture exclusion, so the WebView's exclusion rects (set below) can
   // cover the whole play area.
   //
-  // Arming (CONTRACT.md §9) only changes that for a 3-BUTTON player: their back is a
-  // button, and a hidden bar has no buttons — so the bar comes back for as long as
-  // the page stays armed. Under gesture navigation the bar stays hidden: the system
-  // still delivers the edge back swipe while it's hidden (the transient reveal is
-  // the BOTTOM edge's gesture, not the sides'), and showing it would only re-grow
-  // the safe zone the page just paid for.
-  val hostShowsNavBar = systemBackEnabled && !gestureNavEnabled(context)
-  LaunchedEffect(systemBackEnabled) {
+  // Arming (CONTRACT.md §9) brings the bar back for as long as the page stays armed —
+  // see [hostShowsNavBar] for when.
+  val hostShowsNavBar = hostShowsNavBar(
+    armed = systemBackEnabled,
+    landscape = isLandscapeUi,
+    gestureNav = gestureNavEnabled(context),
+  )
+  LaunchedEffect(hostShowsNavBar) {
     val window = context.findActivity()?.window ?: return@LaunchedEffect
     if (hostShowsNavBar) {
       WindowCompat.getInsetsController(window, view).show(WindowInsetsCompat.Type.navigationBars())
@@ -331,8 +325,8 @@ private fun GameHostContent(
   // exclusion-cap lift is a nav-bar-only condition (see hideNavigationBar), and back
   // never starts from the top edge, so neither reason to un-hide on arming applies.
   // That keeps the top inset out of §9's arming story — it moves on rotation alone.
-  // Games need no change either way: --cp-safe-top is already live and §10 already
-  // tells them the zone reshapes when it turns.
+  // Games need no change either way: env(safe-area-inset-top) is already live and §10
+  // already tells them the zone reshapes when it turns.
   //
   // Sets the transient-by-swipe behavior itself rather than inheriting whatever
   // hideNavigationBar last set on this window: same value, but a hidden bar with no
@@ -361,19 +355,15 @@ private fun GameHostContent(
     }
   }
 
-  fun watchPageTheme() {
-    webView?.evaluateJavascript(WATCH_PAGE_THEME_JS, null)
+  fun watchPageScheme() {
+    webView?.evaluateJavascript(WATCH_PAGE_SCHEME_JS, null)
   }
 
-  // Push the current name into the running controller (CONTRACT.md §2). Guarded,
-  // so a game that hasn't implemented setName is a harmless no-op.
-  fun injectName(name: String) {
-    if (name.isBlank()) return
-    webView?.evaluateJavascript(
-      "window.CouchPad && typeof window.CouchPad.setName === 'function' && " +
-        "window.CouchPad.setName(${JSONObject.quote(name)});",
-      null,
-    )
+  // Settle the page's pending editName() Promise (CONTRACT.md §2): the saved name, or
+  // null when the sheet was dismissed.
+  fun settleName(name: String?) {
+    val arg = name?.let(JSONObject::quote) ?: "null"
+    webView?.evaluateJavascript("window.__cpNameResult && window.__cpNameResult($arg);", null)
   }
 
   // Opt the controller surface out of the system back-gesture so edge swipes reach
@@ -421,126 +411,21 @@ private fun GameHostContent(
     onDispose { activity?.removeOnNewIntentListener(listener) }
   }
 
-  // A game-supplied theme-color becomes the chrome's scrim tint; its content
-  // color is luminance-picked since the page sends no pair.
-  val barTarget = pageTheme.bar ?: MaterialTheme.colorScheme.surfaceContainer
-  val barColor by animateColorAsState(barTarget, tween(300), label = "gameBarColor")
-  val barContent = pageTheme.bar?.let(::contentColorOn)
+  // Old WebViews map no system-bar insets into env(safe-area-inset-*) — M136 added
+  // that for a full-screen WebView (Chromium's android_webview/docs/insets.md). Such a
+  // WebView is kept out from under the bars instead, so the page needs no insets.
+  val legacyInsets = remember { webViewMajorVersion(context) < 136 }
 
-  // Safe-zone geometry, measured off the real layout (window px). In PORTRAIT the
-  // top is the chrome's full extent (inset + LEAVE bar) and the sides carry the
-  // chip's gutter. In LANDSCAPE there is no bar — the chrome collapses to the two
-  // stacked icons in a side strip, the top shrinks to the bare cutout (the
-  // game gets the full height), and the column's side carries it instead. Each side
-  // is published on its own (§5). Bottom is the cutout, or the
-  // nav bar when a 3-button player's armed page brings it back — reported as
-  // visible insets, so this is 0 again while it is hidden.
-  var chromeHeightPx by remember { mutableStateOf(0) }
-  var chromeWidthPx by remember { mutableStateOf(0) }
-  var chipRightPx by remember { mutableStateOf(0) }
-  val isLandscapeUi =
-    LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-  val cutout = WindowInsets.displayCutout
-  val cutoutTop = cutout.getTop(density)
-  val cutoutBottom = cutout.getBottom(density)
-  // Counted only while the host itself shows the bar (the 3-button armed case above).
-  // The system also brings a hidden bar back for as long as the keyboard is up — the
-  // rename sheet's, or a page input's — and that must not reshape the page's safe zone
-  // under it: the bar leaves with the keyboard, so the game would squash and spring
-  // back with every name edit.
-  val navBars = if (hostShowsNavBar) WindowInsets.navigationBars else WindowInsets(0)
-  val navBottom = navBars.getBottom(density)
-  // What covers each side: the cutout on that edge — or the nav bar, because in
-  // landscape the 3-BUTTON bar sits on a side, not the bottom, so a §9-armed page
-  // bringing it back would otherwise cover "safe" game UI (and the icon column).
-  val leftObstructionPx =
-    maxOf(cutout.getLeft(density, layoutDirection), navBars.getLeft(density, layoutDirection))
-  val rightObstructionPx =
-    maxOf(cutout.getRight(density, layoutDirection), navBars.getRight(density, layoutDirection))
-  // The strip landscape reserves on the icon column's side: that side's obstruction, or
-  // the column plus a hairline each side, whichever is wider. Published as that side's
-  // inset AND used to place the column, which is what makes the column concentric with
-  // the band the game is told to leave — measuring the column and publishing THAT
-  // instead can only ever produce a strip it sits flush against on its inner edge.
-  val railMinPx = with(density) { (CHROME_BUTTON + CHROME_GAP * 2).roundToPx() }
-  val leftStripPx = maxOf(leftObstructionPx, railMinPx)
-  val rightStripPx = maxOf(rightObstructionPx, railMinPx)
-  // Keyed on orientation too: the cutout rects (and view width) it reads change on
-  // rotation even when both strips come out the same.
-  val (railOnRight, railDodgePx) = remember(view, isLandscapeUi, leftStripPx, rightStripPx) {
-    railPlacement(view, density, leftStripPx, rightStripPx)
-  }
-  var safeTopPx by remember { mutableStateOf(0) }
-  var safeLeftPx by remember { mutableStateOf(0) }
-  var safeRightPx by remember { mutableStateOf(0) }
-  var safeBottomPx by remember { mutableStateOf(0) }
-
-  // Publish the safe zone to the page as CSS vars on <html> (CONTRACT.md §5), in
-  // CSS px. Reads state at CALL time — the WebView factory captures this closure once.
+  // Keep status-bar icons contrasting against the page, and hand the appearance back to
+  // the theme on the way out. While the join or retry cover is up the icons sit on it,
+  // so they follow the cover's (system) mode — a server's error page under the retry
+  // cover declares no color-scheme of its own. The page decides once it shows.
   //
-  // ceil, not round: an inset that lands mid-pixel must cover the obstruction, never
-  // stop half a pixel short of it. It also makes these agree with the same edges seen
-  // through env(safe-area-inset-*), which Chromium rounds up off the synthetic cutout
-  // below — rounding to nearest left the two channels 1px apart on fractional edges.
-  fun pushSafeZone() {
-    val d = density.density
-    fun cssPx(px: Int) = ceil(px / d).toInt()
-    webView?.evaluateJavascript(
-      "(() => { const s = document.documentElement.style;" +
-        " s.setProperty('--cp-safe-top', '${cssPx(safeTopPx)}px');" +
-        " s.setProperty('--cp-safe-left', '${cssPx(safeLeftPx)}px');" +
-        " s.setProperty('--cp-safe-right', '${cssPx(safeRightPx)}px');" +
-        " s.setProperty('--cp-safe-bottom', '${cssPx(safeBottomPx)}px'); })()",
-      null,
-    )
-  }
-
-  // Recompute + re-push on any layout change; requestApplyInsets re-dispatches the
-  // synthetic cutout (set up in the factory) so env(safe-area-inset-*) tracks the
-  // same four edges as the vars.
-  LaunchedEffect(
-    chromeHeightPx,
-    chromeWidthPx,
-    chipRightPx,
-    leftObstructionPx,
-    rightObstructionPx,
-    leftStripPx,
-    rightStripPx,
-    railOnRight,
-    cutoutTop,
-    cutoutBottom,
-    navBottom,
-    isLandscapeUi,
-    webView,
-  ) {
-    // Per side (§5). Landscape: the icon column's strip on its side, the bare
-    // obstruction on the other. Portrait: the chip's own margin (measured off the
-    // chrome, which is padded by the right obstruction) on top of each side's
-    // obstruction, so a top row lines up with the chip.
-    if (isLandscapeUi) {
-      safeLeftPx = if (railOnRight) leftObstructionPx else leftStripPx
-      safeRightPx = if (railOnRight) rightStripPx else rightObstructionPx
-    } else {
-      val chipMarginPx =
-        if (chromeWidthPx > 0) (chromeWidthPx - chipRightPx - rightObstructionPx).coerceAtLeast(0) else 0
-      safeLeftPx = chipMarginPx + leftObstructionPx
-      safeRightPx = chipMarginPx + rightObstructionPx
-    }
-    // Landscape has no bar (the icons live in the side strip), so the game gets the
-    // full height back — top is the bare cutout, which is 0 on a mid-edge punch-hole.
-    safeTopPx = if (isLandscapeUi) cutoutTop else chromeHeightPx
-    safeBottomPx = maxOf(cutoutBottom, navBottom)
-    pushSafeZone()
-    webView?.requestApplyInsets()
-  }
-
-  // Keep status-bar icons contrasting against the (possibly game-colored) bar strip,
-  // and hand the appearance back to the theme on the way out. ONE owner for both, and
-  // deliberately a DisposableEffect: a LaunchedEffect body is POSTED through
-  // AndroidUiDispatcher, so a re-assert scheduled on the way out can land a frame
-  // AFTER the teardown has restored the theme value — leaving the launcher's dark UI
-  // under a light bar's dark icons until the next configuration change. onDispose runs
-  // inline while changes are applied, so apply and restore stay ordered by construction.
+  // ONE owner for both, and deliberately a DisposableEffect: a LaunchedEffect body is
+  // POSTED through AndroidUiDispatcher, so a re-assert scheduled on the way out can land
+  // a frame AFTER the teardown has restored the theme value — leaving home under the
+  // game's icon color until the next configuration change. onDispose runs inline while
+  // changes are applied, so apply and restore stay ordered by construction.
   //
   // Keyed on the whole Configuration, not uiMode + orientation: EVERY configuration
   // change re-runs MainActivity.applyEdgeToEdge, which stomps this, and a device
@@ -548,7 +433,8 @@ private fun GameHostContent(
   // neither of those two fields — so that stomp used to be permanent. Compose updates
   // LocalConfiguration from the same callback, and measurably after the activity's own,
   // so this always re-asserts on top.
-  val lightStatusIcons = barTarget.luminance() > 0.5f
+  val coverDark = isSystemInDarkTheme()
+  val lightStatusIcons = !(if (loading || failed) coverDark else pageDark ?: coverDark)
   val config = LocalConfiguration.current
   DisposableEffect(lightStatusIcons, config) {
     val window = context.findActivity()?.window
@@ -562,15 +448,17 @@ private fun GameHostContent(
   }
 
   Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-    // The game surface spans the FULL physical screen — the chrome floats above it,
-    // and the page keeps its interactive UI inside the published safe zone.
+    // The game surface spans the FULL physical screen; the page keeps its interactive
+    // UI inside env(safe-area-inset-*).
     Box(Modifier.fillMaxSize()) {
       // While the gate holds, the join cover below is the whole screen — the WebView
       // (and with it loadUrl) only comes into existence once the dialog is answered.
       if (lanGateOpen) {
       key(webViewKey) {
       AndroidView(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+          .fillMaxSize()
+          .then(if (legacyInsets) Modifier.windowInsetsPadding(barsInsets(hostShowsNavBar)) else Modifier),
         // Defined teardown ordering (the view is detached first), unlike a
         // DisposableEffect racing AndroidView's own disposal. Also runs for a
         // renderer-death swap, so the dead instance is destroyed too.
@@ -589,46 +477,31 @@ private fun GameHostContent(
           settings.mediaPlaybackRequiresUserGesture = false
           // Harden: the remote controller has no business touching local files.
           denyLocalFileAccess()
-          // Match the dark chrome while the page is blank — kills the white flash.
+          // Match the join cover while the page is blank — kills the flash.
           setBackgroundColor(surfaceArgb)
-          // Intercept insets, two jobs. (1) The REAL insets never reach WebView, but
-          // IME insets do while the page's own editable field has the window focus:
-          // Chromium (targetSdk 35+) self-applies them, shrinking visualViewport and
-          // scrolling the field into view. The rename sheet is a separate window, so
-          // this one is unfocused while its keyboard is up. (2) Hand WebView a
-          // SYNTHETIC display cutout equal to the full safe zone: viewport-fit=cover
-          // pages then see the same four edges as --cp-safe-* through the standard
-          // env(safe-area-inset-*). Chromium reads the DisplayCutout's safe insets;
-          // the matching insets and per-edge bounding rects keep the object
-          // self-consistent. Chromium only honors cutouts while the WebView spans
-          // the whole display, so the --cp-safe-* vars stay the source of truth.
+          // The REAL insets reach the page as env(safe-area-inset-*), with two edits,
+          // zeroed rather than consumed (consumed insets never reach WebView at all):
+          // - The nav bar only counts while the host itself shows it (armed, above). The
+          //   system also brings a hidden bar back for as long as a keyboard is up, and
+          //   the game must not squash and spring back with it.
+          // - The keyboard only counts while it is the page's own: the name sheet is a
+          //   separate window, so this one is unfocused while ITS keyboard is up, and
+          //   the game under the sheet must not shrink with it.
           ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+            val nav = WindowInsetsCompat.Type.navigationBars()
             val ime = WindowInsetsCompat.Type.ime()
-            val pageIme =
-              if (v.hasWindowFocus() && v.onCheckIsTextEditor()) insets.getInsets(ime) else Insets.NONE
-            // Gate on the portrait chrome having measured once (the host always
-            // enters in portrait), not on the published top — a landscape top is
-            // legitimately 0.
-            if (chromeHeightPx > 0) {
-              val safe = Insets.of(safeLeftPx, safeTopPx, safeRightPx, safeBottomPx)
-              val bounds = buildList {
-                if (safeTopPx > 0) add(Rect(0, 0, v.width, safeTopPx))
-                if (safeBottomPx > 0) add(Rect(0, v.height - safeBottomPx, v.width, v.height))
-                if (safeLeftPx > 0) add(Rect(0, 0, safeLeftPx, v.height))
-                if (safeRightPx > 0) add(Rect(v.width - safeRightPx, 0, v.width, v.height))
+            val pageInsets = WindowInsetsCompat.Builder(insets).apply {
+              val landscape = v.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+              if (!hostShowsNavBar(systemBackEnabled, landscape, gestureNavEnabled(ctx))) {
+                setInsets(nav, Insets.NONE)
               }
-              WindowInsetsCompat.Builder()
-                .setInsets(WindowInsetsCompat.Type.displayCutout(), safe)
-                .setInsets(ime, pageIme)
-                .setVisible(ime, pageIme != Insets.NONE)
-                .setDisplayCutout(DisplayCutoutCompat(Rect(safeLeftPx, safeTopPx, safeRightPx, safeBottomPx), bounds))
-                .build()
-                .toWindowInsets()
-                ?.let { v.onApplyWindowInsets(it) }
-            }
-            WindowInsetsCompat.CONSUMED
+              if (!(v.hasWindowFocus() && v.onCheckIsTextEditor())) {
+                setInsets(ime, Insets.NONE)
+                setVisible(ime, false)
+              }
+            }.build()
+            ViewCompat.onApplyWindowInsets(v, pageInsets)
           }
-          // Re-assert the name on each load (belt-and-suspenders with cpName).
           webViewClient = AllowListWebViewClient(
             allowed,
             // Neither the §9 arming nor the §10 orientation may outlive the page that
@@ -642,9 +515,10 @@ private fun GameHostContent(
             onNavigationStart = {
               systemBackEnabled = false
               orientationAsked = false
+              pageDark = null
             },
             onLoaded = {
-              loading = false
+              painted = true
               // The §10 verdict for this document: a page that has said nothing by the
               // time it is loaded gets the launcher's portrait. A LATER call still
               // rotates — §10 supports deciding once the socket connects — this only
@@ -654,9 +528,7 @@ private fun GameHostContent(
               // Chromium delivers orientation events only to a focused page, and
               // nothing focuses the WebView until the player's first touch.
               requestFocus()
-              injectName(profile.name)
-              watchPageTheme()
-              pushSafeZone()
+              watchPageScheme()
             },
             // The controller page itself couldn't load (no connection / host
             // unreachable) — show the retry overlay in place, not a dead spinner.
@@ -673,22 +545,21 @@ private fun GameHostContent(
             onRenderGone = {
               if (!exited.get()) {
                 webView = null
-                failed = false
-                loading = true
+                retry()
                 webViewKey++
               }
             },
           )
           webChromeClient = object : WebChromeClient() {
-            // The page's own name (ground truth over the manifest): drives the LEAVE
-            // bar live and feeds the home rejoin card. Fires on every document.title
-            // change, so late SPA renames are picked up too.
+            // The page's own name (ground truth over the manifest) feeds the home
+            // rejoin card. Fires on every document.title change, so late SPA renames
+            // are picked up too.
             override fun onReceivedTitle(view: WebView?, title: String?) {
               // While the load has failed the title is WebView's own error page
-              // ("Webpage not available") — it would pollute the Leave bar and the
-              // room card, so ignore it until a real page loads.
+              // ("Webpage not available") — it would pollute the room card, so ignore
+              // it until a real page loads.
               if (failed || title == null) return
-              RecentRoomStore.putTitle(title)?.let { pageTitle = it }
+              RecentRoomStore.putTitle(title)
             }
 
             // JS dialogs are answered silently, matching iOS (which has no dialog
@@ -706,7 +577,18 @@ private fun GameHostContent(
           keepScreenOn = true
           addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> applyGestureExclusion(v) }
           // Must be attached before loadUrl or the page won't see it.
-          addJavascriptInterface(hostBridge, "CouchPadHost")
+          // `name` and a Promise-returning editName() need a JS wrapper, installed before
+          // any page script. A WebView too old for document-start scripts gets the raw
+          // interface as CouchPadHost, without those two — so a game feature-detecting
+          // them falls back to its own name UI rather than a sheet it can't hear back from.
+          if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            addJavascriptInterface(hostBridge, "__cpHost")
+            addJavascriptInterface(nameBridge, "__cpName")
+            WebViewCompat.addDocumentStartJavaScript(this, HOST_SHIM_JS, setOf("*"))
+          } else {
+            addJavascriptInterface(hostBridge, "CouchPadHost")
+          }
+          addJavascriptInterface(schemeBridge, "__cpScheme")
           loadUrl(joinUrl)
           webView = this
         }
@@ -722,251 +604,102 @@ private fun GameHostContent(
         exit = fadeOut(tween(300)),
         modifier = Modifier.fillMaxSize(),
       ) {
-        JoiningCover(stringResource(R.string.joining_game, displayTitle))
+        JoiningCover(stringResource(R.string.joining_game, title))
       }
       // Load failed: an opaque cover over the dead page offering retry-in-place (so a
-      // transient blip doesn't cost a re-scan). Above the join cover, below the floating
-      // chrome. No Leave button — the Leave bar's X already exits. Surface-toned so it
-      // sits over the live game page rather than reading as a full screen.
+      // transient blip doesn't cost a re-scan). Surface-toned so it sits over the live
+      // game page rather than reading as a full screen.
       if (failed) {
         ServerUnreachableRetry(onRetry = retry, background = MaterialTheme.colorScheme.surface)
       }
     }
-    // The floating chrome. Landscape: no bar at all — the game keeps the full
-    // height, and the two session controls stack in a side strip the safe zone
-    // reserves on their side (right when the cutout allows, else left).
-    if (isLandscapeUi) {
-      LandscapeChrome(
-        playerName = profile.name,
-        onLeave = leave,
-        onEditName = { showProfile = true },
-        barColor = barColor,
-        contentColor = barContent,
-        onRight = railOnRight,
-        dodgePx = railDodgePx,
-        stripPx = if (railOnRight) rightStripPx else leftStripPx,
-      )
-    } else {
-      // Portrait: status-bar strip + LEAVE bar over a scrim. Top + horizontal
-      // insets only, deliberately: when a keyboard opens the system re-marks the
-      // (hidden) nav bar visible, and a nav-tracking inset would move the chrome.
-      // The game surface never resizes for the keyboard (the page sees its own
-      // field's only through visualViewport).
-      Column(
-        Modifier
-          .fillMaxWidth()
-          .onGloballyPositioned {
-            chromeHeightPx = it.size.height
-            chromeWidthPx = it.size.width
-          }
-          .background(
-            Brush.verticalGradient(
-              0f to barColor.copy(alpha = 0.9f),
-              0.65f to barColor.copy(alpha = 0.5f),
-              1f to barColor.copy(alpha = 0f),
-            ),
-          )
-          // Top from the bars; horizontal by the same per-side obstructions the
-          // published sides carry, so the X and the chip sit on the page's box.
+    // Until a page is up there is no page close to tap, so the launcher offers its own:
+    // a stalled join or a failed load must never trap the player. A normal join is over
+    // in a second or two, so on the join cover it only fades in once loading runs long;
+    // the retry cover has it at once.
+    androidx.compose.animation.AnimatedVisibility(
+      visible = failed || (loading && slowLoad),
+      enter = fadeIn(),
+      exit = fadeOut(),
+    ) {
+      IconButton(
+        onClick = leave,
+        modifier = Modifier
           .windowInsetsPadding(
-            WindowInsets.statusBars.union(WindowInsets.displayCutout)
-              .only(WindowInsetsSides.Top),
+            barsInsets(hostShowsNavBar).only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
           )
-          .absolutePadding(
-            left = with(density) { leftObstructionPx.toDp() },
-            right = with(density) { rightObstructionPx.toDp() },
-          ),
+          .padding(4.dp),
       ) {
-        LeaveBar(
-          title = displayTitle,
-          playerName = profile.name,
-          onLeave = leave,
-          onEditName = { showProfile = true },
-          contentColor = barContent,
-          accented = pageTheme.accent != null,
-          onChipRight = { chipRightPx = it.roundToInt() },
-        )
-      }
-    }
-  }
-
-  if (showProfile) {
-    // The game's theme-color is the sheet surface, in whichever palette keeps text
-    // legible on it: dark for a dark color (white ≥ 4.5:1 needs luminance < ~0.18),
-    // light otherwise — so a light game (Tiny Track's cream) gets a light sheet rather
-    // than the launcher's dark grey.
-    val lightSheet = pageTheme.bar?.let { it.luminance() >= 0.18f } ?: false
-    CouchPadTheme(darkTheme = !lightSheet) {
-      MaterialTheme(colorScheme = MaterialTheme.colorScheme.withAccent(pageTheme.accent)) {
-        ProfileSheet(
-          initial = profile,
-          surfaceTint = pageTheme.bar,
-          onDismiss = { showProfile = false },
-          onSave = { saved ->
-            ProfileStore.save(context, saved)
-            profile = saved
-            showProfile = false
-            injectName(saved.name)                               // live-update the running controller
-          },
-        )
-      }
-    }
-  }
-
-}
-
-private fun ColorScheme.withAccent(accent: Color?): ColorScheme =
-  accent?.let { copy(primary = it, onPrimary = contentColorOn(it)) } ?: this
-
-/** The LANDSCAPE rail's touch targets (Leave, rename), matching iOS's. Above the 48dp
- * Material floor on purpose: the rail floats in a screen corner the player is holding the
- * phone by, reached one-handed mid-match, so the floor is not enough — a missed Leave
- * means fumbling at the edge of the screen while the game runs on. The portrait bar is a
- * stock toolbar and keeps stock metrics; it is read as one, and sizing it up would make
- * the chrome — and the safe top it publishes — bigger than the app's own bars. */
-private val CHROME_BUTTON = 56.dp
-
-/** The column's breathing room against the screen edge when the cutout leaves it none. */
-private val CHROME_GAP = 4.dp
-
-/** The glyph inside [CHROME_BUTTON]. Scaled with it — Material's default 24-in-48 is the
- * ratio this keeps. Growing the puck alone leaves a button that still READS small, which
- * is the half of "too small to hit" a touch target can't fix. */
-private val CHROME_ICON = 28.dp
-
-// The launcher-owned chrome floating over the game: Close (leaving a live game
-// ends the session — it isn't navigation), the game's name, and the tappable name
-// chip (the in-game rename affordance). [contentColor] is non-null only when the
-// game supplied its own theme-color; [accented] when it supplied an accent.
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LeaveBar(
-  title: String,
-  playerName: String,
-  onLeave: () -> Unit,
-  onEditName: () -> Unit,
-  contentColor: Color?,
-  accented: Boolean,
-  onChipRight: (Float) -> Unit,
-) {
-  // Route a game-supplied content color through the tokens the bar's children
-  // actually read, so everything on the bar flips together.
-  val scheme = MaterialTheme.colorScheme
-  val onBar = contentColor?.let {
-    scheme.copy(onSurface = it, onSurfaceVariant = it, outline = it.copy(alpha = 0.5f))
-  } ?: scheme
-  MaterialTheme(colorScheme = onBar) {
-    TopAppBar(
-      title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-      navigationIcon = {
-        IconButton(onClick = onLeave) {
-          Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.leave_game))
-        }
-      },
-      actions = {
-        // Report the chip's window bounds up so the host can align the page's
-        // horizontal safe zone with it.
-        Box(Modifier.onGloballyPositioned { onChipRight(it.boundsInWindow().right) }) {
-          PlayerChip(name = playerName, onClick = onEditName, accented = accented)
-        }
-        Spacer(Modifier.width(12.dp))
-      },
-      // The host pads status bar + cutout around the chrome — don't re-add them.
-      windowInsets = WindowInsets(0),
-      // Transparent: the host's fading scrim is the bar's backdrop.
-      colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-    )
-  }
-}
-
-// The landscape chrome: Close and the rename affordance stacked in a top corner
-// (side picked by [railPlacement]), floating in the strip the host publishes as that
-// side's inset (§5) — no bar, so the game keeps the full height. [stripPx] is that
-// strip, and the column is centered in it; [dodgePx] drops it below a cutout rect.
-@Composable
-private fun BoxScope.LandscapeChrome(
-  playerName: String,
-  onLeave: () -> Unit,
-  onEditName: () -> Unit,
-  barColor: Color,
-  contentColor: Color?,
-  onRight: Boolean,
-  dodgePx: Float,
-  stripPx: Int,
-) {
-  val density = LocalDensity.current
-  val buttonPx = with(density) { CHROME_BUTTON.toPx() }
-  // Half the slack outside, half inside: [stripPx] is what the host publishes as the
-  // side inset, so this is the same gap on both sides of the buttons. Any asymmetry
-  // the player still sees is the page's own margin on top of `--cp-safe-*`, which the
-  // launcher can't see and mustn't guess at.
-  val edgePadPx = (stripPx - buttonPx) / 2
-  val content = contentColor ?: MaterialTheme.colorScheme.onSurface
-  val edgePad = with(density) { edgePadPx.toDp() }
-  Column(
-    Modifier
-      .align(if (onRight) AbsoluteAlignment.TopRight else AbsoluteAlignment.TopLeft)
-      .absolutePadding(
-        left = if (onRight) 0.dp else edgePad,
-        right = if (onRight) edgePad else 0.dp,
-        top = with(density) { dodgePx.toDp() } + CHROME_GAP,
-      ),
-    verticalArrangement = Arrangement.spacedBy(CHROME_GAP),
-  ) {
-    val colors = IconButtonDefaults.iconButtonColors(
-      containerColor = barColor.copy(alpha = 0.55f),
-      contentColor = content,
-    )
-    // Provided OUTSIDE the IconButtons, for their ripples: ripple() resolves
-    // LocalContentColor at the button's own node — the launcher theme's ambient,
-    // not the button's colors.contentColor — so without this a dark-mode launcher
-    // draws a white (invisible) ripple on a light game-theme scrim.
-    CompositionLocalProvider(LocalContentColor provides content) {
-      IconButton(onClick = onLeave, colors = colors, modifier = Modifier.size(CHROME_BUTTON)) {
         Icon(
           Icons.Filled.Close,
           contentDescription = stringResource(R.string.leave_game),
-          modifier = Modifier.size(CHROME_ICON),
+          tint = MaterialTheme.colorScheme.onSurface,
         )
       }
-      // Icon-only rename affordance; announces the name it edits, like the chip.
-      IconButton(onClick = onEditName, colors = colors, modifier = Modifier.size(CHROME_BUTTON)) {
-        Icon(
-          Icons.Filled.Person,
-          contentDescription = playerName.ifBlank { stringResource(R.string.set_name) },
-          modifier = Modifier.size(CHROME_ICON),
-        )
+    }
+  }
+
+  // The launcher's own name sheet, in the page's scheme, theme-color and accent-color so
+  // it reads as part of the game.
+  nameRequests.firstOrNull()?.let { request ->
+    // Keyed per request, so the next sheet starts fresh rather than as the closed one.
+    key(request) {
+      val colors = request.colors
+      CouchPadTheme(darkTheme = pageDark != false) {
+        val scheme = MaterialTheme.colorScheme
+        val accented = colors.accent?.let { scheme.copy(primary = it, onPrimary = contentColorOn(it)) } ?: scheme
+        MaterialTheme(colorScheme = accented) {
+          ProfileSheet(
+            initial = ProfileStore.load(context),
+            surfaceTint = colors.surface,
+            onDismiss = {
+              nameRequests.remove(request)
+              settleName(null)
+            },
+            onSave = { saved ->
+              ProfileStore.save(context, saved)
+              nameRequests.remove(request)
+              settleName(saved.name)
+            },
+          )
+        }
       }
     }
   }
 }
 
-// Which side the landscape column goes on, and how far it drops below a cutout rect
-// it would overlap. Physical sides, not start/end: the choice is driven by where the
-// camera is, not by reading direction. Uses the DETAILED cutout geometry
-// (boundingRects, not just the inset): a mid-edge punch-hole sits half way down the
-// side and leaves the corner free, so the column stays top-right; a corner camera on
-// the right flips it to the left when that corner is free, and only when both corners
-// are occupied does it stay right and drop below the rect. The host keys this on the
-// orientation and the per-side strips, so a rotation or a 180° flip re-reads it.
-private fun railPlacement(view: View, density: Density, leftStripPx: Int, rightStripPx: Int): Pair<Boolean, Float> {
-  val buttonPx = with(density) { CHROME_BUTTON.toPx() }
-  val gapPx = with(density) { CHROME_GAP.toPx() }
-  val colHeightPx = buttonPx * 2 + gapPx * 2
-  val rects = ViewCompat.getRootWindowInsets(view)?.displayCutout?.boundingRects.orEmpty()
-  fun dodgeFor(right: Boolean): Float {
-    // The column's inner edge, centered in that side's strip.
-    val colEndPx = ((if (right) rightStripPx else leftStripPx) + buttonPx) / 2
-    var top = 0f
-    for (r in rects.sortedBy { it.top }) {
-      val overlapsX = if (right) r.right > view.width - colEndPx else r.left < colEndPx
-      if (overlapsX && r.top < top + colHeightPx && r.bottom > top) top = r.bottom + gapPx * 2
-    }
-    return top
-  }
-  val rightDodge = dodgeFor(right = true)
-  return if (rightDodge == 0f || dodgeFor(right = false) > 0f) true to rightDodge else false to 0f
-}
+/** How long a join may load before its cover offers a close: past a normal join (a second
+ * or two), well short of the web view's own timeout (half a minute or more). */
+private const val SLOW_LOAD_MS = 3_000L
+
+/** One editName() request: the page's colors for its sheet, read when it asked. Compared
+ * by identity, so two requests with the same colors are still two sheets. */
+private class NameRequest(val colors: SheetColors)
+
+/**
+ * Whether the host shows the nav bar: only while the page has armed back (CONTRACT.md §9).
+ * Then always for a 3-BUTTON player, whose back is a button a hidden bar doesn't have.
+ * Under gesture navigation, in portrait only: the visible handle tells the player back is
+ * available and lets the first edge swipe go back (a hidden bar spends it on the transient
+ * reveal), at the cost of a short bottom inset. In landscape it stays hidden — it would come
+ * off the axis a landscape controller has least of, and the hidden bar's edge swipe still
+ * works.
+ */
+private fun hostShowsNavBar(armed: Boolean, landscape: Boolean, gestureNav: Boolean): Boolean =
+  armed && (!gestureNav || !landscape)
+
+/** What covers the screen's edges: the status bar, the cutout, and the nav bar while the
+ * host shows it. */
+@Composable
+private fun barsInsets(hostShowsNavBar: Boolean): WindowInsets =
+  WindowInsets.statusBars
+    .union(WindowInsets.displayCutout)
+    .union(if (hostShowsNavBar) WindowInsets.navigationBars else WindowInsets(0))
+
+/** The WebView's Chromium major version; 0 when it can't be read, which counts as old. */
+private fun webViewMajorVersion(context: Context): Int =
+  WebViewCompat.getCurrentWebViewPackage(context)?.versionName
+    ?.substringBefore('.')?.toIntOrNull() ?: 0
 
 /**
  * Confines the WebView to the game's own domains (subdomains included). Only https
@@ -1002,11 +735,18 @@ private class AllowListWebViewClient(
     return true // everything not explicitly allowed is blocked from the WebView
   }
 
-  // A network-level failure of the MAIN document (no connection, DNS/connect/timeout —
-  // NOT a 4xx/5xx, which means the host answered and renders the server's own body,
-  // same as iOS). Subresource failures are the page's own problem and ignored.
+  // A network-level failure of the MAIN document (no connection, DNS/connect/timeout).
+  // Subresource failures are the page's own problem and ignored.
   override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
     if (request.isForMainFrame) onConnectionError()
+  }
+
+  // The MAIN document came back as an HTTP error (404, 500, 502…). The server's error
+  // page has no close, and with no launcher chrome over the game it would strand the
+  // player — so it gets the same retry cover, with its close, as a lost connection. A
+  // failing favicon, script or image is the page's own business, same as above.
+  override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+    if (request.isForMainFrame && errorResponse.statusCode >= 400) onConnectionError()
   }
 
   // The renderer died (OOM kill while backgrounded, or a crash) — returning false
@@ -1040,14 +780,52 @@ private class AllowListWebViewClient(
 }
 
 /**
- * The game→launcher half of the contract (v1), exposed as `window.CouchPadHost`.
+ * Launcher-internal, exposed as `window.__cpScheme`: fed only by the launcher's own
+ * color-scheme observer (WATCH_PAGE_SCHEME_JS), kept off `CouchPadHost` so games never
+ * see it. Not fire-once: a page may switch scheme. Typed Boolean, so anything else reads
+ * false.
+ */
+private class SchemeBridge(private val onChanged: (Boolean) -> Unit) {
+  private val mainHandler = Handler(Looper.getMainLooper())
+
+  @JavascriptInterface
+  fun changed(dark: Boolean) {
+    mainHandler.post { onChanged(dark) }
+  }
+}
+
+/**
+ * Backs `CouchPadHost.name` and `editName()` (CONTRACT.md §1–2), exposed as `__cpName` for
+ * HOST_SHIM_JS only — never on its own, since neither member works without the wrapper.
+ */
+private class NameBridge(
+  private val currentName: () -> String,
+  private val onEditName: () -> Unit,
+) {
+  private val mainHandler = Handler(Looper.getMainLooper())
+
+  // Always the stored name, read when the page asks.
+  @JavascriptInterface
+  fun getName(): String = currentName()
+
+  // Opens the launcher's name sheet; the shim's Promise is settled by settleName. Not
+  // fire-once: the player may rename any number of times.
+  @JavascriptInterface
+  fun editName() {
+    mainHandler.post { onEditName() }
+  }
+}
+
+/**
+ * The game→launcher half of the contract (v1), exposed as `__cpHost` and wrapped into
+ * `window.CouchPadHost` by HOST_SHIM_JS.
  * Runs on WebView's JS bridge thread, so hop to main before touching Compose state.
  * gameEnded is fire-once — a queued second call (or a game spamming it) must not
  * pop extra nav entries. All arguments are untrusted page input.
  */
 private class CouchPadHostBridge(
   private val onGameEnded: (String?) -> Unit,
-  private val onThemeChanged: (PageTheme) -> Unit,
+  private val onLeave: () -> Unit,
   private val onSystemBackEnabled: (Boolean) -> Unit,
   private val onLandscape: (Boolean) -> Unit,
   private val haptics: GameHaptics,
@@ -1061,13 +839,11 @@ private class CouchPadHostBridge(
     mainHandler.post { onGameEnded(reason) }
   }
 
-  // Fed by the launcher's OWN injected meta observer (WATCH_PAGE_THEME_JS) — it's
-  // on this bridge only because the page needs some JS→native channel. Not
-  // fire-once: themes change repeatedly. Parsed strictly (untrusted).
+  // The page's own close (CONTRACT.md §3). The host's exit guard makes it fire-once
+  // together with gameEnded.
   @JavascriptInterface
-  fun themeChanged(json: String?) {
-    val theme = parsePageTheme(json)
-    mainHandler.post { onThemeChanged(theme) }
+  fun leave() {
+    mainHandler.post { onLeave() }
   }
 
   // Whether the system back gesture may occur right now (CONTRACT.md §9). Not
@@ -1089,7 +865,7 @@ private class CouchPadHostBridge(
     mainHandler.post { onLandscape(wantsLandscape) }
   }
 
-  // A named haptic primitive at a strength (CONTRACT.md §13). Not fire-once, and the
+  // A named haptic primitive at a strength (CONTRACT.md §12). Not fire-once, and the
   // highest-rate call on the bridge — a controller buzzes on nearly every tap — so it
   // plays right here on the bridge thread instead of queueing behind the UI.
   @JavascriptInterface

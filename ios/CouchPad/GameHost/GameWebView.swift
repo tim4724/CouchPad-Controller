@@ -117,18 +117,6 @@ enum GameAudioSession {
     }
 }
 
-/// The launcher-published safe zone, in points (CSS px == points on iOS).
-struct SafeZone: Equatable {
-    var top: Int = 0
-    var left: Int = 0
-    var right: Int = 0
-    var bottom: Int = 0
-
-    var uiEdgeInsets: UIEdgeInsets {
-        UIEdgeInsets(top: CGFloat(top), left: CGFloat(left), bottom: CGFloat(bottom), right: CGFloat(right))
-    }
-}
-
 /// A navigation cancelled on purpose — external links and the cross-doc push cancel in
 /// decidePolicyFor, which surfaces in didFail as NSURLErrorCancelled or WebKit's
 /// frame-load-interrupted (102). Not a real load failure, so both web hosts ignore it.
@@ -139,20 +127,6 @@ func isDeliberateNavigationCancellation(_ error: Error) -> Bool {
     return false
 }
 
-/// WKWebView whose safeAreaInsets are synthetic, so viewport-fit=cover pages see
-/// the launcher's safe zone (chrome height on top, cutout/gutter elsewhere) via
-/// standard `env(safe-area-inset-*)` — contract §7.5 mechanism 1. The `--cp-safe-*`
-/// CSS vars stay the authoritative channel.
-final class CPWebView: WKWebView {
-    var syntheticSafeAreaInsets: UIEdgeInsets = .zero {
-        didSet {
-            if oldValue != syntheticSafeAreaInsets { safeAreaInsetsDidChange() }
-        }
-    }
-
-    override var safeAreaInsets: UIEdgeInsets { syntheticSafeAreaInsets }
-}
-
 /// Hosts a game's remote controller as a TOP-LEVEL web view (the game's
 /// `frame-ancestors` CSP doesn't apply) with the navigation allow-list as the
 /// client-side trust boundary — the join URL can originate from an untrusted
@@ -160,23 +134,24 @@ final class CPWebView: WKWebView {
 struct GameWebView: UIViewRepresentable {
     let joinUrl: String
     let allowedDomains: [String]       // already lowercased, includes CP.launcherHost
-    let playerName: String             // "" = blank → never injected
-    let safeZone: SafeZone             // points == CSS px
     let onLoaded: () -> Void           // first painted frame (the injected __firstFrame signal)
     let onGameEnd: (String?) -> Void   // fire-once
-    let onLeave: () -> Void            // an armed back gesture the page didn't consume (§9)
+    let onLeave: () -> Void            // the page's close (§3)
+    let onEditName: (SheetColors) -> Void  // the page asked for the name sheet (§2), in its colors
+    let playerName: String             // CouchPadHost.name, baked into the bridge shim (§1)
+    let nameResult: NameResult?        // settles the page's editName() Promise (§2)
     let onLandscape: (Bool) -> Void    // the orientation the page is asking for (§10)
     let onRendererGone: () -> Void     // web-content process died — re-issue the load
     @Binding var failed: Bool          // main-doc load failed — drives the retry overlay
     let reloadToken: Int               // bumped by Retry → re-issue the join request
-    let onThemeChanged: (PageTheme) -> Void
-    let onTitleChanged: (String) -> Void  // the page's <title>, trimmed & non-empty
+    let onSchemeChanged: (Bool) -> Void  // is the page dark, per its color-scheme meta (§4)
+    let onNavigationStart: () -> Void  // a new main-frame document is on its way
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    func makeUIView(context: Context) -> CPWebView {
+    func makeUIView(context: Context) -> WKWebView {
         let coordinator = context.coordinator
 
         GameAudioSession.configureOnce()
@@ -187,23 +162,23 @@ struct GameWebView: UIViewRepresentable {
         config.mediaTypesRequiringUserActionForPlayback = []   // game sounds must autoplay
         config.websiteDataStore = .default()                   // localStorage parity
         // The bridge must exist before load or the page won't see it.
-        config.userContentController.addUserScript(
-            WKUserScript(source: GameHostJS.bridgeShim, injectionTime: .atDocumentStart, forMainFrameOnly: false)
-        )
-        config.userContentController.addUserScript(
-            WKUserScript(source: GameHostJS.firstFrameSignal, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-        )
+        Self.installUserScripts(in: config.userContentController, name: playerName)
         config.userContentController.add(coordinator, name: "cpHost")
 
-        let webView = CPWebView(frame: .zero, configuration: config)
+        // Pinned to the screen edges, so its own safeAreaInsets — status bar, notch, home
+        // indicator — are exactly what the page reads through env(safe-area-inset-*).
+        let webView = WKWebView(frame: .zero, configuration: config)
         // WebKit's did-change-frame handler, unlike will-show/will-change, doesn't check
-        // that the web view owns the keyboard, so the rename sheet's keyboard would shrink
-        // visualViewport. The page's own fields are still covered by will-change-frame.
+        // that the web view owns the keyboard, so the name sheet's keyboard would shrink
+        // the page's visualViewport. The page's own fields are still covered by
+        // will-change-frame.
         NotificationCenter.default.removeObserver(webView, name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
+        coordinator.lastNameResult = nameResult?.id
         webView.isOpaque = false
-        // Match the dark chrome while the page is blank — kills the white flash.
-        // CPPalette.dark.surface (#110F17) — keep in sync with CPTheme.swift.
-        let surface = UIColor(red: 0x11 / 255.0, green: 0x0F / 255.0, blue: 0x17 / 255.0, alpha: 1.0)
+        // Match the join cover while the page is blank — kills the flash.
+        let surface = UIColor { traits in
+            UIColor(traits.userInterfaceStyle == .dark ? CPPalette.dark.surface : CPPalette.light.surface)
+        }
         webView.backgroundColor = surface
         webView.scrollView.backgroundColor = surface
         webView.scrollView.contentInsetAdjustmentBehavior = .never
@@ -215,29 +190,13 @@ struct GameWebView: UIViewRepresentable {
         #endif
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
-        webView.syntheticSafeAreaInsets = safeZone.uiEdgeInsets
-        // The Leave bar and home rejoin card follow the page's own <title> — KVO, not
+        // The home rejoin card follows the page's own <title> — KVO, not
         // a didFinish sample, because a controller SPA typically sets its title well
         // after the load finishes (once the relay socket connects).
         coordinator.titleObservation = webView.observe(\.title, options: [.new]) { [weak coordinator] webView, _ in
             let title = webView.title
             DispatchQueue.main.async { coordinator?.titleChanged(title) }
         }
-        // The system back gesture, off until the page arms it (CONTRACT.md §9). WebKit's
-        // own allowsBackForwardNavigationGestures can't serve here: it drives web history
-        // and never reaches back(), and the launcher — not the page's history — owns the
-        // exit. Disabled, the recognizer is inert, so edge swipes are gameplay input;
-        // that's the Android gesture-exclusion rects' counterpart. cancelsTouchesInView
-        // (on by default) cancels the page's touch once the swipe is recognized.
-        let backEdge = UIScreenEdgePanGestureRecognizer(
-            target: coordinator, action: #selector(Coordinator.handleBackEdgePan(_:))
-        )
-        backEdge.edges = UIApplication.shared.userInterfaceLayoutDirection == .rightToLeft ? .right : .left
-        backEdge.isEnabled = false
-        webView.addGestureRecognizer(backEdge)
-        coordinator.backEdgeGesture = backEdge
-        coordinator.lastInjectedName = playerName
-        coordinator.lastPushedZone = safeZone
         // Going home must drop the relay socket (Android gets this for free from the
         // process freezer; iOS keeps sockets alive in the out-of-process network
         // stack) — the page's own pagehide/visibilitychange handlers do the work.
@@ -249,24 +208,19 @@ struct GameWebView: UIViewRepresentable {
         return webView
     }
 
-    func updateUIView(_ webView: CPWebView, context: Context) {
+    func updateUIView(_ webView: WKWebView, context: Context) {
         let coordinator = context.coordinator
         coordinator.parent = self  // always-current closures
 
-        if playerName != coordinator.lastInjectedName {
-            coordinator.lastInjectedName = playerName
-            // Live rename (contract §2) — blank names are never injected.
-            if let js = GameHostJS.nameInjection(name: playerName) {
-                webView.evaluateJavaScript(js, completionHandler: nil)
+        if let nameResult, nameResult.id != coordinator.lastNameResult {
+            coordinator.lastNameResult = nameResult.id
+            webView.evaluateJavaScript(GameHostJS.nameResult(nameResult.name), completionHandler: nil)
+            // The shim bakes the name in, so the next page load needs a fresh one.
+            if nameResult.name != nil {
+                let controller = webView.configuration.userContentController
+                controller.removeAllUserScripts()
+                Self.installUserScripts(in: controller, name: playerName)
             }
-        }
-
-        if safeZone != coordinator.lastPushedZone {
-            coordinator.lastPushedZone = safeZone
-            // env() re-derives from the synthetic insets — the iOS analog of
-            // requestApplyInsets; the vars remain the source of truth.
-            webView.syntheticSafeAreaInsets = safeZone.uiEdgeInsets
-            webView.evaluateJavaScript(GameHostJS.safeZonePush(safeZone), completionHandler: nil)
         }
 
         // A Retry tap bumps reloadToken. Reload the page the controller is actually on
@@ -282,8 +236,18 @@ struct GameWebView: UIViewRepresentable {
         }
     }
 
+    /// The bridge must exist before load or the page won't see it.
+    private static func installUserScripts(in controller: WKUserContentController, name: String) {
+        controller.addUserScript(
+            WKUserScript(source: GameHostJS.bridgeShim(name: name), injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        )
+        controller.addUserScript(
+            WKUserScript(source: GameHostJS.firstFrameSignal, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+    }
+
     /// Tear the web view down so the game's WebSocket/audio fully stop the moment we pop.
-    static func dismantleUIView(_ webView: CPWebView, coordinator: Coordinator) {
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         coordinator.isTearingDown = true
         coordinator.titleObservation = nil
         coordinator.haptics.shutdown()
@@ -299,9 +263,8 @@ struct GameWebView: UIViewRepresentable {
     @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         var parent: GameWebView
         var isTearingDown = false
-        var lastInjectedName = ""
-        var lastPushedZone = SafeZone()
         var lastReloadToken = 0
+        var lastNameResult: UUID?
         var titleObservation: NSKeyValueObservation?
         // Fire-once for the game-reported end — a game spamming gameEnded must pop
         // home only once. (A load failure is NOT terminal: it flips `failed` for the
@@ -313,19 +276,15 @@ struct GameWebView: UIViewRepresentable {
         // still on its way.
         private var orientationAsked = false
 
-        // The page's navigator.vibrate() and CouchPadHost.haptic() (CONTRACT.md §12,
-        // §13). Lazy inside — no haptic engine is created until a game asks for one.
+        // The page's navigator.vibrate() and CouchPadHost.haptic() (CONTRACT.md §11,
+        // §12). Lazy inside — no haptic engine is created until a game asks for one.
         let haptics = GameHaptics()
 
         // Weak: the coordinator must not extend the web view's life past dismantle.
         // Set once from makeUIView.
-        private weak var hostedWebView: CPWebView?
+        private weak var hostedWebView: WKWebView?
         // The SwiftUI host view the web view was lifted out of while a link hands over.
         private weak var parkedIn: UIView?
-        // The armed state IS the recognizer's isEnabled — no separate flag to drift.
-        weak var backEdgeGesture: UIScreenEdgePanGestureRecognizer?
-        private static let minBackTravel: CGFloat = 60     // pt
-        private static let minBackFling: CGFloat = 300     // pt/s
 
         init(parent: GameWebView) {
             self.parent = parent
@@ -338,7 +297,7 @@ struct GameWebView: UIViewRepresentable {
         /// didEnterBackground, not willResignActive: Control Center / notification
         /// pulls and app-switcher peeks shouldn't churn the connection. The eval runs
         /// inside the background grace window, before the content process suspends.
-        func observeBackgrounding(of webView: CPWebView) {
+        func observeBackgrounding(of webView: WKWebView) {
             hostedWebView = webView
             NotificationCenter.default.addObserver(
                 self, selector: #selector(appDidEnterBackground),
@@ -373,27 +332,6 @@ struct GameWebView: UIViewRepresentable {
             guard let webView = hostedWebView, let parkedIn else { return }
             parkedIn.addSubview(webView)
             self.parkedIn = nil
-        }
-
-        /// A completed edge swipe while the page has armed system back (CONTRACT.md §9).
-        /// The page gets first refusal via `back()`; anything but a literal `true` means
-        /// it didn't consume the gesture, and the launcher leaves — the same exit the
-        /// Leave bar's X takes. The evaluate is async, so the shell simply stays put
-        /// until the answer arrives. Disarms on the way out so a second swipe landing
-        /// during teardown can't pop twice.
-        @objc func handleBackEdgePan(_ gesture: UIScreenEdgePanGestureRecognizer) {
-            guard gesture.state == .ended, !isTearingDown else { return }
-            let travel = abs(gesture.translation(in: gesture.view).x)
-            let fling = abs(gesture.velocity(in: gesture.view).x)
-            // A flinched swipe is not a back. UIKit exposes no threshold of its own for
-            // this, so these are empirical: far enough that a thumb resting on the edge
-            // can't trigger it, loose enough that a fast confident flick still counts.
-            guard travel > Self.minBackTravel || fling > Self.minBackFling else { return }
-            hostedWebView?.evaluateJavaScript(GameHostJS.deliverBack) { [weak self] result, _ in
-                guard let self, result as? Bool != true else { return }
-                self.backEdgeGesture?.isEnabled = false
-                self.parent.onLeave()
-            }
         }
 
         /// The trust boundary. Only https navigations to an allow-listed domain stay
@@ -440,28 +378,25 @@ struct GameWebView: UIViewRepresentable {
 
         /// The main document failed to load at the network level — no connection, host
         /// unreachable, DNS/TLS/timeout. (An HTTP 4xx/5xx is a *successful* navigation
-        /// to WebKit and shows the server's body, so it never lands here.) Provisional =
-        /// the initial connection never committed (the offline-at-join case); the plain
-        /// didFail = a committed load dropped. Both bail home with a message rather than
-        /// leave a dead spinner up.
+        /// to WebKit; the response check below catches those.) Provisional = the initial
+        /// connection never committed (the offline-at-join case); the plain didFail = a
+        /// committed load dropped. Both surface the retry cover rather than leave a dead
+        /// spinner up.
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
                      withError error: Error) {
             reportLoadFailure(error)
         }
 
-        /// Neither the §9 arming nor the §10 orientation may outlive the page that asked
-        /// for it — but they expire differently, because one is input safety and the
-        /// other is cosmetic. Back DISARMS here: an unloaded page must never inherit a
-        /// live exit gesture. Orientation is only re-armed for the verdict — the device
-        /// HOLDS what it has until the incoming document has had its say (didFinish
-        /// below, or the failure path). Reverting here instead rotates the phone to
-        /// portrait for the length of a page load and straight back again the moment the
-        /// new page's §10 call lands — which is every self-reload a landscape game does.
-        /// Main frame only, and not fired for same-document navigations, so a page that
-        /// pushes history mid-session keeps both.
+        /// The §10 orientation may not outlive the page that asked for it, but it is only
+        /// re-armed for the verdict here — the device HOLDS what it has until the incoming
+        /// document has had its say (didFinish below, or the failure path). Reverting here
+        /// instead rotates the phone to portrait for the length of a page load and straight
+        /// back again the moment the new page's §10 call lands — which is every self-reload
+        /// a landscape game does. Main frame only, and not fired for same-document
+        /// navigations, so a page that pushes history mid-session keeps it.
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            backEdgeGesture?.isEnabled = false
             orientationAsked = false
+            parent.onNavigationStart()
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -510,19 +445,36 @@ struct GameWebView: UIViewRepresentable {
             decisionHandler(allowed ? .grant : .deny)
         }
 
-        /// The page's own name (ground truth over the manifest): drives the Leave bar
-        /// and feeds the home rejoin card, so games not in the bundled manifest show a
-        /// real name instead of the generic fallback. putTitle returns the sanitized
-        /// text so the bar shows exactly what the card stores.
+        /// The page's own name (ground truth over the manifest) feeds the home rejoin
+        /// card, so games not in the bundled manifest show a real name instead of the
+        /// generic fallback.
         func titleChanged(_ raw: String?) {
-            guard !isTearingDown, let raw, let clean = RecentRoomStore.putTitle(raw) else { return }
-            parent.onTitleChanged(clean)
+            guard !isTearingDown, let raw else { return }
+            RecentRoomStore.putTitle(raw)
+        }
+
+        /// The MAIN document came back as an HTTP error (404, 500, 502…). WebKit counts
+        /// that as a successful load and shows the server's error page — which has no
+        /// close, and with no launcher chrome over the game would strand the player. It
+        /// gets the same retry cover, with its close, as a lost connection. A failing
+        /// favicon, script or image is the page's own business.
+        func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+            if navigationResponse.isForMainFrame,
+               let http = navigationResponse.response as? HTTPURLResponse, http.statusCode >= 400 {
+                showRetry()
+            }
+            decisionHandler(.allow)
         }
 
         private func reportLoadFailure(_ error: Error) {
+            if isDeliberateNavigationCancellation(error) { return }
+            showRetry()
+        }
+
+        private func showRetry() {
             // Ignore our own teardown and a game already ended.
             guard !isTearingDown, !didEnd else { return }
-            if isDeliberateNavigationCancellation(error) { return }
             // Nothing is going to ask now — the held orientation would otherwise strand
             // the retry cover sideways with no page behind it.
             if !orientationAsked { parent.onLandscape(false) }
@@ -530,14 +482,13 @@ struct GameWebView: UIViewRepresentable {
             DispatchQueue.main.async { self.parent.failed = true }
         }
 
-        /// Every page finish: re-assert the name (belt-and-suspenders with cpName),
-        /// re-install the theme observer (idempotent), re-push the safe zone.
+        /// Every page finish: re-install the color-scheme observer (idempotent).
         /// Deliberately does NOT touch the cover: its fade is driven solely by the
         /// injected __firstFrame signal, because didFinish means "loaded" and can
         /// precede first paint by seconds on a cold start. No time-based fallback
         /// either — one fading the cover before content exists is the bug, not a
-        /// safety net (a stalled page keeps the honest spinner, and Leave stays
-        /// available in the chrome above it; load failures surface the retry cover
+        /// safety net (a stalled page keeps the honest spinner, and the cover's own close
+        /// stays available; load failures surface the retry cover
         /// through the error callbacks). The page's <title> needs nothing here — the
         /// KVO observer set up in makeUIView tracks it continuously.
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -546,11 +497,7 @@ struct GameWebView: UIViewRepresentable {
             // supports deciding once the socket connects — this only closes the window
             // where a silent page could inherit its predecessor's landscape.
             if !isTearingDown, !orientationAsked { parent.onLandscape(false) }
-            if let js = GameHostJS.nameInjection(name: parent.playerName) {
-                webView.evaluateJavaScript(js, completionHandler: nil)
-            }
-            webView.evaluateJavaScript(GameHostJS.watchPageTheme, completionHandler: nil)
-            webView.evaluateJavaScript(GameHostJS.safeZonePush(parent.safeZone), completionHandler: nil)
+            webView.evaluateJavaScript(GameHostJS.watchPageScheme, completionHandler: nil)
         }
 
         /// The game→launcher half of the contract (v1). All arguments are untrusted page input.
@@ -569,19 +516,26 @@ struct GameWebView: UIViewRepresentable {
                 guard !didEnd else { return }
                 didEnd = true
                 parent.onGameEnd(body["value"] as? String)  // null tolerated → generic message
-            case "themeChanged":
-                // Not fire-once: themes change repeatedly. Parsed strictly.
-                parent.onThemeChanged(parsePageTheme(body["value"] as? String))
-            case "enableSystemBack":
-                // Not fire-once: games arm and disarm repeatedly (a dialog opening and
-                // closing). The shim already coerced to a boolean, so only "true" arms.
-                backEdgeGesture?.isEnabled = (body["value"] as? String) == "true"
+            case "leave":
+                // The page's own close (§3). Shares gameEnded's fire-once latch:
+                // whichever comes first exits, the other is ignored.
+                guard !didEnd else { return }
+                didEnd = true
+                parent.onLeave()
+            case "editName":
+                // Not fire-once: the player may rename any number of times.
+                hostedWebView?.evaluateJavaScript(GameHostJS.readSheetColors) { [weak self] result, _ in
+                    self?.parent.onEditName(parseSheetColors(result))
+                }
+            case "__scheme":
+                // Launcher-injected (watchPageScheme), not a contract message.
+                parent.onSchemeChanged((body["value"] as? String) == "true")
             case "vibrate":
                 // Not fire-once, and the highest-rate message on the bridge — a
                 // controller buzzes on nearly every tap.
                 haptics.play(parseVibrationPattern(body["value"] as? String))
             case "haptic":
-                // Same rate as vibrate — the §13 path for the same taps.
+                // Same rate as vibrate — the §12 path for the same taps.
                 if let haptic = parseHaptic(body["value"] as? String) {
                     haptics.play(haptic.primitive, scale: haptic.scale)
                 }

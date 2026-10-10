@@ -62,16 +62,27 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_2 # 1080×1920 — Play-compliant 16:9 phone screenshots
+          # Headroom: on the 2-core default a system window took focus mid-test
+          # (Espresso's RootViewWithoutFocusException in pressBack).
+          cores: 4
+          ram-size: 4096M
           disable-animations: true
           working-directory: android
+          # The action runs each line as its own `sh -c`: no multi-line constructs.
           script: |
+            # Crash/ANR dialogs take window focus and land in screenshots; suppress them.
+            adb shell settings put global hide_error_dialogs 1
+            # Streamed for the whole run: the device may be gone by the time a
+            # failure is handled.
+            mkdir -p ../diag
+            adb logcat -v threadtime -b main,system,crash,events > ../diag/logcat.txt 2>&1 &
             # Status-bar demo mode is applied by the TEST itself (per theme pass —
             # the uimode flip knocks SystemUI out of demo mode, so a one-shot setup
             # here wouldn't stick). The test publishes PNGs to shared storage
             # (survives the post-test uninstall); clear leftovers so MediaStore
             # can't dedupe-rename.
             adb shell rm -rf /sdcard/Pictures/couchpad-screenshots
-            ./gradlew :app:connectedDebugAndroidTest
+            ./gradlew :app:connectedDebugAndroidTest || { adb shell dumpsys window > ../diag/window.txt 2>&1; exit 1; }
             adb pull /sdcard/Pictures/couchpad-screenshots ../out
             ls -la ../out
 
@@ -86,7 +97,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: android-test-reports
-          path: android/app/build/reports
+          path: |
+            android/app/build/reports
+            diag
           if-no-files-found: ignore
 
   ios:

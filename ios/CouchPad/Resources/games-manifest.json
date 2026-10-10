@@ -26,7 +26,7 @@
       "status": "beta",
       "minPlayers": 1,
       "maxPlayers": 4,
-      "art": "/artwork/tinytrack-16x9-v2.webp",
+      "art": "/artwork/tinytrack-16x9-v3.webp",
       "icon": "/artwork/tinytrack-icon.png",
       "video": "https://tinytrack.couchpad.games/assets/trailer/trailer.mp4",
       "accentColor": "#4ECDC4",

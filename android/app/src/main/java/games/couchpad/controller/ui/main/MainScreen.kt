@@ -670,7 +670,12 @@ private fun HomeTopBar(profile: Profile, onEditProfile: () -> Unit, onOpenAbout:
     },
     // The host Box already pads status bar + cutout; don't let the bar re-add them.
     windowInsets = WindowInsets(0),
-    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+    // Text color for About, not M3's onSurfaceVariant grey: it sits beside the name
+    // chip's onSurface label and matches iOS's .primary.
+    colors = TopAppBarDefaults.topAppBarColors(
+      containerColor = Color.Transparent,
+      actionIconContentColor = MaterialTheme.colorScheme.onSurface,
+    ),
   )
 }
 

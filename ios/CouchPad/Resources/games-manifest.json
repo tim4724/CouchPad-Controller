@@ -8,7 +8,7 @@
       "maxPlayers": 8,
       "tvApps": {
         "appletv": "live",
-        "androidtv": "live"
+        "androidtv": "soon"
       },
       "art": "/artwork/hexstacker-16x9-v2.webp",
       "icon": "/artwork/hexstacker-icon-v2.png",

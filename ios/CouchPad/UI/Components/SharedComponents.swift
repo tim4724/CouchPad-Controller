@@ -316,9 +316,13 @@ struct GameIcon: View {
                     .frame(width: 48, height: 48)
             }
         }
+        // Re-read on every icon change: a card slot can switch games under the same view
+        // (the rejoin card going from one room to another), and keeping a loaded image
+        // would show the previous game's icon.
         .task(id: game.icon) {
-            guard image == nil, let icon = game.icon else { return }
-            image = await ArtCache.uiImage(forArt: icon)
+            guard let icon = game.icon else { image = nil; return }
+            image = ArtCache.cached(forArt: icon)
+            if image == nil { image = await ArtCache.uiImage(forArt: icon) }
         }
     }
 }

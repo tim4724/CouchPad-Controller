@@ -25,6 +25,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
 
+        #if DEBUG
+        // UI-test hook: `-uitest.lanAsked YES` — LocalNetworkAsked is a file, out of
+        // the argument domain's reach. Before the root view, which reads it at init.
+        if UserDefaults.standard.bool(forKey: "uitest.lanAsked") { LocalNetworkAsked.set() }
+        #endif
+
         let window = UIWindow(windowScene: windowScene)
         let root = RootHostingController(rootView: RootView(router: router))
         ChromeState.shared.host = root

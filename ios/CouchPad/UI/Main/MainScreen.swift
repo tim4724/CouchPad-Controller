@@ -41,7 +41,7 @@ struct MainScreen: View {
     // picks the status line's wording — browsing keeps running regardless (see
     // LanMonitor on the hotspot case).
     @StateObject private var lan = LanMonitor()
-    @State private var nearbyOptedIn = NearbyOptIn.isSet
+    @State private var lanAsked = LocalNetworkAsked.isSet
     /// mDNS discovery never "completes" — it just keeps listening — so a spinner would
     /// spin forever with the TV off. Settle to a plain "not found" after a grace period.
     @State private var nearbySearchSettled = false
@@ -118,8 +118,8 @@ struct MainScreen: View {
                         NearbyStatusCard(
                             state: nearbyState,
                             onAsk: {
-                                NearbyOptIn.set()
-                                nearbyOptedIn = true
+                                LocalNetworkAsked.set()
+                                lanAsked = true
                                 nearby.start()
                             },
                             onOpenSettings: {
@@ -250,7 +250,7 @@ struct MainScreen: View {
             guard isTopVisible else { return }
             await runRejoinPoll()
         }
-        // Browse only while home is on screen AND the player has opted in — the same
+        // Browse only while home is on screen AND Local Network has been asked — the same
         // gating as the rejoin poll, and it keeps the Local Network prompt off the
         // game host and off a first launch nobody asked anything of yet.
         .onChange(of: isTopVisible, initial: true) { _, visible in
@@ -260,9 +260,11 @@ struct MainScreen: View {
                 // (Android gets this for free: its Main entry is disposed under the game
                 // host, so the remembered load re-runs on return.)
                 profile = ProfileStore.load()
+                // And the ask: a first join may have shown the prompt meanwhile.
+                lanAsked = LocalNetworkAsked.isSet
             }
-            if visible && nearbyOptedIn { nearby.start() } else { nearby.stop() }
-            // Unlike the browser, not gated on the opt-in: watching the path is
+            if visible && lanAsked { nearby.start() } else { nearby.stop() }
+            // Unlike the browser, not gated on the ask: watching the path is
             // passive, and the ask button costs nothing to leave un-hinted.
             if visible { lan.start() } else { lan.stop() }
         }
@@ -290,9 +292,9 @@ struct MainScreen: View {
         }
         // Keyed on the LAN too: Wi-Fi coming back restarts the grace period, so the slot
         // reads "Searching…" again instead of a stale instant "No rooms found".
-        .task(id: [nearbyOptedIn, lan.hasLan]) {
+        .task(id: [lanAsked, lan.hasLan]) {
             nearbySearchSettled = false
-            guard nearbyOptedIn else { return }
+            guard lanAsked else { return }
             try? await Task.sleep(for: .seconds(8))
             nearbySearchSettled = true
         }
@@ -395,7 +397,7 @@ struct MainScreen: View {
     // MARK: Derived
 
     private var nearbyState: NearbyStatus {
-        if !nearbyOptedIn { return .ask }
+        if !lanAsked { return .ask }
         if nearby.permissionDenied { return .denied }
         if !lan.hasLan { return .noWifi }
         return nearbySearchSettled ? .none : .searching
@@ -753,11 +755,11 @@ private func cardTitle(_ name: String, _ roomCode: String, codeColor: Color) -> 
 
 /// Where discovery currently stands, when it has no room to show for it.
 enum NearbyStatus {
-    /// Never opted in.
+    /// Local Network never asked for.
     case ask
     case searching
     case none
-    /// Opted in, but no Wi-Fi/Ethernet is up — nothing local to search, so the slot
+    /// Asked, but no Wi-Fi/Ethernet is up — nothing local to search, so the slot
     /// says how to fix that instead of claiming a search happened.
     case noWifi
     /// Local Network was denied, which is unrecoverable in-app.

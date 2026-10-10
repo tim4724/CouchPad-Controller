@@ -241,7 +241,7 @@ private const val OPTED_IN_KEY = "opted_in"
  * Has the player asked for nearby discovery? On API 37+ the permission grant IS the
  * memory (ungranted → the ask button, granted → discovery just runs). Below
  * enforcement there is no permission to remember with — [localNetworkPermissionGranted]
- * is unconditionally true — so a stored flag stands in, mirroring iOS's NearbyOptIn.
+ * is unconditionally true — so a stored flag stands in — the role iOS's LocalNetworkAsked plays there.
  * Without it every pre-37 device would browse and relay-advertise on the LAN from
  * launch, which §8 forbids ("the launcher asks only when the player asks for it").
  */

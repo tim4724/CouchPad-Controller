@@ -51,9 +51,9 @@ final class StoreScreenshotTests: XCTestCase {
         // deterministic. English and the interface style are forced the same way.
         let baseArguments = [
             "-cp_profile.name", playerName,
-            // Already opted in to nearby discovery, so home shows "Searching for rooms…"
-            // rather than the one-time Local Network ask.
-            "-cp_nearby.opted_in", "YES",
+            // Local Network already asked (app DEBUG hook), so home shows "Searching for
+            // rooms…" rather than the one-time ask.
+            "-uitest.lanAsked", "YES",
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US",
             // Window-level override via the app's DEBUG hook — the documented

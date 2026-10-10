@@ -43,38 +43,6 @@ enum ProfileStore {
     }
 }
 
-// MARK: - DeviceFlag
-
-/// A set-once flag about THIS device (its Local Network answer). Kept out of backups —
-/// iOS backs UserDefaults up whole, and a restore lands on a device whose answer may
-/// differ.
-enum DeviceFlag {
-
-    private static let dir: URL = {
-        var url = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("device-flags", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try? url.setResourceValues(values)
-        return url
-    }()
-
-    static func isSet(_ key: String) -> Bool {
-        // Builds before the move kept it in UserDefaults — carry it over once.
-        if UserDefaults.standard.bool(forKey: key) {
-            set(key)
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-        return FileManager.default.fileExists(atPath: dir.appendingPathComponent(key).path)
-    }
-
-    static func set(_ key: String) {
-        FileManager.default.createFile(atPath: dir.appendingPathComponent(key).path, contents: nil)
-    }
-}
-
 // MARK: - ManifestStore
 
 /// The games list the launcher renders: the last manifest fetched from
@@ -101,8 +69,6 @@ enum DeviceFlag {
     private var refreshed = false
 
     private init() {
-        // Where builds before the move to Caches kept it — drop it from backups too.
-        UserDefaults.standard.removeObject(forKey: "cp_manifest.json")
         if let data = try? Data(contentsOf: Self.cacheFile),
            let cached = GamesManifest.parse(data) {
             games = cached

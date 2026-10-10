@@ -209,48 +209,52 @@ extension NearbyRoom {
     }
 }
 
-/// Whether the player has ever asked for TV discovery. iOS has no queryable Local
-/// Network authorization, so the opt-in is ours to remember: until it's set, home shows
-/// the nearby-slot "Allow" button and nothing touches the network; the first tap starts the
-/// browse (and with it the system prompt), and every later launch discovers on its own.
-enum NearbyOptIn {
-    private static let key = "cp_nearby.opted_in"
+/// Whether this app has put the Local Network prompt in front of the player — the one
+/// bit iOS can't tell us: there is no authorization query, and the only probe (a Bonjour
+/// browse) IS the prompt. Until it's set, home offers "Allow" and nothing touches the
+/// network; once set, discovery and advertising run and read the live answer off their
+/// own state (`NearbyBrowser.permissionDenied`) — this never stands in for the grant.
+///
+/// A marker file excluded from backup, not UserDefaults (backed up whole): a restore
+/// lands on a device that has never shown the prompt.
+enum LocalNetworkAsked {
+    private static let marker = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("lan-asked")
 
-    static var isSet: Bool { DeviceFlag.isSet(key) }
+    static var isSet: Bool { FileManager.default.fileExists(atPath: marker.path) }
 
-    static func set() { DeviceFlag.set(key) }
-}
-
-/// Remembers that the first-join Local Network gate (GameHostScreen) reached a verdict —
-/// granted or denied — so no later join ever holds the page load again. Distinct from
-/// `NearbyOptIn`: a deny must be remembered too, and iOS never re-prompts — only the
-/// Settings toggle changes the answer after that.
-enum LocalNetworkPrompt {
-    private static let key = "cp_lan.prompted"
-
-    static var done: Bool { DeviceFlag.isSet(key) }
-
-    static func markDone() { DeviceFlag.set(key) }
+    static func set() {
+        guard !isSet else { return }
+        let fm = FileManager.default
+        try? fm.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
+        fm.createFile(atPath: marker.path, contents: nil)
+        var file = marker
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? file.setResourceValues(values)
+    }
 }
 
 /// Fires the system Local Network prompt — iOS has no ask API, so starting a Bonjour
 /// browse IS the ask — and waits for a verdict: `.ready` is a grant, PolicyDenied a
-/// denial (the same signals NearbyBrowser reads). Returns whether access was granted.
+/// denial (the same signals NearbyBrowser reads). Either verdict sets
+/// `LocalNetworkAsked`; which one it was is read live wherever it matters.
 ///
 /// Best effort by construction: if the OS surfaces PolicyDenied while the dialog is
 /// still pending rather than after a "Don't Allow", the gate opens early and a
 /// mid-load grant is recovered by the game's own fastlane retry — the relay path
 /// works throughout either way. The timeout covers verdict-less states (no network
-/// interface at all); it deliberately does NOT mark the prompt done, so a join on a
+/// interface at all); it deliberately does NOT set `LocalNetworkAsked`, so a join on a
 /// healthy network gets to ask again.
 @MainActor
-func requestLocalNetworkAccess() async -> Bool {
+func requestLocalNetworkAccess() async {
     let browser = NWBrowser(
         for: .bonjourWithTXTRecord(type: nearbyServiceType, domain: nil),
         using: NWParameters.tcp
     )
-    // nil = no verdict (failed/timeout): don't remember, don't claim a grant.
-    let granted = await withCheckedContinuation { (cont: CheckedContinuation<Bool?, Never>) in
+    // true = a verdict arrived (grant or deny); false = none (failed/timeout).
+    let answered = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
         let settle = OneShot(cont)
         browser.stateUpdateHandler = { state in
             switch state {
@@ -258,9 +262,9 @@ func requestLocalNetworkAccess() async -> Bool {
                 Task { @MainActor in settle.resolve(true) }
             case .waiting(let error):
                 // Any non-denied .waiting is transient.
-                if isPolicyDenied(error) { Task { @MainActor in settle.resolve(false) } }
+                if isPolicyDenied(error) { Task { @MainActor in settle.resolve(true) } }
             case .failed:
-                Task { @MainActor in settle.resolve(nil) }
+                Task { @MainActor in settle.resolve(false) }
             default:
                 break
             }
@@ -268,12 +272,11 @@ func requestLocalNetworkAccess() async -> Bool {
         browser.start(queue: .main)
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(15))
-            settle.resolve(nil)
+            settle.resolve(false)
         }
     }
     browser.cancel()
-    if granted != nil { LocalNetworkPrompt.markDone() }
-    return granted ?? false
+    if answered { LocalNetworkAsked.set() }
 }
 
 /// First verdict wins; late state changes and the timeout no-op. Every path hops to
@@ -281,11 +284,11 @@ func requestLocalNetworkAccess() async -> Bool {
 /// main-actor isolation is the whole synchronization story.
 @MainActor
 private final class OneShot {
-    private var cont: CheckedContinuation<Bool?, Never>?
+    private var cont: CheckedContinuation<Bool, Never>?
 
-    init(_ cont: CheckedContinuation<Bool?, Never>) { self.cont = cont }
+    init(_ cont: CheckedContinuation<Bool, Never>) { self.cont = cont }
 
-    func resolve(_ value: Bool?) {
+    func resolve(_ value: Bool) {
         cont?.resume(returning: value)
         cont = nil
     }
@@ -302,9 +305,9 @@ private final class OneShot {
 /// relayed record proposes no origin and grants a relaying phone no more trust than the
 /// display has. `cpr=1` marks the instance name as not-a-room-label.
 ///
-/// NEVER prompts. It advertises only if the player already opted into discovery — the
-/// same Local Network authorization, already granted for their own benefit — so nobody
-/// is ever asked for a capability that helps someone else.
+/// NEVER prompts. It advertises only once the player has been asked for Local Network
+/// for their own benefit (`LocalNetworkAsked`), so nobody is ever asked for a
+/// capability that helps someone else; denied, the listener simply fails.
 @MainActor final class NearbyAdvertiser {
 
     static let shared = NearbyAdvertiser()
@@ -312,7 +315,7 @@ private final class OneShot {
     private var listener: NWListener?
 
     func start(roomCode: String) {
-        guard listener == nil, !roomCode.isEmpty, NearbyOptIn.isSet else { return }
+        guard listener == nil, !roomCode.isEmpty, LocalNetworkAsked.isSet else { return }
         var txt = NWTXTRecord()
         txt[codeKey] = roomCode
         txt[relayedKey] = "1"

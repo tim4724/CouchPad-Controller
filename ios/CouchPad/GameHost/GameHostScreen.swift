@@ -40,8 +40,8 @@ struct GameHostScreen: View {
     // after the page has started ICE is only picked up by the game's own retry loop.
     // The join never blocks on the ANSWER: a deny loads the page anyway, which falls
     // back to its relay exactly as on an AP-isolated network. Held at most once ever —
-    // an earlier discovery opt-in or a remembered verdict skips straight through.
-    @State private var lanGateOpen = NearbyOptIn.isSet || LocalNetworkPrompt.done
+    // once the prompt has been shown (here or by home's "Allow"), skip straight through.
+    @State private var lanGateOpen = LocalNetworkAsked.isSet
     // The main document failed to load (no connection / host unreachable) — drives the
     // in-place retry overlay. Retry bumps the token GameWebView observes to reload.
     @State private var failed = false
@@ -212,10 +212,9 @@ struct GameHostScreen: View {
         }
         .task {
             guard !lanGateOpen else { return }
-            // A grant made here is the same authorization discovery uses, so light
-            // discovery up too — matching Android 17+, where the permission IS the
-            // opt-in memory (nearbyOptedIn).
-            if await requestLocalNetworkAccess() { NearbyOptIn.set() }
+            // Its verdict sets LocalNetworkAsked, which also lights discovery up on home —
+            // granted it finds rooms, denied it offers Settings.
+            await requestLocalNetworkAccess()
             lanGateOpen = true
         }
         // The room is not idle while its player is looking at it: hold the recent-room
@@ -230,8 +229,8 @@ struct GameHostScreen: View {
         // Relay this room to the local network while we're in it, so the next player can
         // tap instead of scan — and so the room stays discoverable even if its display
         // never advertised. Publishes the room code only (§8); no URL, no device name.
-        // Re-keyed on the gate so a grant made there starts the advert in this same
-        // session (start() is a no-op without the opt-in).
+        // Re-keyed on the gate so a verdict reached there starts the advert in this same
+        // session (start() is a no-op until LocalNetworkAsked).
         .task(id: "\(lanGateOpen)|\(joinUrl)") {
             guard let room = RecentRoomStore.current() else { return }
             NearbyAdvertiser.shared.start(roomCode: room.roomCode)

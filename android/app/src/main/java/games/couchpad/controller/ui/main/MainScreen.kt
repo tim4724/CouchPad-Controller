@@ -78,6 +78,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1050,6 +1052,10 @@ private fun CodeEntryDialog(
     onDismissRequest = onDismiss,
     title = { Text(stringResource(R.string.enter_room_code)) },
     text = {
+      // Focus on open, so the keyboard rises with the dialog. The effect lives in the
+      // dialog's own composition, next to the field it focuses.
+      val focus = remember { FocusRequester() }
+      LaunchedEffect(Unit) { focus.requestFocus() }
       OutlinedTextField(
         value = code,
         onValueChange = { if (it.length <= 16) code = it },
@@ -1057,7 +1063,7 @@ private fun CodeEntryDialog(
         singleLine = true,
         isError = error != null,
         supportingText = { if (error != null) Text(error) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().focusRequester(focus),
       )
     },
     confirmButton = {

@@ -8,11 +8,11 @@
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 	<!-- No data leaves the device for the app's own purposes: the QR camera scan is
-	     on-device only, and the profile/room history live in local UserDefaults. -->
+	     on-device only, and the player's name lives in local UserDefaults. -->
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array/>
 	<!-- Required-reason APIs actually used by the app. Only UserDefaults (Data/Stores.swift,
-	     handle + recent-room persistence). Reason CA92.1: access to info stored only in and
+	     player name). Reason CA92.1: access to info stored only in and
 	     accessible only to the app itself. -->
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>

@@ -40,6 +40,7 @@ object FunnyName {
 }
 
 object ProfileStore {
+  // Backup includes this file by name — res/xml/backup_rules.xml + data_extraction_rules.xml.
   private const val PREFS = "cp_profile"
   private const val KEY_NAME = "name"
 

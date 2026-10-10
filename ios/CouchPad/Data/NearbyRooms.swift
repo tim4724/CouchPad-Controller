@@ -216,9 +216,9 @@ extension NearbyRoom {
 enum NearbyOptIn {
     private static let key = "cp_nearby.opted_in"
 
-    static var isSet: Bool { UserDefaults.standard.bool(forKey: key) }
+    static var isSet: Bool { DeviceFlag.isSet(key) }
 
-    static func set() { UserDefaults.standard.set(true, forKey: key) }
+    static func set() { DeviceFlag.set(key) }
 }
 
 /// Remembers that the first-join Local Network gate (GameHostScreen) reached a verdict —
@@ -228,9 +228,9 @@ enum NearbyOptIn {
 enum LocalNetworkPrompt {
     private static let key = "cp_lan.prompted"
 
-    static var done: Bool { UserDefaults.standard.bool(forKey: key) }
+    static var done: Bool { DeviceFlag.isSet(key) }
 
-    static func markDone() { UserDefaults.standard.set(true, forKey: key) }
+    static func markDone() { DeviceFlag.set(key) }
 }
 
 /// Fires the system Local Network prompt — iOS has no ask API, so starting a Bonjour

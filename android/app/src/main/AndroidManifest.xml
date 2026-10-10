@@ -25,8 +25,13 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- Backup carries only the player's name (cp_profile). Everything else is a cache
+         or a device-local fact: a restored served manifest names art this build may not
+         ship, and a restored "asked" flag without its permission reads as locked out. -->
     <application
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

@@ -43,21 +43,57 @@ enum ProfileStore {
     }
 }
 
+// MARK: - DeviceFlag
+
+/// A set-once flag about THIS device (its Local Network answer). Kept out of backups —
+/// iOS backs UserDefaults up whole, and a restore lands on a device whose answer may
+/// differ.
+enum DeviceFlag {
+
+    private static let dir: URL = {
+        var url = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("device-flags", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+        return url
+    }()
+
+    static func isSet(_ key: String) -> Bool {
+        // Builds before the move kept it in UserDefaults — carry it over once.
+        if UserDefaults.standard.bool(forKey: key) {
+            set(key)
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        return FileManager.default.fileExists(atPath: dir.appendingPathComponent(key).path)
+    }
+
+    static func set(_ key: String) {
+        FileManager.default.createFile(atPath: dir.appendingPathComponent(key).path, contents: nil)
+    }
+}
+
 // MARK: - ManifestStore
 
 /// The games list the launcher renders: the last manifest fetched from
 /// couchpad.games (persisted verbatim), seeded from the bundled copy until a
 /// fetch has ever succeeded. `refresh()` pulls at most once per process launch —
 /// a launch-fresh list is fresh enough, and every failure silently keeps the
-/// current list. Served art paths may name files this build didn't ship; ArtCache
-/// pulls those through ArtworkCache.
+/// current list. Persisted in Caches, not UserDefaults, so a backup restore can't
+/// resurrect a stale list naming art the installed build doesn't ship.
+/// Served art paths may name files this build didn't ship; ArtCache pulls those
+/// through ArtworkCache.
 @MainActor final class ManifestStore: ObservableObject {
 
     static let shared = ManifestStore()
 
     @Published private(set) var games: [Game]
 
-    private static let jsonKey = "cp_manifest.json"
+    private static let cacheFile = FileManager.default
+        .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("games-manifest.json")
     private static let manifestURL = URL(string: "https://\(CP.launcherHost)/games-manifest.json")!
     /// Sanity cap for a served manifest (ours is ~1 KB) — a deploy mistake must not balloon memory.
     private static let maxBytes = 1 << 20
@@ -65,7 +101,9 @@ enum ProfileStore {
     private var refreshed = false
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: Self.jsonKey),
+        // Where builds before the move to Caches kept it — drop it from backups too.
+        UserDefaults.standard.removeObject(forKey: "cp_manifest.json")
+        if let data = try? Data(contentsOf: Self.cacheFile),
            let cached = GamesManifest.parse(data) {
             games = cached
         } else {
@@ -83,11 +121,11 @@ enum ProfileStore {
               // Identical to the seeded copy (the common case every launch) — the
               // current list already reflects it, so skip the re-parse, the
               // rewrite, and the objectWillChange.
-              data != UserDefaults.standard.data(forKey: Self.jsonKey),
+              data != (try? Data(contentsOf: Self.cacheFile)),
               let fresh = GamesManifest.parse(data) else {
             return
         }
-        UserDefaults.standard.set(data, forKey: Self.jsonKey)
+        try? data.write(to: Self.cacheFile, options: .atomic)
         games = fresh
     }
 }

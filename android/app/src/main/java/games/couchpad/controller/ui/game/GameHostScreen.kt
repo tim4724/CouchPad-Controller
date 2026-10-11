@@ -201,7 +201,25 @@ private fun GameHostContent(
   // no-ops, so we never pop the back stack twice. A load failure is NOT terminal: it
   // shows the retry overlay in place, and only its close trips this.
   val exited = remember { AtomicBoolean(false) }
-  val leave = { if (exited.compareAndSet(false, true)) currentOnLeave() }
+  // Hand the window back to the launcher: BOTH bars (systemBars, not navigationBars — a
+  // landscape game also hid the status bar) and the launcher's portrait (§10 — home is
+  // portrait, and an orientation the game asked for must not outlive it). Called BEFORE
+  // each exit pops, not just on dispose: dispose waits out the exit crossfade, and home
+  // would lay out landscape until then and only turn after. The status-icon appearance
+  // is NOT restored here: it has a single owner, the page-theming effect below, which
+  // reverts it on its own teardown.
+  fun restoreLauncherWindow() {
+    val activity = context.findActivity() ?: return
+    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    WindowCompat.getInsetsController(activity.window, view).show(WindowInsetsCompat.Type.systemBars())
+  }
+  fun exitOnce(pop: () -> Unit) {
+    if (exited.compareAndSet(false, true)) {
+      restoreLauncherWindow()
+      pop()
+    }
+  }
+  val leave = { exitOnce { currentOnLeave() } }
   // Retry the controller load in place (no re-scan): clear the error, bring the join
   // cover back, reload. A dead renderer lands here too, before its WebView is swapped.
   val retry = {
@@ -242,7 +260,7 @@ private fun GameHostContent(
   }
   val hostBridge = remember {
     CouchPadHostBridge(
-      onGameEnded = { if (exited.compareAndSet(false, true)) currentOnGameEnd(it) },
+      onGameEnded = { exitOnce { currentOnGameEnd(it) } },
       onLeave = leave,
       onSystemBackEnabled = { systemBackEnabled = it },
       onLandscape = {
@@ -341,18 +359,9 @@ private fun GameHostContent(
     }
   }
 
-  // On leave BOTH bars come back (systemBars, not navigationBars — a landscape game
-  // also hid the status bar) and the launcher's portrait is restored (§10 — home is
-  // portrait, and an orientation the game asked for must not outlive it). The
-  // status-icon appearance is NOT restored here: it has a single owner, the
-  // page-theming effect below, which reverts it on its own teardown.
+  // Backstop for any pop that skipped the restores above.
   DisposableEffect(Unit) {
-    val activity = context.findActivity()
-    val controller = activity?.window?.let { WindowCompat.getInsetsController(it, view) }
-    onDispose {
-      activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-      controller?.show(WindowInsetsCompat.Type.systemBars())
-    }
+    onDispose { restoreLauncherWindow() }
   }
 
   fun watchPageScheme() {
@@ -402,11 +411,17 @@ private fun GameHostContent(
 
   // A join link (re-scan) pops this host, but the activity resumes on it first and the
   // page would reconnect just before the pop drops it — the display sees join, leave,
-  // join. onNewIntent precedes onResume, so pause the WebView (reports the page hidden).
+  // join. onNewIntent precedes onResume, so pause the WebView (reports the page hidden),
+  // and hand the window back now rather than after the pop's crossfade.
   // dataString != null is what MainActivity treats as a deep link.
   DisposableEffect(Unit) {
     val activity = context.findActivity() as? ComponentActivity
-    val listener = Consumer<Intent> { if (it.dataString != null) webView?.onPause() }
+    val listener = Consumer<Intent> {
+      if (it.dataString != null) {
+        webView?.onPause()
+        restoreLauncherWindow()
+      }
+    }
     activity?.addOnNewIntentListener(listener)
     onDispose { activity?.removeOnNewIntentListener(listener) }
   }

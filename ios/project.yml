@@ -208,6 +208,9 @@ targets:
         # The fastlane doesn't need it — WKWebView traffic is exempt, and on-device
         # stats with the permission denied show a host-candidate LAN pair.
         <<: *appInfo
+        # XcodeGen fills this in for an application target but not for an
+        # on-demand-install-capable one, and App Store Connect rejects a clip without it.
+        CFBundlePackageType: APPL
         NSAppClip:
           NSAppClipRequestEphemeralUserNotification: false
           NSAppClipRequestLocationConfirmation: false

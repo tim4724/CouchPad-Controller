@@ -1,6 +1,7 @@
 import SwiftUI
 import Observation
 import UIKit
+import StoreKit
 
 // MARK: - Routes
 
@@ -117,6 +118,9 @@ struct ToastItem: Identifiable, Equatable {
 struct RootView: View {
 
     @Bindable private var router: AppRouter
+    // App Clip only: the full-app offer, raised when a game hands back to home — the
+    // moment the player has just seen what it does, and never over a live controller.
+    @State private var offerFullApp = false
 
     init(router: AppRouter) {
         self.router = router
@@ -179,12 +183,19 @@ struct RootView: View {
         // onAppear/onDisappear don't fire reliably across NavigationStack
         // push/pop. (Indicator/edge-gesture chrome is view-scoped SwiftUI on
         // GameHostScreen and needs no reset.)
-        .onChange(of: router.path, initial: true) { _, path in
-            let inGame = path.contains { if case .gameHost = $0 { return true } else { return false } }
+        .onChange(of: router.path, initial: true) { oldPath, path in
+            let isGame: (Route) -> Bool = { if case .gameHost = $0 { return true } else { return false } }
+            let inGame = path.contains(where: isGame)
             UIApplication.shared.isIdleTimerDisabled = inGame
             if !inGame {
                 ChromeState.shared.reset()
             }
+            if CP.isAppClip {
+                offerFullApp = !inGame && oldPath.contains(where: isGame)
+            }
+        }
+        .appStoreOverlay(isPresented: $offerFullApp) {
+            SKOverlay.AppClipConfiguration(position: .bottom)
         }
         .task {
             // Warm the web engine for the first game join, once launch has settled.

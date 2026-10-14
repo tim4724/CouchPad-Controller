@@ -166,8 +166,10 @@ A native display (tvOS, Android TV) may advertise its room over DNS-SD as
 - Advertise at create, send a goodbye at close. Withdrawing while full is optional.
 - New TXT keys are fine; a shape old launchers must not read needs a new service type.
 - Discovery is optional: it needs the Local Network permission and fails on isolated
-  networks, so keep showing the QR and code. The launcher asks for that permission before
-  loading the page on a first join; a deny still loads it, so treat the LAN as unreliable.
+  networks, so keep showing the QR and code. The Android launcher asks for that permission
+  before loading the page on a first join, since Android gates the page's LAN traffic too;
+  a deny still loads it. iOS exempts web view traffic and never asks there. Either way,
+  treat the LAN as unreliable.
 
 ## 9. System back: `enableSystemBack` + `back()`
 

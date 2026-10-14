@@ -4,7 +4,7 @@
     <string name="home_subtitle">Kumanda</string>
     <string name="about">Hakkında</string>
     <string name="nearby_denied">Ayarları aç</string>
-    <string name="nearby_hint">Ekranla doğrudan bağlantı kurmak için %1$s iznini ver.</string>
+    <string name="nearby_hint">TV ile doğrudan bağlantı kurmak için %1$s iznini ver.</string>
     <string name="nearby_perm">Yakındaki cihazlar</string>
     <string name="nearby_allow">İzin ver</string>
     <string name="nearby_no_wifi">Yakındaki odaları bulmak için Wi-Fi\'ye bağlan</string>

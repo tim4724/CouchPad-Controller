@@ -71,7 +71,7 @@ IOS_ONLY = {
     # Android has the same denied-state UI (nearby_denied/nearby_hint) but quotes its
     # own OS — see the note there.
     "Open Settings",
-    "To connect directly to the display, allow **Local Network**.",
+    "To connect directly to the TV, allow **Local Network**.",
 }
 
 problems = []

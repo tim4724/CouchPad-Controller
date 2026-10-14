@@ -3494,66 +3494,66 @@
         }
       }
     },
-    "To connect directly to the display, allow **Local Network**." : {
+    "To connect directly to the TV, allow **Local Network**." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Um dich direkt mit dem Display zu verbinden, erlaube **Lokales Netzwerk**."
+            "value" : "Um dich direkt mit dem Fernseher zu verbinden, erlaube **Lokales Netzwerk**."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Para conectarte directamente a la pantalla, permite **Red local**."
+            "value" : "Para conectarte directamente a la TV, permite **Red local**."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pour te connecter directement à l’écran, autorise **Réseau local**."
+            "value" : "Pour te connecter directement à la TV, autorise **Réseau local**."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Per collegarti direttamente allo schermo, consenti **Rete locale**."
+            "value" : "Per collegarti direttamente alla TV, consenti **Rete locale**."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ディスプレイと直接接続するには、**ローカルネットワーク**を許可してください。"
+            "value" : "テレビと直接接続するには、**ローカルネットワーク**を許可してください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "디스플레이와 직접 연결하려면 **로컬 네트워크**를 허용하세요."
+            "value" : "TV와 직접 연결하려면 **로컬 네트워크**를 허용하세요."
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Para se conectar diretamente à tela, permita **Rede local**."
+            "value" : "Para se conectar diretamente à TV, permita **Rede local**."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Чтобы напрямую подключиться к экрану, разреши **Локальная сеть**."
+            "value" : "Чтобы напрямую подключиться к телевизору, разреши **Локальная сеть**."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ekranla doğrudan bağlantı kurmak için **Yerel Ağ** iznini ver."
+            "value" : "TV ile doğrudan bağlantı kurmak için **Yerel Ağ** iznini ver."
           }
         },
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "如需直接连接屏幕，请允许**本地网络**。"
+            "value" : "如需直接连接电视，请允许**本地网络**。"
           }
         }
       }

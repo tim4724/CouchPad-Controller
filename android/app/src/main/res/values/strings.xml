@@ -5,7 +5,7 @@
     <string name="home_subtitle">Controller</string>
     <string name="about">About</string>
     <string name="nearby_denied">Open settings</string>
-    <string name="nearby_hint">To connect directly to the display, allow %1$s.</string>
+    <string name="nearby_hint">To connect directly to the TV, allow %1$s.</string>
     <string name="nearby_perm">Nearby devices</string>
     <string name="nearby_allow">Allow</string>
     <string name="nearby_no_wifi">Connect to Wi-Fi to find rooms nearby</string>

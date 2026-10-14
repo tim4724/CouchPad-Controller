@@ -4,7 +4,7 @@
     <string name="home_subtitle">Controller</string>
     <string name="about">Informazioni</string>
     <string name="nearby_denied">Apri le impostazioni</string>
-    <string name="nearby_hint">Per collegarti direttamente allo schermo, consenti %1$s.</string>
+    <string name="nearby_hint">Per collegarti direttamente alla TV, consenti %1$s.</string>
     <string name="nearby_perm">Dispositivi nelle vicinanze</string>
     <string name="nearby_allow">Consenti</string>
     <string name="nearby_no_wifi">Connettiti al Wi-Fi per trovare stanze nelle vicinanze</string>

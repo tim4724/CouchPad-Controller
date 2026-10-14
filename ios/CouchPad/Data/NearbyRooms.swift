@@ -236,64 +236,6 @@ enum LocalNetworkAsked {
     }
 }
 
-/// Fires the system Local Network prompt — iOS has no ask API, so starting a Bonjour
-/// browse IS the ask — and waits for a verdict: `.ready` is a grant, PolicyDenied a
-/// denial (the same signals NearbyBrowser reads). Either verdict sets
-/// `LocalNetworkAsked`; which one it was is read live wherever it matters.
-///
-/// Best effort by construction: if the OS surfaces PolicyDenied while the dialog is
-/// still pending rather than after a "Don't Allow", the gate opens early and a
-/// mid-load grant is recovered by the game's own fastlane retry — the relay path
-/// works throughout either way. The timeout covers verdict-less states (no network
-/// interface at all); it deliberately does NOT set `LocalNetworkAsked`, so a join on a
-/// healthy network gets to ask again.
-@MainActor
-func requestLocalNetworkAccess() async {
-    let browser = NWBrowser(
-        for: .bonjourWithTXTRecord(type: nearbyServiceType, domain: nil),
-        using: NWParameters.tcp
-    )
-    // true = a verdict arrived (grant or deny); false = none (failed/timeout).
-    let answered = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-        let settle = OneShot(cont)
-        browser.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                Task { @MainActor in settle.resolve(true) }
-            case .waiting(let error):
-                // Any non-denied .waiting is transient.
-                if isPolicyDenied(error) { Task { @MainActor in settle.resolve(true) } }
-            case .failed:
-                Task { @MainActor in settle.resolve(false) }
-            default:
-                break
-            }
-        }
-        browser.start(queue: .main)
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(15))
-            settle.resolve(false)
-        }
-    }
-    browser.cancel()
-    if answered { LocalNetworkAsked.set() }
-}
-
-/// First verdict wins; late state changes and the timeout no-op. Every path hops to
-/// the main actor before resolving — the same idiom as NearbyBrowser's handlers — so
-/// main-actor isolation is the whole synchronization story.
-@MainActor
-private final class OneShot {
-    private var cont: CheckedContinuation<Bool, Never>?
-
-    init(_ cont: CheckedContinuation<Bool, Never>) { self.cont = cont }
-
-    func resolve(_ value: Bool) {
-        cont?.resume(returning: value)
-        cont = nil
-    }
-}
-
 // MARK: - Advertiser
 
 /// Re-advertises the room this phone is in, so the next player can tap instead of scan.

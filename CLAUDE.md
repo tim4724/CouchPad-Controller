@@ -32,6 +32,8 @@ third-party dependencies. There is no automated test suite.
 Android `data/` ↔ iOS `Data/`, `ui/main/` ↔ `UI/Main/`, `ui/game/` (WebView host) ↔
 `GameHost/` (WKWebView host), `theme/` ↔ `Theme/`. A behavior change on one platform almost
 always needs the mirrored change on the other. Both implement `CONTRACT.md` identically.
+iOS also builds the same sources a second time as an App Clip (`CP.isAppClip`; see
+`ios/README.md`) — iOS code must keep compiling and degrading cleanly there.
 
 ## Things that must stay in sync (and their checks)
 

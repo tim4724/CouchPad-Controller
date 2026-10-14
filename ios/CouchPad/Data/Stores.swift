@@ -6,6 +6,10 @@ import UIKit
 enum ProfileStore {
 
     private static let nameKey = "cp_profile.name"
+    /// The App Group shared by the app and its App Clip (project.yml), so the name a
+    /// player typed in the clip is waiting when the full app replaces it. Mirrored on
+    /// every save; read only when .standard has no name, i.e. on a fresh install.
+    private static let shared = UserDefaults(suiteName: "group.games.couchpad.controller")
 
     /// Last loaded/saved profile. load() is a @State default expression on the main
     /// screens, so it re-runs on every struct init (each parent body re-eval). Only
@@ -21,7 +25,10 @@ enum ProfileStore {
             return cached
         }
         let profile: Profile
-        let stored = defaults.string(forKey: nameKey) ?? ""
+        var stored = defaults.string(forKey: nameKey) ?? ""
+        if stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, defaults === UserDefaults.standard {
+            stored = shared?.string(forKey: nameKey) ?? ""
+        }
         if !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             profile = Profile(name: stored)
         } else {
@@ -38,6 +45,7 @@ enum ProfileStore {
     static func save(_ profile: Profile, defaults: UserDefaults = .standard) {
         if defaults === UserDefaults.standard {
             cached = profile
+            shared?.set(profile.name, forKey: nameKey)
         }
         defaults.set(profile.name, forKey: nameKey)
     }

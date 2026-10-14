@@ -4,7 +4,7 @@
     <string name="home_subtitle">Mando</string>
     <string name="about">Acerca de</string>
     <string name="nearby_denied">Abrir ajustes</string>
-    <string name="nearby_hint">Para conectarte directamente a la pantalla, permite %1$s.</string>
+    <string name="nearby_hint">Para conectarte directamente a la TV, permite %1$s.</string>
     <string name="nearby_perm">Dispositivos cercanos</string>
     <string name="nearby_allow">Permitir</string>
     <string name="nearby_no_wifi">Conéctate al Wi-Fi para encontrar salas cercanas</string>

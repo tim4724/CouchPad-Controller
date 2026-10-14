@@ -13,7 +13,8 @@
 	<array/>
 	<!-- Required-reason APIs actually used by the app. Only UserDefaults (Data/Stores.swift,
 	     player name). Reason CA92.1: access to info stored only in and
-	     accessible only to the app itself. -->
+	     accessible only to the app itself. 1C8F.1: the same name mirrored into the App
+	     Group shared with the app's own App Clip. -->
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>
@@ -22,6 +23,7 @@
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>CA92.1</string>
+				<string>1C8F.1</string>
 			</array>
 		</dict>
 	</array>

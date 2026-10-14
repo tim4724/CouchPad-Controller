@@ -8,6 +8,12 @@ enum CP {
     /// per game: Base58 (case-sensitive, excludes 0 O I l), six characters.
     static let base58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     static let roomCodeLength = 6
+    /// Built as the App Clip (project.yml's CouchPadClip target sets APPCLIP).
+    #if APPCLIP
+    static let isAppClip = true
+    #else
+    static let isAppClip = false
+    #endif
     /// Illustrative code shown in the entry field's placeholder — never a real room, just
     /// the shape (Base58, six chars) a typed/scanned code takes. Kept in one place so the
     /// "e.g." copy stays localized while the sample doesn't repeat across translations.

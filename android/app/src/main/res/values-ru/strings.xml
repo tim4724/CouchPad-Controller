@@ -4,7 +4,7 @@
     <string name="home_subtitle">Контроллер</string>
     <string name="about">О приложении</string>
     <string name="nearby_denied">Открыть настройки</string>
-    <string name="nearby_hint">Чтобы напрямую подключиться к экрану, разреши %1$s.</string>
+    <string name="nearby_hint">Чтобы напрямую подключиться к телевизору, разреши %1$s.</string>
     <string name="nearby_perm">Устройства поблизости</string>
     <string name="nearby_allow">Разрешить</string>
     <string name="nearby_no_wifi">Подключись к Wi-Fi, чтобы найти комнаты поблизости</string>

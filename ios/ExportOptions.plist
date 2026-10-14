@@ -19,6 +19,8 @@
 	<dict>
 		<key>games.couchpad.controller</key>
 		<string>CouchPad App Store</string>
+		<key>games.couchpad.controller.Clip</key>
+		<string>CouchPad Clip App Store</string>
 	</dict>
 	<key>uploadSymbols</key>
 	<true/>

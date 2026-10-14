@@ -113,7 +113,8 @@ struct MainScreen: View {
                     // regardless: hiding it behind a rejoin card would make discovery
                     // invisible for the rest of the session. So does the denied button,
                     // which is the same offer by another route.
-                    if nearbyState == .ask || nearbyState == .denied
+                    // A clip can't browse (no Bonjour), so it makes no claim either way.
+                    if !CP.isAppClip, nearbyState == .ask || nearbyState == .denied
                         || (home.nearby.isEmpty && rejoin == nil) {
                         NearbyStatusCard(
                             state: nearbyState,
@@ -810,7 +811,7 @@ private struct NearbyStatusCard: View {
         VStack(alignment: .leading, spacing: 8) {
             // Default antenna glyph on purpose: Android's info line quotes the toggle's
             // system icon, but Apple's Settings gives "Local Network" no icon to quote.
-            statusLine(Text("To connect directly to the display, allow **Local Network**."))
+            statusLine(Text("To connect directly to the TV, allow **Local Network**."))
             askButton(verb, action: action)
         }
     }

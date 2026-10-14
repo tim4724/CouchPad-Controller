@@ -27,3 +27,4 @@ xcuserdata/
 
 # Generated from project.yml (entitlements.properties) alongside the .xcodeproj
 ios/CouchPad/CouchPad.entitlements
+ios/CouchPadClip/CouchPadClip.entitlements

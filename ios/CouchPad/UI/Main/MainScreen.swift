@@ -234,9 +234,15 @@ struct MainScreen: View {
             showCodeEntry = false
             // A legal-page App Link opens the in-app doc viewer; anything else is a
             // join. The URL keeps its locale segment (/en/privacy vs /privacy), so
-            // the viewer loads the right variant.
+            // the viewer loads the right variant. Except in the clip, a link that names
+            // no room: a clip opens for every URL under an experience's prefix, and
+            // Apple's own App Clip link names no room at all — those just show home.
+            // (The app never sees one: its Universal Links are AASA-scoped to room paths.)
+            let firstSegment = URLComponents(string: link)?.path.split(separator: "/").first.map(String.init)
             if CP.legalTitle(for: URL(string: link)) != nil {
                 onOpenLegalDoc(link)
+            } else if CP.isAppClip, !validRoomCode(firstSegment ?? "") {
+                // Home is already showing.
             } else {
                 resolveAndJoin(link)
             }

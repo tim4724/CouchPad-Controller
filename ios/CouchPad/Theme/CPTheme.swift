@@ -18,19 +18,25 @@ extension Color {
 
 // MARK: - Palette
 
-/// INK & CONFETTI palette — the couchpad.games design tokens (Couch-Games
-/// assets/theme.css) mapped onto Material 3 roles; must stay value-identical to the
-/// Android theme (android theme/Color.kt + Theme.kt). Faintly warm paper light,
+/// The couchpad.games design tokens (Couch-Games assets/theme.css) mapped onto
+/// Material 3 roles, plus the site card token that has no M3 role; must stay
+/// value-identical to the Android theme (android theme/Color.kt + Theme.kt), minus the
+/// tonal-button roles only Android's FilledTonalButton reads. Faintly warm paper light,
 /// violet-tinted near-black dark; large fills use only the palest surface steps (the
-/// deep ones read muddy at card size). Members are `var` only so the copy helpers can mutate a copy;
+/// deep ones read muddy at card size). From the site's rules: coral fills a screen's one
+/// primary button and nothing else, and cards are flat with a hairline border.
+/// Interactive controls stay the platform's own (the secondary button is the system
+/// bordered button). Members are `var` only so the copy helpers can mutate a copy;
 /// `.light`/`.dark` are the sole instances handed out.
 struct CPPalette: Equatable {
     var primary, onPrimary, primaryContainer, onPrimaryContainer: Color
-    var secondary, onSecondary, secondaryContainer, onSecondaryContainer: Color
+    var secondary, onSecondary: Color
     var background, onBackground, surface, onSurface: Color
     var surfaceVariant, onSurfaceVariant, outline, outlineVariant: Color
     var surfaceContainerLowest, surfaceContainerLow, surfaceContainer, surfaceContainerHigh, surfaceContainerHighest, surfaceBright: Color
     var error, onError, inverseSurface, inverseOnSurface, scrim: Color
+    /// Site --card.
+    var card: Color
 
     static let light = CPPalette(
         primary: Color(cpHex: 0x26242C),
@@ -39,9 +45,6 @@ struct CPPalette: Equatable {
         onPrimaryContainer: Color(cpHex: 0x26242C),
         secondary: Color(cpHex: 0x625B71),
         onSecondary: Color(cpHex: 0xFFFFFF),
-        // Near-neutral grey, not a surface-ladder step (its warm cast reads muddy as a fill).
-        secondaryContainer: Color(cpHex: 0xDAD8D6),
-        onSecondaryContainer: Color(cpHex: 0x26242C),
         background: Color(cpHex: 0xFAF9F7),
         onBackground: Color(cpHex: 0x1C1B1F),
         surface: Color(cpHex: 0xFAF9F7),
@@ -60,7 +63,8 @@ struct CPPalette: Equatable {
         onError: Color(cpHex: 0xFFFFFF),
         inverseSurface: Color(cpHex: 0x313033),
         inverseOnSurface: Color(cpHex: 0xF4EFF4),
-        scrim: Color(cpHex: 0x000000)
+        scrim: Color(cpHex: 0x000000),
+        card: Color(cpHex: 0xFFFFFF)
     )
 
     static let dark = CPPalette(
@@ -70,8 +74,6 @@ struct CPPalette: Equatable {
         onPrimaryContainer: Color(cpHex: 0xF1EFEC),
         secondary: Color(cpHex: 0xCCC2DC),
         onSecondary: Color(cpHex: 0x332D41),
-        secondaryContainer: Color(cpHex: 0x332F3F),
-        onSecondaryContainer: Color(cpHex: 0xF1EFEC),
         background: Color(cpHex: 0x110F17),
         onBackground: Color(cpHex: 0xE6E1E5),
         surface: Color(cpHex: 0x110F17),
@@ -90,12 +92,13 @@ struct CPPalette: Equatable {
         onError: Color(cpHex: 0x601410),
         inverseSurface: Color(cpHex: 0xE6E1E5),
         inverseOnSurface: Color(cpHex: 0x313033),
-        scrim: Color(cpHex: 0x000000)
+        scrim: Color(cpHex: 0x000000),
+        card: Color(cpHex: 0x1C1A24)
     )
 
-    /// Site --action. CTA container only, never small text: 3.4:1 against the light
-    /// background. White label per the site's "Play now" (contentColorOn would pick black).
-    static let actionCoral = Color(cpHex: 0xF04A50)
+    /// Site --action-solid: the fill of a screen's one primary button, behind a white
+    /// label (4.6:1, AA). Nothing else is coral.
+    static let actionCoral = Color(cpHex: 0xD63C43)
 
     /// Copy with primary = accent, onPrimary = contentColorOn(accent). (Game-host accent remap.)
     func withAccent(_ accent: Color) -> CPPalette {

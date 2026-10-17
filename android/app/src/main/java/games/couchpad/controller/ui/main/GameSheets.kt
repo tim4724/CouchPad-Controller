@@ -206,18 +206,15 @@ private fun Tile(iconRes: Int, label: String, soon: Boolean, modifier: Modifier)
 @Composable
 private fun PlayersChip(range: String) {
   Row(
-    Modifier
-      .clip(CircleShape)
-      .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-      .padding(horizontal = 10.dp, vertical = 5.dp),
+    Modifier.padding(horizontal = 4.dp, vertical = 5.dp),
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(5.dp),
+    horizontalArrangement = Arrangement.spacedBy(6.dp),
   ) {
     Icon(
       painterResource(R.drawable.ic_people),
       contentDescription = null,
-      Modifier.size(16.dp),
-      tint = MaterialTheme.colorScheme.onSurface,
+      Modifier.size(20.dp),
+      tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Text(
       range,
@@ -313,7 +310,7 @@ private fun GameplayLoop(game: Game, url: String) {
             .clip(CircleShape)
             .background(Color.Black.copy(alpha = 0.35f)),
         ) {
-          Box(Modifier.fillMaxWidth(it).fillMaxHeight().clip(CircleShape).background(game.accentColor))
+          Box(Modifier.fillMaxWidth(it).fillMaxHeight().clip(CircleShape).background(Color.White.copy(alpha = 0.9f)))
         }
       }
     }

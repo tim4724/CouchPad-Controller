@@ -39,7 +39,7 @@ struct GameInfoSheet: View {
             }
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             if !game.tvApps.isEmpty || game.displayHost != nil {
                 PlatformTiles(game: game)
@@ -67,19 +67,19 @@ struct GameInfoSheet: View {
         .padding(.bottom, 28)
     }
 
-    // "1–8" + person glyph: the glyph stands in for the word "players", so the
-    // count range needs no translation (Game.playersRange).
+    // "1–8" + person glyph, plain like the site's card meta: the glyph stands in for
+    // the word "players", so the count range needs no translation (Game.playersRange).
     private func playersChip(_ range: String) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Image(systemName: "person.2.fill")
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(palette.onSurfaceVariant)
             Text(range)
                 .font(.cpLabelLarge)
+                .foregroundStyle(palette.onSurface)
         }
-        .foregroundStyle(palette.onSurface)
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 4)
         .padding(.vertical, 5)
-        .background(Capsule().fill(palette.surfaceContainerHighest))
     }
 }
 
@@ -151,7 +151,7 @@ private struct PlatformTiles: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.vertical, 12)
         .padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 16).fill(palette.surfaceContainerHighest))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(palette.surfaceContainerHighest))
     }
 }
 
@@ -198,7 +198,7 @@ struct GameplayLoopView: View {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.black.opacity(0.35))
-                        Capsule().fill(game.accentColor).frame(width: geo.size.width * progress)
+                        Capsule().fill(Color.white.opacity(0.9)).frame(width: geo.size.width * progress)
                     }
                 }
                 .frame(height: 4)

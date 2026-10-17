@@ -132,21 +132,9 @@ struct QRScannerScreen: View {
                         }
                         // The scan can always fail (a scratched code, a glossy TV);
                         // without this the only way out is backing all the way home.
-                        Button { finish(.enterCode) } label: {
+                        SecondaryButton(action: { finish(.enterCode) }) {
                             Text("Enter code manually")
-                                .font(.cpTitleMedium)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                // The pill is a background BEHIND a `.plain` button —
-                                // only the label's own shape is tappable (see JoinButtons).
-                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .background(
-                            palette.secondaryContainer,
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        )
-                        .foregroundStyle(palette.onSecondaryContainer)
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)

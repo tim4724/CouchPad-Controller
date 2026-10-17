@@ -27,7 +27,7 @@
     <string name="enter_code_manually">Digitar o código manualmente</string>
 
     <string name="enter_room_code">Digitar código da sala</string>
-    <string name="code_placeholder">ex.: %1$s</string>
+    <string name="room_code">Código da sala</string>
     <string name="joining">Entrando…</string>
     <string name="join">Jogar</string>
     <string name="cancel">Cancelar</string>

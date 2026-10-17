@@ -27,7 +27,7 @@
     <string name="enter_code_manually">Saisir le code manuellement</string>
 
     <string name="enter_room_code">Saisir le code de la salle</string>
-    <string name="code_placeholder">ex. %1$s</string>
+    <string name="room_code">Code de salle</string>
     <string name="joining">Connexion…</string>
     <string name="join">Jouer</string>
     <string name="cancel">Annuler</string>

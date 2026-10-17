@@ -14,10 +14,6 @@ enum CP {
     #else
     static let isAppClip = false
     #endif
-    /// Illustrative code shown in the entry field's placeholder — never a real room, just
-    /// the shape (Base58, six chars) a typed/scanned code takes. Kept in one place so the
-    /// "e.g." copy stays localized while the sample doesn't repeat across translations.
-    static let sampleRoomCode = "A3KX9p"
     /// Fallback accent ("suite indigo") for missing/invalid accent colors and the synthetic launcher.
     static let defaultAccent = Color(cpHex: 0x6C5CE7)
     /// Shared relay for all games; doubles as the room -> controller directory. No trailing slash.

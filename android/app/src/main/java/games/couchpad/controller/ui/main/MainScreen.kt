@@ -92,6 +92,11 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -124,13 +129,13 @@ import games.couchpad.controller.data.Profile
 import games.couchpad.controller.data.ProfileStore
 import games.couchpad.controller.data.RecentRoom
 import games.couchpad.controller.data.RecentRoomStore
-import games.couchpad.controller.data.SAMPLE_ROOM_CODE
 import games.couchpad.controller.data.ROOM_POLL_MS
 import games.couchpad.controller.data.RoomLookup
 import games.couchpad.controller.data.probeRoom
 import games.couchpad.controller.data.resolveJoin
 import androidx.compose.ui.tooling.preview.Preview
 import games.couchpad.controller.theme.CouchPadTheme
+import games.couchpad.controller.theme.card
 import games.couchpad.controller.ui.preview.CardSamples
 import games.couchpad.controller.ui.legal.LegalLinks
 import games.couchpad.controller.R
@@ -749,10 +754,10 @@ private fun GameEndBanner(message: String?, onDismiss: () -> Unit) {
  * advertising. The two are the same object to a player, so they are one card; only where
  * the pieces come from differs, which is what [RejoinCard] and [NearbyCard] supply.
  *
- * Ordinary chrome — the same secondaryContainer the tonal buttons use, so it adapts per
- * theme instead of sitting as a dark slab on a light screen. The game's colour lives on
- * the icon and nowhere else: routing brand through the border made every HexStacker card
- * near-CTA red (its accent is #FF6B6B against coral #F04A50), which both read as an alert
+ * The site's card: flat, the card fill with a hairline border, so it adapts per theme
+ * instead of sitting as a dark slab on a light screen. The game's colour lives on the
+ * icon and nowhere else: routing brand through the border made every HexStacker card
+ * near-CTA red (its accent is #FF6B6B against the coral), which both read as an alert
  * and spent the one colour that's supposed to mean "this is how you play".
  */
 @Composable
@@ -768,7 +773,7 @@ private fun RoomCard(
 ) {
   val interaction = remember { MutableInteractionSource() }
   val scale = rememberPressScale(interaction)
-  val onCard = MaterialTheme.colorScheme.onSecondaryContainer
+  val onCard = MaterialTheme.colorScheme.onSurface
   // "Wohnzimmer · Apple TV" — which box, on its own line. Either half may be missing.
   val locator = listOfNotNull(label.ifBlank { null }, deviceName(platform)).joinToString(" · ")
   Card(
@@ -777,8 +782,9 @@ private fun RoomCard(
       .fillMaxWidth()
       .graphicsLayer { scaleX = scale; scaleY = scale },
     interactionSource = interaction,
+    shape = MaterialTheme.shapes.large,
     colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.secondaryContainer,
+      containerColor = MaterialTheme.colorScheme.card,
       contentColor = onCard,
     ),
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -1048,6 +1054,7 @@ private fun CodeEntryDialog(
   onDismiss: () -> Unit,
 ) {
   var code by remember { mutableStateOf("") }
+  val canSubmit = code.isNotBlank() && !loading
   AlertDialog(
     onDismissRequest = onDismiss,
     title = { Text(stringResource(R.string.enter_room_code)) },
@@ -1059,15 +1066,27 @@ private fun CodeEntryDialog(
       OutlinedTextField(
         value = code,
         onValueChange = { if (it.length <= 16) code = it },
-        placeholder = { Text(stringResource(R.string.code_placeholder, SAMPLE_ROOM_CODE)) },
+        placeholder = { Text(stringResource(R.string.room_code)) },
         singleLine = true,
+        // A Base58 code is not a word: the password layout keeps suggestions,
+        // correction and the keyboard's learning out of it (the text stays visible —
+        // no visual transformation is applied).
+        keyboardOptions = KeyboardOptions(
+          keyboardType = KeyboardType.Password,
+          capitalization = KeyboardCapitalization.None,
+          autoCorrectEnabled = false,
+          imeAction = ImeAction.Go,
+        ),
+        keyboardActions = KeyboardActions(onGo = { if (canSubmit) onSubmit(code) }),
         isError = error != null,
-        supportingText = { if (error != null) Text(error) },
+        // Null, not an empty lambda: a present slot reserves its line and opens a gap
+        // between the field and the buttons.
+        supportingText = error?.let { { Text(it) } },
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
       )
     },
     confirmButton = {
-      TextButton(onClick = { onSubmit(code) }, enabled = code.isNotBlank() && !loading) {
+      TextButton(onClick = { onSubmit(code) }, enabled = canSubmit) {
         Text(stringResource(if (loading) R.string.joining else R.string.join))
       }
     },

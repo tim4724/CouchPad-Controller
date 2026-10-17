@@ -273,8 +273,7 @@ fun PlaySteps(game: Game) {
 /** The two join actions — shared by the home Join card and a playable game's info sheet. */
 @Composable
 fun JoinButtons(onScan: () -> Unit, onEnterCode: () -> Unit) {
-  // Coral is reserved for this one CTA (site --action rule): large/bold only,
-  // everything else stays on the neutral chrome.
+  // Coral fills a screen's one primary button (site --action-solid) and nothing else.
   Button(
     onClick = onScan,
     modifier = Modifier.fillMaxWidth().height(56.dp),

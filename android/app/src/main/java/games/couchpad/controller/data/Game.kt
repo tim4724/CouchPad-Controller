@@ -10,11 +10,6 @@ import org.json.JSONObject
 const val BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 const val ROOM_CODE_LENGTH = 6
 
-// Illustrative code shown in the entry field's placeholder — never a real room, just
-// the shape (Base58, six chars) a typed/scanned code takes. Passed into code_placeholder
-// so the "e.g." copy stays localized while the sample lives in one place.
-const val SAMPLE_ROOM_CODE = "A3KX9p"
-
 /** Suite indigo — the accent for games with no (valid) accentColor of their own. */
 val DefaultAccent = Color(0xFF6C5CE7)
 

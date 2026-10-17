@@ -27,7 +27,7 @@
     <string name="enter_code_manually">Inserisci il codice manualmente</string>
 
     <string name="enter_room_code">Inserisci il codice della stanza</string>
-    <string name="code_placeholder">es. %1$s</string>
+    <string name="room_code">Codice stanza</string>
     <string name="joining">Connessione…</string>
     <string name="join">Gioca</string>
     <string name="cancel">Annulla</string>

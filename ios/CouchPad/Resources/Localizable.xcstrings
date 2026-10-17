@@ -1037,67 +1037,66 @@
         }
       }
     },
-    "e.g. %@" : {
-      "extractionState" : "stale",
+    "Room code" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "z. B. %@"
+            "value" : "Raumcode"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "p. ej. %@"
+            "value" : "Código de sala"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ex. %@"
+            "value" : "Code de salle"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "es. %@"
+            "value" : "Codice stanza"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "例: %@"
+            "value" : "ルームコード"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "예: %@"
+            "value" : "방 코드"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ex.: %@"
+            "value" : "Código da sala"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "напр. %@"
+            "value" : "Код комнаты"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "örn. %@"
+            "value" : "Oda kodu"
           }
         },
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "例如 %@"
+            "value" : "房间代码"
           }
         }
       }

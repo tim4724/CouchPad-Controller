@@ -27,7 +27,7 @@
     <string name="enter_code_manually">Code manuell eingeben</string>
 
     <string name="enter_room_code">Raumcode eingeben</string>
-    <string name="code_placeholder">z.&#160;B. %1$s</string>
+    <string name="room_code">Raumcode</string>
     <string name="joining">Verbinden…</string>
     <string name="join">Spielen</string>
     <string name="cancel">Abbrechen</string>

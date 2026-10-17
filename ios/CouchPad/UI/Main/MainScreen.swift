@@ -320,7 +320,10 @@ struct MainScreen: View {
             }
         }
         .alert("Enter room code", isPresented: $showCodeEntry) {
-            TextField("e.g. \(CP.sampleRoomCode)", text: $codeText)
+            TextField("Room code", text: $codeText)
+                // A Base58 code is not a word: ASCII layout, no capitalization,
+                // correction or predictions.
+                .keyboardType(.asciiCapable)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             Button("Cancel", role: .cancel) { codeError = nil; codeText = "" }
@@ -654,10 +657,10 @@ private struct GameEndBanner: View {
 /// advertising. The two are the same object to a player, so they are one card; only where
 /// the pieces come from differs, which is what `RejoinCard` and `NearbyCard` supply.
 ///
-/// Ordinary chrome — the same secondaryContainer the tonal buttons use, so it adapts per
+/// The site's card: flat, the card fill with a hairline border, so it adapts per
 /// theme instead of sitting as a dark slab on a light screen. The game's colour lives on
 /// the icon and nowhere else: routing brand through the border made every HexStacker card
-/// near-CTA red (its accent is #FF6B6B against coral #F04A50), which both read as an alert
+/// near-CTA red (its accent is #FF6B6B against the coral), which both read as an alert
 /// and spent the one colour that's supposed to mean "this is how you play".
 private struct RoomCard: View {
     let game: Game
@@ -679,10 +682,10 @@ private struct RoomCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 14) {
-                GameIcon(game: game, tint: palette.onSecondaryContainer)
+                GameIcon(game: game, tint: palette.onSurface)
                 VStack(alignment: .leading, spacing: 2) {
                     cardTitle(title, roomCode,
-                              codeColor: palette.onSecondaryContainer.opacity(0.55))
+                              codeColor: palette.onSurface.opacity(0.55))
                         .font(.cpTitleMedium)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -699,15 +702,15 @@ private struct RoomCard: View {
                     .font(.footnote.weight(.semibold))
                     .opacity(0.65)
             }
-            .foregroundStyle(palette.onSecondaryContainer)
+            .foregroundStyle(palette.onSurface)
             .padding(16)
             .frame(maxWidth: .infinity)
             .background(
-                palette.secondaryContainer,
-                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                palette.card,
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(palette.outlineVariant, lineWidth: 1)
             )
         }
@@ -822,23 +825,8 @@ private struct NearbyStatusCard: View {
         }
     }
 
-    /// Explicit tonal fill, matching JoinButtons' "Enter code manually" — see the note
-    /// there on why `.bordered` can't be used, and on why the label needs a content
-    /// shape of its own.
     private func askButton(_ text: Text, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            text
-                .font(.cpTitleMedium)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(
-            palette.secondaryContainer,
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-        )
-        .foregroundStyle(palette.onSecondaryContainer)
+        SecondaryButton(action: action) { text }
     }
 
     /// A 48pt minimum height keeps the muted states interchangeable without the cards
@@ -933,9 +921,9 @@ private struct JoinCard: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .strokeBorder(.quaternary, lineWidth: 0.5)
         )
         .shadow(color: Color.black.opacity(0.15), radius: 18, y: 6)

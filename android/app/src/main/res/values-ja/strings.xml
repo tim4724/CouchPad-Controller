@@ -28,7 +28,7 @@
     <string name="enter_code_manually">コードを手動で入力</string>
 
     <string name="enter_room_code">ルームコードを入力</string>
-    <string name="code_placeholder">例: %1$s</string>
+    <string name="room_code">ルームコード</string>
     <string name="joining">参加中…</string>
     <string name="join">プレイ</string>
     <string name="cancel">キャンセル</string>

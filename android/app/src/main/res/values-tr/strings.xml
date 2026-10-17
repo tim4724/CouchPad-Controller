@@ -27,7 +27,7 @@
     <string name="enter_code_manually">Kodu elle gir</string>
 
     <string name="enter_room_code">Oda kodunu gir</string>
-    <string name="code_placeholder">örn. %1$s</string>
+    <string name="room_code">Oda kodu</string>
     <string name="joining">Katılınıyor…</string>
     <string name="join">Oyna</string>
     <string name="cancel">İptal</string>

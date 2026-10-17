@@ -27,7 +27,7 @@
     <string name="enter_code_manually">Ввести код вручную</string>
 
     <string name="enter_room_code">Введи код комнаты</string>
-    <string name="code_placeholder">напр. %1$s</string>
+    <string name="room_code">Код комнаты</string>
     <string name="joining">Подключение…</string>
     <string name="join">Играть</string>
     <string name="cancel">Отмена</string>

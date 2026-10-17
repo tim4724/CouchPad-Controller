@@ -3,16 +3,17 @@ package games.couchpad.controller.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 
-// INK & CONFETTI — the couchpad.games design tokens (Couch-Games assets/theme.css)
-// mapped onto M3 roles. Neutral charcoal chrome still carries the structure and the
-// game posters still carry the color (console-shell pattern); the change from the old
-// Mono palette is tint: faintly warm paper light surfaces, violet-tinted near-black dark
-// ones, and the coral CTA. Container roles the site doesn't define are steps on the
-// site's surface ladder — except the tonal-button fill (secondaryContainer), which is
-// deliberately off-ladder; see its comment below.
-val PrimaryLight = Color(0xFF26242C) // --chrome
+// The couchpad.games design tokens (Couch-Games assets/theme.css) mapped onto M3 roles.
+// Neutral ink and paper carry the structure and the game posters carry the color; the
+// light surfaces are faintly warm paper, the dark ones violet-tinted near-black. From
+// the site's rules: coral fills a screen's one primary button and nothing else, and
+// cards are flat with a hairline border. Interactive controls stay the platform's own
+// (the secondary button is M3's tonal button). Container roles the site doesn't define
+// are steps on the site's surface ladder — except the tonal-button fill
+// (secondaryContainer), which is deliberately off-ladder; see its comment below.
+val PrimaryLight = Color(0xFF26242C) // --on-surface (the site's ink pills)
 val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFE7E4DF) // --surface-container
+val PrimaryContainerLight = Color(0xFFE7E4DF)
 val OnPrimaryContainerLight = Color(0xFF26242C)
 
 val PrimaryDark = Color(0xFFF1EFEC)
@@ -20,12 +21,11 @@ val OnPrimaryDark = Color(0xFF26242C)
 val PrimaryContainerDark = Color(0xFF3D3849)
 val OnPrimaryContainerDark = Color(0xFFF1EFEC)
 
-// Tonal-button fill: a near-neutral grey (the surface blended toward --chrome), NOT
-// a step on the surface ladder — the ladder's warm cast reads muddy as a fill.
-// Deep enough to read as a button on the surfaceContainerHigh Join card.
+// Tonal-button fill: a near-neutral grey (the surface blended toward the ink), NOT a step
+// on the surface ladder — the ladder's warm cast reads muddy as a fill.
 val SecondaryContainerLight = Color(0xFFDAD8D6)
 val OnSecondaryContainerLight = Color(0xFF26242C)
-val SurfaceVariantLight = Color(0xFFE7E4DF) // --surface-container
+val SurfaceVariantLight = Color(0xFFE7E4DF)
 val OnSurfaceVariantLight = Color(0xFF5E5A66)
 val OutlineLight = Color(0xFF77717F)
 val OutlineVariantLight = Color(0xFFDCD9D3)
@@ -41,9 +41,13 @@ val OutlineVariantDark = Color(0xFF2F2B3A)
 val SurfaceDarkBase = Color(0xFF110F17)
 val SurfaceLightBase = Color(0xFFFAF9F7)
 
-// --action. CTA container only, never small text: it is 3.4:1 against the light
-// background, so anything below large/bold sizes must use onSurface instead.
-val ActionCoral = Color(0xFFF04A50)
+// --action-solid: the fill of a screen's one primary button, behind white label text
+// (4.6:1, AA). Nothing else is coral.
+val ActionCoral = Color(0xFFD63C43)
+
+// --card: see ColorScheme.card (Theme.kt).
+internal val CardLight = Color(0xFFFFFFFF)
+internal val CardDark = Color(0xFF1C1A24)
 
 /**
  * Black or white over [color], whichever wins on WCAG contrast — accents and

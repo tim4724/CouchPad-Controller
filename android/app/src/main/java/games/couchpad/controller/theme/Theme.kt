@@ -1,12 +1,17 @@
 package games.couchpad.controller.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.dp
 
 private val DarkColors = darkColorScheme(
   primary = PrimaryDark,
@@ -58,8 +63,23 @@ private val LightColors = lightColorScheme(
 )
 
 /**
+ * The site's --card fill (white on paper, one step up from the dark background), which
+ * no M3 role matches in both schemes. Keyed on the scheme in force rather than the
+ * system setting, so a forced palette gets the right one.
+ */
+val ColorScheme.card: Color
+  get() = if (background.luminance() < 0.5f) CardDark else CardLight
+
+// The site's radii: 18 for cards, tiles and media, 28 for panels and sheets; buttons
+// and fields are pills (M3's default button shape already).
+private val AppShapes = Shapes(
+  large = RoundedCornerShape(18.dp),
+  extraLarge = RoundedCornerShape(28.dp),
+)
+
+/**
  * Standard Material 3 theming: follows the system light/dark setting; both
- * schemes are the brand Ink & Confetti palette (see Color.kt).
+ * schemes are the brand palette (see Color.kt).
  */
 @Composable
 fun CouchPadTheme(
@@ -69,6 +89,7 @@ fun CouchPadTheme(
   MaterialTheme(
     colorScheme = if (darkTheme) DarkColors else LightColors,
     typography = Typography,
+    shapes = AppShapes,
     content = content,
   )
 }

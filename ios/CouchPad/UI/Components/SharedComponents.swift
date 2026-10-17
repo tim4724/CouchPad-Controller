@@ -387,8 +387,8 @@ struct JoinButtons: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            // Coral is reserved for this one CTA (site --action rule): large/bold only,
-            // everything else stays on the neutral chrome.
+            // Coral fills a screen's one primary button (site --action-solid) and
+            // nothing else. A pill, like every site button and Android's.
             Button(action: onScan) {
                 Label("Scan code", systemImage: "qrcode.viewfinder")
                     .font(.cpTitleMedium)
@@ -397,31 +397,32 @@ struct JoinButtons: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(CPPalette.actionCoral)
-            .buttonBorderShape(.roundedRectangle(radius: 14))
+            .buttonBorderShape(.capsule)
             .controlSize(.large)
 
-            // Explicit tonal fill: `.bordered` would derive a translucent fill from
-            // the ambient tint and never read the palette's secondaryContainer, so
-            // the fill would drift from Android's FilledTonalButton. The cost of
-            // building the pill by hand is that the label must claim its own hit
-            // area: a `.plain` button is only tappable where its label DRAWS, so
-            // without the content shape the fill is decoration and every tap that
-            // misses the glyphs falls through — the wider the pill, the deader it
-            // feels (verified on device).
-            Button(action: onEnterCode) {
+            SecondaryButton(action: onEnterCode) {
                 Text("Enter code manually")
-                    .font(.cpTitleMedium)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .background(
-                palette.secondaryContainer,
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
-            .foregroundStyle(palette.onSecondaryContainer)
         }
+    }
+}
+
+// MARK: - SecondaryButton
+
+/// The secondary action beside the one coral primary: the system bordered button,
+/// which inherits the global ink tint, sized to match the primary.
+struct SecondaryButton<Label: View>: View {
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        Button(action: action) {
+            label()
+                .font(.cpTitleMedium)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
     }
 }
 

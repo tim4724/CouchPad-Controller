@@ -53,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -101,7 +102,7 @@ import games.couchpad.controller.ui.components.denyLocalFileAccess
 import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.gestureNavEnabled
 import games.couchpad.controller.ui.components.hideNavigationBar
-import games.couchpad.controller.ui.components.themeLightBarIcons
+import games.couchpad.controller.ui.components.BarIcons
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -117,6 +118,7 @@ fun GameHostScreen(
   joinUrl: String,
   title: String,
   allowedHosts: List<String>,
+  onBarIcons: (BarIcons) -> Unit,
   onLeave: () -> Unit,
   onGameEnd: (reason: String?) -> Unit,
 ) {
@@ -124,7 +126,7 @@ fun GameHostScreen(
   // follow the system's light/dark mode, like home: the launcher can't know a game's
   // colors before its page has loaded, and not every game is in the manifest.
   CouchPadTheme {
-    GameHostContent(joinUrl, title, allowedHosts, onLeave, onGameEnd)
+    GameHostContent(joinUrl, title, allowedHosts, onBarIcons, onLeave, onGameEnd)
   }
 }
 
@@ -138,6 +140,7 @@ private fun GameHostContent(
   joinUrl: String,
   title: String,
   allowedHosts: List<String>,
+  onBarIcons: (BarIcons) -> Unit,
   onLeave: () -> Unit,
   onGameEnd: (reason: String?) -> Unit,
 ) {
@@ -205,9 +208,8 @@ private fun GameHostContent(
   // landscape game also hid the status bar) and the launcher's portrait (§10 — home is
   // portrait, and an orientation the game asked for must not outlive it). Called BEFORE
   // each exit pops, not just on dispose: dispose waits out the exit crossfade, and home
-  // would lay out landscape until then and only turn after. The bar-icon appearance
-  // is NOT restored here: it has a single owner, the page-theming effect below, which
-  // reverts it on its own teardown.
+  // would lay out landscape until then and only turn after. The bar icons are not
+  // touched here: MainNavigation applies them.
   fun restoreLauncherWindow() {
     val activity = context.findActivity() ?: return
     activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -432,43 +434,15 @@ private fun GameHostContent(
   val legacyInsets = remember { webViewMajorVersion(context) < 136 }
 
   // Keep the bar icons contrasting against the page — status icons, and the nav bar's
-  // 3-button keys while the host shows it (armed, §9) — and hand the appearance back to
-  // the theme on the way out. While the join or retry cover is up the icons sit on it,
-  // so they follow the cover's (system) mode — a server's error page under the retry
-  // cover declares no color-scheme of its own. The page decides once it shows — unless
-  // legacyInsets: the bars then sit on the host's surface, not the page, so they follow
-  // the system mode.
-  //
-  // ONE owner for both, and deliberately a DisposableEffect: a LaunchedEffect body is
-  // POSTED through AndroidUiDispatcher, so a re-assert scheduled on the way out can land
-  // a frame AFTER the teardown has restored the theme value — leaving home under the
-  // game's icon color until the next configuration change. onDispose runs inline while
-  // changes are applied, so apply and restore stay ordered by construction.
-  //
-  // Keyed on the whole Configuration, not uiMode + orientation: EVERY configuration
-  // change re-runs MainActivity.applyEdgeToEdge, which stomps this, and a device
-  // rotation within landscape (a §10 game is locked to SENSOR_LANDSCAPE) changes
-  // neither of those two fields — so that stomp used to be permanent. Compose updates
-  // LocalConfiguration from the same callback, and measurably after the activity's own,
-  // so this always re-asserts on top.
+  // 3-button keys while the host shows it (armed, §9). While the join or retry cover is
+  // up the icons sit on it, so they follow the cover's (system) mode — a server's error
+  // page under the retry cover declares no color-scheme of its own. The page decides
+  // once it shows — unless legacyInsets: the bars then sit on the host's surface, not
+  // the page, so they follow the system mode. MainNavigation applies the wish and hands
+  // the icons back on the way out.
   val coverDark = isSystemInDarkTheme()
   val lightBarIcons = !(if (loading || failed || legacyInsets) coverDark else pageDark ?: coverDark)
-  val config = LocalConfiguration.current
-  DisposableEffect(lightBarIcons, config) {
-    val window = context.findActivity()?.window
-    fun setLightBarIcons(light: Boolean) {
-      window?.let {
-        WindowCompat.getInsetsController(it, view).run {
-          isAppearanceLightStatusBars = light
-          isAppearanceLightNavigationBars = light
-        }
-      }
-    }
-    setLightBarIcons(lightBarIcons)
-    // Re-derived, never a captured value — uiMode no longer recreates the activity, so
-    // a theme flipped mid-game must be honored here.
-    onDispose { setLightBarIcons(themeLightBarIcons(context)) }
-  }
+  SideEffect { onBarIcons(BarIcons(lightBarIcons, lightBarIcons)) }
 
   Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
     // The game surface spans the FULL physical screen; the page keeps its interactive

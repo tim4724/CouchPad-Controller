@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -68,14 +69,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -85,6 +91,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -139,8 +146,12 @@ import games.couchpad.controller.theme.card
 import games.couchpad.controller.ui.preview.CardSamples
 import games.couchpad.controller.ui.legal.LegalLinks
 import games.couchpad.controller.R
+import games.couchpad.controller.ui.components.ART_LUMINANCE_ROWS
+import games.couchpad.controller.ui.components.Art
+import games.couchpad.controller.ui.components.BarIcons
 import games.couchpad.controller.ui.components.GameArt
 import games.couchpad.controller.ui.components.GameIcon
+import games.couchpad.controller.ui.components.rememberArt
 import games.couchpad.controller.ui.components.deviceName
 import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.JoinButtons
@@ -166,6 +177,7 @@ fun MainScreen(
   // in the rejoin slot. Cleared on dismiss (auto after a few seconds, or tap/swipe).
   gameEndBanner: String? = null,
   onDismissGameEndBanner: () -> Unit = {},
+  onBarIcons: (BarIcons) -> Unit = {},
 ) {
   val context = LocalContext.current
   // Config-aware resources for string lookups in callbacks (context.getString on
@@ -404,6 +416,19 @@ fun MainScreen(
     }
   }
 
+  // The status bar is fully transparent and its icons follow what's under them. Posters
+  // scroll under it, so each GameCard reports whether its art is light where the bar's
+  // icon row crosses it (keyed by game; cleared while it's elsewhere) — with no poster
+  // there the theme's background is under the bar. The scanner is a dark surface over
+  // everything.
+  val underBar = remember { mutableStateMapOf<String, Boolean>() }
+  val themeLight = !isSystemInDarkTheme()
+  val lightStatus by remember(themeLight) {
+    derivedStateOf { underBar.values.firstOrNull() ?: themeLight }
+  }
+  val bars = BarIcons(lightStatus = lightStatus && !showScanner, lightNav = themeLight && !showScanner)
+  SideEffect { onBarIcons(bars) }
+
   // Games scroll the full screen; the join card floats over the list at the bottom.
   // The trailing Spacer, sized off the card's measured height, keeps the last
   // poster reachable. The scanner overlay sits in the same root Box but OUTSIDE
@@ -508,12 +533,11 @@ fun MainScreen(
               }
             }
           }
-          GamesSection(games, Modifier.padding(top = 8.dp), onOpen = { infoGame = it })
+          GamesSection(games, underBar, Modifier.padding(top = 8.dp), onOpen = { infoGame = it })
           Spacer(Modifier.height(with(LocalDensity.current) { joinCardHeightPx.toDp() } + 12.dp))
         }
       }
-      // Nav-area protection, the bottom counterpart of the status-bar strip:
-      // posters dissolve into the background before they reach the gesture zone,
+      // Nav-area protection: posters dissolve into the background before they reach the gesture zone,
       // instead of ending in a hard cut under the pill. Drawn behind the (opaque)
       // join card, so only the band below and beside the card actually shows.
       val bottomInset = with(LocalDensity.current) { stableScreenInsets.getBottom(this).toDp() }
@@ -541,18 +565,6 @@ fun MainScreen(
           .padding(bottom = 12.dp),
       )
     }
-    // Status-bar protection: the window background at 50% alpha, one status-bar tall.
-    // At rest it sits over the same background — a no-op, invisible. When a poster
-    // scrolls under the bar it tints that strip back toward the background, keeping
-    // the theme-colored status icons legible. No icon flipping, no poster-color
-    // assumption. Sits above the catalog but below the full-screen scanner overlay.
-    Box(
-      Modifier
-        .align(Alignment.TopCenter)
-        .fillMaxWidth()
-        .windowInsetsTopHeight(stableScreenInsets)
-        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f)),
-    )
     if (showScanner) {
       ScanScreen(
         games = games,
@@ -969,32 +981,69 @@ private fun StatusLine(text: AnnotatedString, @DrawableRes icon: Int, showsProgr
 
 // Every game — live or coming soon — gets the same full-width poster card.
 @Composable
-private fun GamesSection(games: List<Game>, modifier: Modifier = Modifier, onOpen: (Game) -> Unit) {
+private fun GamesSection(
+  games: List<Game>,
+  underBar: SnapshotStateMap<String, Boolean>,
+  modifier: Modifier = Modifier,
+  onOpen: (Game) -> Unit,
+) {
   Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    games.forEach { game -> GameCard(game, onOpen) }
+    games.forEach { game -> GameCard(game, underBar, onOpen) }
   }
 }
+
+// Relative luminance above which the status bar's dark icons beat its white ones:
+// Android's dark icons are translucent, so this sits well above the pure-black
+// crossover (~0.18).
+private const val ICON_FLIP_LUMINANCE = 0.4f
+
+// The title scrim over a poster: clear down to SCRIM_START, then to SCRIM_ALPHA black.
+private const val SCRIM_START = 0.55f
+private const val SCRIM_ALPHA = 0.86f
 
 // Poster tile: name/tagline/status sit ON the art over a bottom scrim, so the
 // scrim colors are fixed (white text on black gradient) in both themes.
 @Composable
-private fun GameCard(game: Game, onOpen: (Game) -> Unit) {
+private fun GameCard(game: Game, underBar: SnapshotStateMap<String, Boolean>, onOpen: (Game) -> Unit) {
   val interaction = remember { MutableInteractionSource() }
   val scale = rememberPressScale(interaction)
+  val art = rememberArt(game.art)
+  // Whether the art is light where the status bar's icon row crosses this card; null
+  // while the bar is elsewhere (or the art hasn't decoded). Decided in the positioned
+  // callback so the card only recomposes on a flip, not on every scroll frame. Root
+  // coordinates are window coordinates (edge to edge), so root y = 0 is the top of
+  // the screen.
+  val barCenterPx = with(LocalDensity.current) { stableScreenInsets.getTop(this) / 2f }
+  val latestArt by rememberUpdatedState(art)
+  var lightUnderBar by remember { mutableStateOf<Boolean?>(null) }
+  DisposableEffect(lightUnderBar) {
+    lightUnderBar?.let { underBar[game.id] = it }
+    onDispose { underBar.remove(game.id) }
+  }
   ElevatedCard(
     onClick = { onOpen(game) },
-    modifier = Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale },
+    modifier = Modifier
+      .fillMaxWidth()
+      .graphicsLayer { scaleX = scale; scaleY = scale }
+      .onGloballyPositioned { coords ->
+        // positionInRoot, not boundsInRoot: the latter clips to the ancestors, which
+        // would fold the part scrolled off the top into the fraction.
+        val top = coords.positionInRoot().y
+        val height = coords.size.height
+        val crossing = if (barCenterPx >= top && barCenterPx < top + height) (barCenterPx - top) / height else null
+        lightUnderBar = latestArt?.let { a -> crossing?.let { posterLuminance(a, it) > ICON_FLIP_LUMINANCE } }
+      },
     interactionSource = interaction,
   ) {
     Box {
       // 16:9 matches the screenshots — a shorter crop would slice the per-player
       // HUD chips in the corners of each quadrant.
-      GameArt(game, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+      GameArt(game, art, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
       Box(
         Modifier.matchParentSize().background(
           Brush.verticalGradient(
-            0.55f to Color.Transparent,
-            1f to Color.Black.copy(alpha = 0.86f),
+            SCRIM_START to Color.Transparent,
+            1f to Color.Black.copy(alpha = SCRIM_ALPHA),
           ),
         ),
       )
@@ -1013,6 +1062,14 @@ private fun GameCard(game: Game, onOpen: (Game) -> Unit) {
       }
     }
   }
+}
+
+// How light a poster is at [fraction] of its height, with the title scrim GameCard
+// draws over the art folded in: that composite is what the icons actually sit on.
+private fun posterLuminance(art: Art, fraction: Float): Float {
+  val row = art.rowLuminance[(fraction * ART_LUMINANCE_ROWS).toInt().coerceIn(0, ART_LUMINANCE_ROWS - 1)]
+  val scrim = SCRIM_ALPHA * ((fraction - SCRIM_START) / (1f - SCRIM_START)).coerceIn(0f, 1f)
+  return row * (1f - scrim)
 }
 
 // The floating join card pinned over the scrolling catalog: browse first, act at

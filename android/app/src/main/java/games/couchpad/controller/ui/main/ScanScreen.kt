@@ -59,7 +59,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,11 +80,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -94,7 +91,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -106,7 +102,6 @@ import games.couchpad.controller.data.originlessCode
 import games.couchpad.controller.data.validRoomCode
 import games.couchpad.controller.ui.components.findActivity
 import games.couchpad.controller.ui.components.stableScreenInsets
-import games.couchpad.controller.ui.components.themeLightBarIcons
 import games.couchpad.controller.ui.legal.LegalLinks
 import java.util.concurrent.Executors
 import kotlinx.coroutines.awaitCancellation
@@ -141,26 +136,8 @@ fun ScanScreen(
   // LocalContext.current is flagged by lint as not tracking config changes).
   val resources = LocalResources.current
   val haptics = LocalHapticFeedback.current
-  val view = LocalView.current
 
   BackHandler(onBack = onClose)
-
-  // The scanner is always a dark surface — force light bar icons while it's up and
-  // restore the theme's own contrast on exit (same recipe as GameHostScreen). Keyed on
-  // the whole Configuration: EVERY configuration change re-runs
-  // MainActivity.applyEdgeToEdge, which stomps this, so re-assert after any of them —
-  // uiMode alone left every other config change's stomp in place for good.
-  val config = LocalConfiguration.current
-  DisposableEffect(config) {
-    val controller = context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
-    controller?.isAppearanceLightStatusBars = false
-    controller?.isAppearanceLightNavigationBars = false
-    onDispose {
-      val light = themeLightBarIcons(context)
-      controller?.isAppearanceLightStatusBars = light
-      controller?.isAppearanceLightNavigationBars = light
-    }
-  }
 
   var granted by remember { mutableStateOf(hasCameraPermission(context)) }
   var requested by remember { mutableStateOf(false) }

@@ -7,20 +7,27 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.core.view.WindowCompat
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import games.couchpad.controller.data.RecentRoomStore
 import games.couchpad.controller.ui.about.AboutScreen
 import games.couchpad.controller.ui.about.LicensesScreen
+import games.couchpad.controller.ui.components.BarIcons
+import games.couchpad.controller.ui.components.findActivity
+import games.couchpad.controller.ui.components.themeBarIcons
 import games.couchpad.controller.ui.game.GameHostScreen
 import games.couchpad.controller.ui.legal.LegalLinks
 import games.couchpad.controller.ui.legal.WebDocScreen
@@ -47,6 +54,34 @@ fun MainNavigation(deepLink: String? = null, onDeepLinkConsumed: () -> Unit = {}
       delay(5_000)
       gameEndBanner = null
     }
+  }
+
+  // The ONE writer of the bar icon appearance. Screens report the pair they want (null:
+  // the theme's own) and the top entry's wish is applied here, so a screen leaving
+  // restores nothing — a restore on dispose lands at the end of the pop crossfade, over
+  // whatever the screen underneath asked for at its start. Keyed on the whole
+  // Configuration: every configuration change re-runs MainActivity.applyEdgeToEdge,
+  // which resets the icons to the theme's; Compose updates LocalConfiguration from the
+  // same callback, after the activity's own, so this re-asserts on top. A
+  // DisposableEffect, not a LaunchedEffect: it runs inline while changes are applied,
+  // so a new top entry's first frame already carries its icons.
+  var mainBars by remember { mutableStateOf<BarIcons?>(null) }
+  var gameBars by remember { mutableStateOf<BarIcons?>(null) }
+  val bars = when (backStack.lastOrNull()) {
+    is Main -> mainBars
+    is GameHost -> gameBars
+    else -> null
+  } ?: themeBarIcons(context)
+  val view = LocalView.current
+  val config = LocalConfiguration.current
+  DisposableEffect(bars, config) {
+    context.findActivity()?.window?.let { window ->
+      WindowCompat.getInsetsController(window, view).run {
+        isAppearanceLightStatusBars = bars.lightStatus
+        isAppearanceLightNavigationBars = bars.lightNav
+      }
+    }
+    onDispose {}
   }
 
   // An external App Link routes through MainScreen (which owns the name gate + join).
@@ -81,6 +116,7 @@ fun MainNavigation(deepLink: String? = null, onDeepLinkConsumed: () -> Unit = {}
           onOpenAbout = { backStack.add(About) },
           gameEndBanner = gameEndBanner,
           onDismissGameEndBanner = { gameEndBanner = null },
+          onBarIcons = { mainBars = it },
         )
       }
       entry<About> {
@@ -119,6 +155,7 @@ fun MainNavigation(deepLink: String? = null, onDeepLinkConsumed: () -> Unit = {}
           joinUrl = key.joinUrl,
           title = key.title,
           allowedHosts = key.allowedHosts,
+          onBarIcons = { gameBars = it },
           onLeave = { backStack.removeLastOrNull() },
           // Back home like leave(), plus a banner in the rejoin slot — the player didn't
           // choose to leave, so silence would read as a crash. (A load failure isn't a

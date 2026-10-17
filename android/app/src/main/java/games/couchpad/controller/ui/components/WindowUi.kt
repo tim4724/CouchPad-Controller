@@ -109,11 +109,19 @@ tailrec fun Context.findActivity(): Activity? = when (this) {
 
 /**
  * The bar-icon appearance the current theme wants: dark icons on the light theme,
- * light icons on the dark theme.
- * Screens that force their own appearance (game host, scanner) restore THIS on
- * exit rather than a captured value — uiMode no longer recreates the activity,
- * so a value captured before a mid-overlay theme flip would be stale.
+ * light icons on the dark theme. MainActivity applies it on every configuration
+ * change; MainNavigation falls back to it for a screen with no wish of its own.
  */
 fun themeLightBarIcons(context: Context): Boolean =
   (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) !=
     Configuration.UI_MODE_NIGHT_YES
+
+/**
+ * Which way the status and navigation bar icons go: `true` = dark icons, for a light
+ * surface under that bar (the platform's "light bars" sense). Screens only REPORT the
+ * pair they want; the one place that applies it is MainNavigation.
+ */
+data class BarIcons(val lightStatus: Boolean, val lightNav: Boolean)
+
+/** Both bars over the theme's own background. */
+fun themeBarIcons(context: Context): BarIcons = themeLightBarIcons(context).let { BarIcons(it, it) }

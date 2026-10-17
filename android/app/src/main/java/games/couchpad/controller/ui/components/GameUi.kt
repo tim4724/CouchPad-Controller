@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -90,6 +91,15 @@ private const val MAX_ART_WIDTH = 1280
 private const val MAX_ART_HEIGHT = 720
 
 /**
+ * Decoded artwork plus what the status-bar icons need to know when a poster scrolls
+ * under them: the mean relative luminance of each of [ART_LUMINANCE_ROWS] horizontal
+ * bands, top to bottom.
+ */
+class Art(val image: ImageBitmap, val rowLuminance: FloatArray)
+
+const val ART_LUMINANCE_ROWS = 16
+
+/**
  * Process-wide memoized decode of artwork, keyed by manifest art path. Decoding runs
  * off the main thread, so opening a sheet never decodes mid-animation, and a path
  * that FAILS is remembered too — otherwise a game whose art this build didn't ship
@@ -100,13 +110,13 @@ private const val MAX_ART_HEIGHT = 720
  * memoizes, and the cost is one wasted decode, so it doesn't earn a task map.
  */
 private object ArtCache {
-  private val images = ConcurrentHashMap<String, ImageBitmap>()
+  private val images = ConcurrentHashMap<String, Art>()
   private val failures = ConcurrentHashMap.newKeySet<String>()
 
   /** Non-null only after a successful decode has been memoized. */
-  fun cached(art: String): ImageBitmap? = images[art]
+  fun cached(art: String): Art? = images[art]
 
-  suspend fun load(context: Context, art: String): ImageBitmap? {
+  suspend fun load(context: Context, art: String): Art? {
     images[art]?.let { return it }
     if (art in failures) return null
     val decoded = withContext(Dispatchers.IO) { decode(context, art) }
@@ -121,14 +131,44 @@ private object ArtCache {
    * URL/name, never on content, so a changed image must ship under a new file name
    * or ?v= — see ArtworkCache.
    */
-  private fun decode(context: Context, art: String): ImageBitmap? {
+  private fun decode(context: Context, art: String): Art? {
     val assetPath = "artwork/" + art.substringAfterLast('/')
-    decodeScaled { runCatching { context.assets.open(assetPath) }.getOrNull() }
-      ?.let { return it.asImageBitmap() }
-    val url = remoteArtUrl(art) ?: return null
-    val file = ArtworkCache.fetch(context, url) ?: return null
-    return decodeScaled { runCatching { file.inputStream() }.getOrNull() }?.asImageBitmap()
+    val bitmap = decodeScaled { runCatching { context.assets.open(assetPath) }.getOrNull() }
+      ?: remoteArtUrl(art)?.let { url -> ArtworkCache.fetch(context, url) }
+        ?.let { file -> decodeScaled { runCatching { file.inputStream() }.getOrNull() } }
+      ?: return null
+    return Art(bitmap.asImageBitmap(), rowLuminance(bitmap))
   }
+}
+
+/**
+ * Mean relative luminance (sRGB-linearized, 0..1) of each band, off a coarse grid: 32
+ * columns by 4 scanlines per band is plenty for a yes/no on icon contrast.
+ */
+private fun rowLuminance(bitmap: Bitmap): FloatArray {
+  val columns = 32
+  val lines = 4
+  return FloatArray(ART_LUMINANCE_ROWS) { row ->
+    var sum = 0f
+    repeat(lines) { line ->
+      val y = (bitmap.height * (row * lines + line + 0.5f) / (ART_LUMINANCE_ROWS * lines)).toInt()
+      repeat(columns) { column ->
+        val x = (bitmap.width * (column + 0.5f) / columns).toInt()
+        sum += Color(bitmap.getPixel(x, y)).luminance()
+      }
+    }
+    sum / (columns * lines)
+  }
+}
+
+/** The decoded [Art] for a manifest path: null until decoded, or for good when it can't be. */
+@Composable
+fun rememberArt(path: String?): Art? {
+  val context = LocalContext.current
+  val art by produceState(initialValue = path?.let(ArtCache::cached), path) {
+    value = path?.let { ArtCache.load(context, it) }
+  }
+  return art
 }
 
 /**
@@ -172,15 +212,14 @@ private fun decodeScaled(open: () -> InputStream?): Bitmap? {
  * accent is the one place a game's own branding shows outside the WebView.
  */
 @Composable
-fun GameArt(game: Game, modifier: Modifier = Modifier) {
-  val context = LocalContext.current
-  val img by produceState(initialValue = game.art?.let(ArtCache::cached), game.art) {
-    value = game.art?.let { ArtCache.load(context, it) }
-  }
+fun GameArt(game: Game, modifier: Modifier = Modifier) = GameArt(game, rememberArt(game.art), modifier)
+
+/** [GameArt] with the art already in hand, for a caller that needs the [Art] itself too. */
+@Composable
+fun GameArt(game: Game, art: Art?, modifier: Modifier = Modifier) {
   Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
-    val bitmap = img
-    if (bitmap != null) {
-      Image(bitmap, contentDescription = game.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+    if (art != null) {
+      Image(art.image, contentDescription = game.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
     } else {
       Box(
         Modifier.fillMaxSize().background(
@@ -213,11 +252,7 @@ fun deviceName(platform: String?): String? = when (platform) {
  */
 @Composable
 fun GameIcon(game: Game, tint: Color, modifier: Modifier = Modifier) {
-  val context = LocalContext.current
-  val img by produceState(initialValue = game.icon?.let(ArtCache::cached), game.icon) {
-    value = game.icon?.let { ArtCache.load(context, it) }
-  }
-  val bitmap = img
+  val bitmap = rememberArt(game.icon)?.image
   if (bitmap != null) {
     Image(
       bitmap,

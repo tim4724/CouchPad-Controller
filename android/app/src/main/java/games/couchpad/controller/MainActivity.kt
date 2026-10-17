@@ -5,10 +5,9 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -16,7 +15,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.view.WindowCompat
 import games.couchpad.controller.theme.CouchPadTheme
+import games.couchpad.controller.ui.components.themeLightBarIcons
 import games.couchpad.controller.ui.game.WebViewWarmer
 
 class MainActivity : ComponentActivity() {
@@ -52,28 +53,42 @@ class MainActivity : ComponentActivity() {
   }
 
   // uiMode is handled (manifest configChanges) so a dark-mode flip doesn't recreate
-  // the activity mid-game. Compose re-themes on its own; only the bar icon contrast
-  // was resolved at onCreate time and must be re-derived from the new configuration.
+  // the activity mid-game. Compose re-themes on its own; only the bar icons were
+  // resolved at onCreate time, so the bar setup is re-applied for the new configuration.
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
     applyEdgeToEdge()
   }
 
-  // Fully transparent system bars; icon contrast follows the system light/dark
-  // theme. The no-arg default only makes the STATUS bar transparent — the nav bar
-  // keeps a ~50% scrim (DefaultDarkScrim), so pass a transparent nav style too.
+  // Hand-rolled, not androidx's enableEdgeToEdge: that hangs a hidden view on the decor
+  // that re-runs its setup on every configuration change, after this callback, and its
+  // SystemBarStyle.auto turns the nav bar's contrast scrim back on — a 3-button bar went
+  // scrimmed from the first rotation or theme flip on.
+  @Suppress("DEPRECATION") // bar colors are ignored from API 35 on; below it they matter
   private fun applyEdgeToEdge() {
-    enableEdgeToEdge(
-      statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
-      navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
-    )
-    // enableEdgeToEdge disables the status bar's contrast scrim but leaves the nav
-    // bar's on (isNavigationBarContrastEnforced defaults true) — so in 3-button mode
-    // the nav bar tints as content scrolls under it while the status bar stays clear.
-    // Match them: neither bar draws a scrim, so content shows through both cleanly.
-    // (Our layouts keep the bar edges over dark chrome, so no legibility scrim needed.)
+    // First: installing the decor re-reads the window theme (contrast enforcement on, opaque
+    // bar colors) over anything set before it.
+    val decor = window.decorView
+    WindowCompat.setDecorFitsSystemWindows(window, false)
+    window.statusBarColor = Color.TRANSPARENT
+    window.navigationBarColor = Color.TRANSPARENT
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      window.isStatusBarContrastEnforced = false
       window.isNavigationBarContrastEnforced = false
+    }
+    // Lay out under the cutout too, so a landscape game spans the full screen.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      window.attributes.layoutInDisplayCutoutMode =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        } else {
+          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+    }
+    val light = themeLightBarIcons(this)
+    WindowCompat.getInsetsController(window, decor).run {
+      isAppearanceLightStatusBars = light
+      isAppearanceLightNavigationBars = light
     }
   }
 }

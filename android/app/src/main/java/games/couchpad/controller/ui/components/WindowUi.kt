@@ -108,8 +108,8 @@ tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 /**
- * The bar-icon appearance the current theme wants (what enableEdgeToEdge's auto
- * style picks): dark icons on the light theme, light icons on the dark theme.
+ * The bar-icon appearance the current theme wants: dark icons on the light theme,
+ * light icons on the dark theme.
  * Screens that force their own appearance (game host, scanner) restore THIS on
  * exit rather than a captured value — uiMode no longer recreates the activity,
  * so a value captured before a mid-overlay theme flip would be stale.

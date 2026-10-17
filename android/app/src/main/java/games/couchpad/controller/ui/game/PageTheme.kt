@@ -124,6 +124,16 @@ internal val HOST_SHIM_JS = """
       const done = waiting.shift();
       if (done) done(typeof name === 'string' ? name : null);
     };
+    // A §12 sequence flattened to `primitive,scale,delay;…`; a non-array is nothing. The
+    // native side is authoritative and re-checks every field — keep the step cap in step
+    // with GameHaptics.parseComposition. Non-numbers become 0, as the typed bridge would.
+    const encodeComposition = (steps) => Array.isArray(steps)
+      ? steps.slice(0, 32).map((s) => {
+          s = s || {};
+          return String(s.primitive) + ',' + (typeof s.scale === 'number' ? s.scale : 0) +
+            ',' + (typeof s.delay === 'number' ? s.delay : 0);
+        }).join(';')
+      : null;
     window.CouchPadHost = {
       get name() { return names.getName(); },
       editName() {
@@ -137,6 +147,7 @@ internal val HOST_SHIM_JS = """
       enableSystemBack: (on) => host.enableSystemBack(on),
       setOrientation: (mode) => host.setOrientation(mode),
       haptic: (primitive, scale) => host.haptic(primitive, scale),
+      hapticComposition: (steps) => host.hapticComposition(encodeComposition(steps)),
     };
   })();
 """.trimIndent()

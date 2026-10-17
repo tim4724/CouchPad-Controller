@@ -895,4 +895,12 @@ private class CouchPadHostBridge(
   fun haptic(primitive: String?, scale: Double) {
     haptics.play(primitive, scale)
   }
+
+  // A timed sequence of primitives (CONTRACT.md §12), flattened by the shim to
+  // `primitive,scale,delay;…`; empty stops. A held control re-issues one every second
+  // or so, so it plays on the bridge thread like haptic.
+  @JavascriptInterface
+  fun hapticComposition(encoded: String?) {
+    haptics.play(GameHaptics.parseComposition(encoded))
+  }
 }

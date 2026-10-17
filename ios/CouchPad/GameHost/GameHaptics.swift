@@ -5,13 +5,34 @@ import CoreHaptics
 enum HapticPrimitive: String {
     case click, tick, thud, spin
     case lowTick = "low_tick", quickRise = "quick_rise", slowRise = "slow_rise", quickFall = "quick_fall"
+
+    /// The length AOSP targets for each (source.android.com/docs/core/interaction/haptics/haptics-constants-primitives),
+    /// which the rebuilt pattern lasts and a composition's clock advances by.
+    var duration: TimeInterval {
+        switch self {
+        case .click, .lowTick: 0.012
+        case .tick: 0.005
+        case .thud: 0.3
+        case .spin, .quickRise: 0.15
+        case .slowRise: 0.5
+        case .quickFall: 0.1
+        }
+    }
+}
+
+/// One step of a `CouchPadHost.hapticComposition()` sequence (CONTRACT.md §12), validated.
+struct HapticStep {
+    let primitive: HapticPrimitive
+    let scale: Double
+    /// Seconds of rest after the previous step ends.
+    let delay: TimeInterval
 }
 
 /// Plays the patterns the page hands to `navigator.vibrate()` (CONTRACT.md §11) and
-/// the primitives it hands to `CouchPadHost.haptic()` (§12). WebKit implements no
-/// Vibration API, so the bridge shim polyfills it and forwards the pattern here; Core
-/// Haptics is the only iOS API that takes an arbitrary duration or shape rather than a
-/// fixed system feel.
+/// the primitives it hands to `CouchPadHost.haptic()` / `hapticComposition()` (§12).
+/// WebKit implements no Vibration API, so the bridge shim polyfills it and forwards the
+/// pattern here; Core Haptics is the only iOS API that takes an arbitrary duration or
+/// shape rather than a fixed system feel.
 ///
 /// No feedback-generator fallback: the app is iPhone-only from iOS 17, and every
 /// such device has a haptic engine. Where the check does fail — the simulator — a
@@ -42,41 +63,60 @@ enum HapticPrimitive: String {
         start(events)
     }
 
+    /// `scale` is already clamped to 0–1 by `parseHaptic`.
+    func play(_ primitive: HapticPrimitive, scale: Double) {
+        play([HapticStep(primitive: primitive, scale: scale, delay: 0)])
+    }
+
+    /// A sequence of primitives, each after its rest, already validated and capped by
+    /// `parseHapticComposition`. Empty = the contract's stop.
+    func play(_ steps: [HapticStep]) {
+        stop()
+        guard supported, !steps.isEmpty else { return }
+        var events: [CHHapticEvent] = []
+        var curves: [CHHapticParameterCurve] = []
+        var at: TimeInterval = 0
+        for step in steps {
+            at += step.delay
+            let built = Self.build(step.primitive, scale: step.scale, at: at)
+            events += built.events
+            curves += built.curves
+            at += step.primitive.duration
+        }
+        start(events, curves: curves)
+    }
+
     /// Core Haptics has no primitives, so each is rebuilt from the hardware targets AOSP
     /// sets for it (source.android.com/docs/core/interaction/haptics/haptics-constants-primitives):
     /// duration and sweep shape carry over, peak acceleration relative to click becomes
     /// intensity, and frequency relative to the actuator's resonance becomes sharpness.
     /// Apple publishes no mapping of either to acceleration or Hz, so the levels are a
-    /// judgement call. `scale` is already clamped to 0–1 by `parseHaptic`.
-    func play(_ primitive: HapticPrimitive, scale: Double) {
-        stop()
-        guard supported else { return }
-        let level = Self.floor + (1 - Self.floor) * Float(scale)
+    /// judgement call.
+    private static func build(_ primitive: HapticPrimitive, scale: Double, at: TimeInterval)
+        -> (events: [CHHapticEvent], curves: [CHHapticParameterCurve]) {
+        let level = floor + (1 - floor) * Float(scale)
         switch primitive {
         case .click:     // 12 ms, 2 G, at resonance
-            start([Self.tap(level, sharpness: 0.5)])
+            return ([tap(level, sharpness: 0.5, at: at)], [])
         case .tick:      // 5 ms, 1 G, 2× resonance
-            start([Self.tap(0.7 * level, sharpness: 1)])
+            return ([tap(0.7 * level, sharpness: 1, at: at)], [])
         case .lowTick:   // 12 ms, 0.25 G, ⅔ resonance
-            start([Self.tap(0.45 * level, sharpness: 0.2)])
+            return ([tap(0.45 * level, sharpness: 0.2, at: at)], [])
         case .thud:      // 300 ms, 0.25 G, falling ½ → ⅓ resonance, percussive onset
-            let tail = Self.sweep(0.3, peak: 0.6 * level,
-                                  intensity: [(0, 1), (0.3, 0)], sharpness: [(0, 0.2), (0.3, 0)])
-            start([Self.tap(0.8 * level, sharpness: 0.1)] + tail.events, curves: tail.curves)
+            let tail = sweep(primitive.duration, peak: 0.6 * level, at: at,
+                             intensity: [(0, 1), (0.3, 0)], sharpness: [(0, 0.2), (0.3, 0)])
+            return ([tap(0.8 * level, sharpness: 0.1, at: at)] + tail.events, tail.curves)
         case .spin:      // 150 ms, 0.5 G; strength and pitch sweep opposite ways, then back
-            let spin = Self.sweep(0.15, peak: 0.7 * level,
-                                  intensity: [(0, 0.2), (0.075, 1), (0.15, 0.2)],
-                                  sharpness: [(0, 0.4), (0.075, 0.1), (0.15, 0.3)])
-            start(spin.events, curves: spin.curves)
+            return sweep(primitive.duration, peak: 0.7 * level, at: at,
+                         intensity: [(0, 0.2), (0.075, 1), (0.15, 0.2)],
+                         sharpness: [(0, 0.4), (0.075, 0.1), (0.15, 0.3)])
         case .quickRise, .slowRise:  // 150 / 500 ms, 0.5 G, rising ½ → ⅔ resonance
-            let duration = primitive == .quickRise ? 0.15 : 0.5
-            let rise = Self.sweep(duration, peak: 0.7 * level,
-                                  intensity: [(0, 0), (duration, 1)], sharpness: [(0, 0.2), (duration, 0.4)])
-            start(rise.events, curves: rise.curves)
+            let duration = primitive.duration
+            return sweep(duration, peak: 0.7 * level, at: at,
+                         intensity: [(0, 0), (duration, 1)], sharpness: [(0, 0.2), (duration, 0.4)])
         case .quickFall: // 100 ms, 1 G, soft onset, falling 2× → 1× resonance
-            let fall = Self.sweep(0.1, peak: 0.9 * level,
-                                  intensity: [(0, 0), (0.03, 1), (0.1, 0)], sharpness: [(0, 1), (0.1, 0.5)])
-            start(fall.events, curves: fall.curves)
+            return sweep(primitive.duration, peak: 0.9 * level, at: at,
+                         intensity: [(0, 0), (0.03, 1), (0.1, 0)], sharpness: [(0, 1), (0.1, 0.5)])
         }
     }
 
@@ -93,29 +133,33 @@ enum HapticPrimitive: String {
     /// floor its pulse fallback keeps (`GameHaptics.kt` PULSE_FLOOR).
     private static let floor: Float = 0.25
 
-    private static func tap(_ intensity: Float, sharpness: Float) -> CHHapticEvent {
+    private static func tap(_ intensity: Float, sharpness: Float, at: TimeInterval) -> CHHapticEvent {
         CHHapticEvent(eventType: .hapticTransient, parameters: [
             CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: sharpness),
-        ], relativeTime: 0)
+        ], relativeTime: at)
     }
 
-    /// A continuous event at `peak` whose intensity (a 0–1 multiplier of `peak`) and
-    /// sharpness follow (seconds, value) points, interpolated linearly. Sharpness control
-    /// is an offset added to the event's own, which is therefore 0.
-    private static func sweep(_ duration: TimeInterval, peak: Float,
+    /// A continuous event at `peak` from `at`, whose intensity (a 0–1 multiplier of
+    /// `peak`) and sharpness follow (seconds, value) points, interpolated linearly.
+    /// Sharpness control is an offset added to the event's own, which is therefore 0.
+    private static func sweep(_ duration: TimeInterval, peak: Float, at: TimeInterval,
                               intensity: [(TimeInterval, Float)], sharpness: [(TimeInterval, Float)])
         -> (events: [CHHapticEvent], curves: [CHHapticParameterCurve]) {
         let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [
             CHHapticEventParameter(parameterID: .hapticIntensity, value: peak),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: 0),
-        ], relativeTime: 0, duration: duration)
-        func curve(_ id: CHHapticDynamicParameter.ID, _ points: [(TimeInterval, Float)]) -> CHHapticParameterCurve {
-            CHHapticParameterCurve(parameterID: id, controlPoints: points.map {
+        ], relativeTime: at, duration: duration)
+        // A curve's last value holds after it ends, which would mute or detune every
+        // later step of a composition — so each curve returns to its parameter's rest
+        // value inside the event's own last millisecond, where nothing is left to hear.
+        func curve(_ id: CHHapticDynamicParameter.ID, _ points: [(TimeInterval, Float)], rest: Float) -> CHHapticParameterCurve {
+            let shaped = points.map { (min($0.0, duration - 0.001), $0.1) } + [(duration, rest)]
+            return CHHapticParameterCurve(parameterID: id, controlPoints: shaped.map {
                 CHHapticParameterCurve.ControlPoint(relativeTime: $0.0, value: $0.1)
-            }, relativeTime: 0)
+            }, relativeTime: at)
         }
-        return ([event], [curve(.hapticIntensityControl, intensity), curve(.hapticSharpnessControl, sharpness)])
+        return ([event], [curve(.hapticIntensityControl, intensity, rest: 1), curve(.hapticSharpnessControl, sharpness, rest: 0)])
     }
 
     /// Cuts a pattern short — the API's `vibrate(0)`, the next haptic, and the game host

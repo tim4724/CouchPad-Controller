@@ -255,6 +255,31 @@ else navigator.vibrate?.(14);
 - An unknown name, or a `NaN`/infinite scale, plays nothing.
 - On Android these follow the media-vibration setting, not touch feedback.
 
+### `CouchPadHost.hapticComposition(steps)`
+
+Several primitives in one call, timed — a rumble under a held control, a rhythm, a knock
+after a tap. The step shape and its clock are Android's composition API and AirConsole's
+composition vibrate, so one sequence serves both platforms:
+
+```js
+// A held-control rumble: a low tick, 60 ms of rest, again — ~1.8 s, re-issued before it ends.
+const rumble = Array.from({ length: 25 }, (_, i) => ({ primitive: 'low_tick', scale: 1, delay: i ? 60 : 0 }));
+if (window.CouchPadHost?.hapticComposition) CouchPadHost.hapticComposition(rumble);
+else navigator.vibrate?.(Array(25).fill([12, 60]).flat());
+// ...and on release:
+CouchPadHost.hapticComposition([]);
+```
+
+Each step is `{ primitive, scale, delay }`: a primitive and scale as above, and `delay` in
+milliseconds of rest AFTER the previous step ends (0 plays on its heels; the first step's
+delay is a lead-in).
+
+- The valid prefix plays: the first malformed step ends the sequence there.
+- Capped at 32 steps and 5 s of run time, delays and the primitives' own lengths together.
+- Each call — this, `haptic()` or a §11 pattern — replaces whatever is playing; an empty
+  sequence stops it. `navigator.vibrate(0)` does not reach it on Android.
+- Feature-detect it on its own: a launcher may have `haptic` without this.
+
 ## Platform note: tilt controls
 
 Motion and orientation events are plain web APIs; the launcher grants iOS's sensor gate

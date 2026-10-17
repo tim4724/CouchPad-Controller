@@ -88,9 +88,36 @@ func parseHaptic(_ value: String?) -> (primitive: HapticPrimitive, scale: Double
     return (primitive, min(max(scale, 0), 1))
 }
 
+/// `CouchPadHost.hapticComposition(steps)` as the shim posts it: `primitive,scale,delay;…`.
+/// Untrusted like a §11 pattern: the valid prefix plays, and both the step count and the
+/// run time (rests plus the primitives' own lengths) are capped, so nothing a page sends
+/// leaves the phone shaking after the tap that caused it. Mirrors
+/// `GameHaptics.parseComposition` on Android, down to the whole-millisecond clock, so the
+/// same sequence is cut at the same step on both.
+func parseHapticComposition(_ value: String?) -> [HapticStep] {
+    guard let value, !value.isEmpty, value.utf16.count <= 2048 else { return [] }
+    var steps: [HapticStep] = []
+    var runMillis = 0
+    for field in value.split(separator: ";", omittingEmptySubsequences: false) {
+        guard steps.count < 32 else { break }
+        let parts = field.split(separator: ",", omittingEmptySubsequences: false)
+        // The range check comes before the Int conversion, which traps out of range.
+        guard parts.count == 3, let primitive = HapticPrimitive(rawValue: String(parts[0])),
+              let scale = Double(parts[1]), scale.isFinite,
+              let delay = Double(parts[2]), delay >= 0, delay <= 5000
+        else { break }
+        let delayMillis = Int(delay.rounded())
+        runMillis += delayMillis + Int((primitive.duration * 1000).rounded())
+        guard runMillis <= 5000 else { break }
+        steps.append(HapticStep(primitive: primitive, scale: min(max(scale, 0), 1),
+                                delay: TimeInterval(delayMillis) / 1000))
+    }
+    return steps
+}
+
 enum GameHostJS {
     /// Document-start user script (all frames): defines
-    /// `window.CouchPadHost.{name,editName,gameEnded,leave,enableSystemBack,setOrientation,haptic}`
+    /// `window.CouchPadHost.{name,editName,gameEnded,leave,enableSystemBack,setOrientation,haptic,hapticComposition}`
     /// posting `{type, value}` to `window.webkit.messageHandlers.cpHost`, and polyfills
     /// `navigator.vibrate` over the same channel (CONTRACT.md §11) — WebKit ships no
     /// Vibration API, which is why a game's haptics are silent on iOS but not on
@@ -147,6 +174,17 @@ enum GameHostJS {
           // Android's typed JS bridge turns a non-number into 0 but passes NaN through;
           // mirror it so the same call plays (or doesn't) on both.
           post('haptic', String(primitive) + ',' + (typeof scale === 'number' ? scale : 0));
+        },
+        hapticComposition: function (steps) {
+          // A §12 sequence flattened to `primitive,scale,delay;…`; a non-array is nothing.
+          // The native side is authoritative and re-checks every field — keep the step
+          // cap in step with parseHapticComposition.
+          if (!Array.isArray(steps)) { return; }
+          post('hapticComposition', steps.slice(0, 32).map(function (s) {
+            s = s || {};
+            return String(s.primitive) + ',' + (typeof s.scale === 'number' ? s.scale : 0) +
+              ',' + (typeof s.delay === 'number' ? s.delay : 0);
+          }).join(';'));
         }
       };
       try {

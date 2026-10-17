@@ -539,6 +539,12 @@ struct GameWebView: UIViewRepresentable {
                 if let haptic = parseHaptic(body["value"] as? String) {
                     haptics.play(haptic.primitive, scale: haptic.scale)
                 }
+            case "hapticComposition":
+                // §12's timed sequence; a held control re-issues one every second or
+                // so. Empty is the contract's stop; a sequence with no valid step plays
+                // nothing and leaves the current haptic alone, like an unknown name above.
+                let value = body["value"] as? String ?? ""
+                if value.isEmpty { haptics.stop() } else { haptics.play(parseHapticComposition(value)) }
             case "setOrientation":
                 // Not fire-once: a game may run its lobby portrait and its match
                 // landscape. The shim already narrowed to the two legal keywords.

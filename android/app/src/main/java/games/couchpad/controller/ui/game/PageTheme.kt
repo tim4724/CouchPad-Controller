@@ -109,10 +109,11 @@ private fun parseCssRgb(value: String): Color? {
 /**
  * Document-start script: defines `window.CouchPadHost` (CONTRACT.md) over the raw
  * `__cpHost` and `__cpName` Java interfaces, for the two members a Java interface can't
- * express — a `name` property and an `editName()` that returns a Promise. Everything else
- * passes straight through, so the Java bridge's own argument conversions still apply. Every
- * `editName()` reaches the launcher and gets its own Promise; the launcher answers them in
- * order through `__cpNameResult(name | null)`.
+ * express — a `name` property and an `editName()` that returns a Promise — and for the one
+ * argument it can't take, `hapticComposition()`'s array of steps, flattened to a string.
+ * Everything else passes straight through, so the Java bridge's own argument conversions
+ * still apply. Every `editName()` reaches the launcher and gets its own Promise; the
+ * launcher answers them in order through `__cpNameResult(name | null)`.
  */
 internal val HOST_SHIM_JS = """
   (() => {
@@ -123,6 +124,18 @@ internal val HOST_SHIM_JS = """
     window.__cpNameResult = (name) => {
       const done = waiting.shift();
       if (done) done(typeof name === 'string' ? name : null);
+    };
+    // A §12 sequence flattened to `primitive,scale,delay;…`; a non-array is nothing (not
+    // the empty sequence's stop). The native side is authoritative and re-checks every
+    // field — keep the step cap in step with GameHaptics.parseComposition. Non-numbers
+    // become 0, as the typed bridge would.
+    const hapticComposition = (steps) => {
+      if (!Array.isArray(steps)) return;
+      host.hapticComposition(steps.slice(0, 32).map((s) => {
+        s = s || {};
+        return String(s.primitive) + ',' + (typeof s.scale === 'number' ? s.scale : 0) +
+          ',' + (typeof s.delay === 'number' ? s.delay : 0);
+      }).join(';'));
     };
     window.CouchPadHost = {
       get name() { return names.getName(); },
@@ -137,6 +150,7 @@ internal val HOST_SHIM_JS = """
       enableSystemBack: (on) => host.enableSystemBack(on),
       setOrientation: (mode) => host.setOrientation(mode),
       haptic: (primitive, scale) => host.haptic(primitive, scale),
+      hapticComposition,
     };
   })();
 """.trimIndent()

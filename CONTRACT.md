@@ -252,7 +252,8 @@ else navigator.vibrate?.(14);
 - `scale` is clamped to 0–1; 0 is the faintest buzz, not silence.
 - One primitive per call; each call replaces whatever is playing.
 - Always plays something — the closest available effect where the device lacks one.
-- An unknown name, or a `NaN`/infinite scale, plays nothing.
+- An unknown name, or a `NaN`/infinite scale, plays nothing — and stops nothing: whatever
+  was playing plays on.
 - On Android these follow the media-vibration setting, not touch feedback.
 
 ### `CouchPadHost.hapticComposition(steps)`
@@ -276,10 +277,10 @@ delay is a lead-in).
 
 - The valid prefix plays: the first malformed step — an unknown primitive, a `NaN`/infinite
   scale, a negative or non-finite delay — ends the sequence there. A sequence with no valid
-  step plays nothing, like an unknown name to `haptic()`.
+  step plays nothing and, like an unknown name to `haptic()`, stops nothing.
 - Capped at 32 steps and 5 s of run time, delays and the primitives' own lengths together.
-- Each call — this, `haptic()` or a §11 pattern — replaces whatever is playing; an empty
-  sequence stops this or a `haptic()`. On Android a §11 pattern and §12 don't stop each
+- Each call that plays — this, `haptic()` or a §11 pattern — replaces whatever is playing;
+  an empty sequence stops this or a `haptic()`. On Android a §11 pattern and §12 don't stop each
   other: `navigator.vibrate(0)` does not reach §12, and an empty sequence does not reach
   §11.
 - Feature-detect it on its own: a launcher may have `haptic` without this.
